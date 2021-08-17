@@ -140,9 +140,9 @@ print("\n")
 -- GENERATE SOLUTION
 -----------------------------------------
 
-workspace "D3D12Renderer"
+workspace "D3D12ProjectionMapping"
 	architecture "x64"
-	startproject "D3D12Renderer"
+	startproject "D3D12ProjectionMapping"
 
 	configurations {
 		"Debug",
@@ -169,7 +169,7 @@ group "Dependencies"
 group ""
 
 
-project "D3D12Renderer"
+project "D3D12ProjectionMapping"
 	kind "ConsoleApp"
 	language "C++"
 	cppdialect "C++17"
@@ -334,71 +334,4 @@ project "D3D12Renderer"
 			shadertype("Amplification")
 			shadermodel "6.5" -- Required for amplification shaders.
 	end
-
-
-
------------------------------------------
--- GENERATE PHYSICS ONLY DLL
------------------------------------------
-
-project "Physics-Lib"
-	kind "SharedLib"
-	language "C++"
-	cppdialect "C++17"
-	staticruntime "Off"
-
-	targetdir ("./bin/" .. outputdir)
-	objdir ("./bin_int/" .. outputdir ..  "/%{prj.name}")
-
-	debugdir "."
-	debugenvs {
-		"PATH=ext/bin;%PATH%;"
-	}
-
-	pchheader "pch.h"
-	pchsource "src/pch.cpp"
-
-	sysincludedirs {
-		"ext/entt/src",
-		"ext",
-	}
-
-	files {
-		"src/bounding_volumes.*",
-		"src/collision_broad.*",
-		"src/collision_epa.*",
-		"src/collision_gjk.*",
-		"src/collision_narrow.*",
-		"src/collision_sat.*",
-		"src/constraints.*",
-		"src/locomotion_learning.*",
-		"src/math.*",
-		"src/pch.*",
-		"src/physics.*",
-		"src/ragdoll.*",
-		"src/scene.*",
-	}
-
-	vpaths {
-		["Headers"] = { "src/*.h" },
-		["Sources"] = { "src/*.cpp" },
-	}
-
-	filter "system:windows"
-		systemversion "latest"
-
-		defines {
-			"PHYSICS_ONLY",
-			"_UNICODE",
-			"UNICODE",
-			"_CRT_SECURE_NO_WARNINGS"
-		}
-
-	filter "configurations:Debug"
-        runtime "Debug"
-		symbols "On"
-		
-	filter "configurations:Release"
-        runtime "Release"
-		optimize "On"
 
