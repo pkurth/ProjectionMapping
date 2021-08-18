@@ -234,7 +234,7 @@ int main(int argc, char** argv)
 
 		fileBrowser.draw(meshEditor);
 		meshEditor.draw();
-		projectorManager.update();
+		projectorManager.updateAndRender(app.camera);
 
 		fenceValues[window.currentBackbufferIndex] = renderToMainWindow(window);
 

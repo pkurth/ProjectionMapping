@@ -6,7 +6,7 @@ struct projector_manager
 {
 	projector_manager();
 
-	void update();
+	void updateAndRender(const render_camera& viewerCamera);
 
 	std::vector<monitor_info> monitors;
 	std::vector<physical_projector> physicalProjectors;

@@ -31,6 +31,8 @@ struct application
 	void serializeToFile();
 	bool deserializeFromFile();
 
+	render_camera camera;
+
 private:
 	void setSelectedEntityEulerRotation();
 	void setSelectedEntity(scene_entity entity);
@@ -91,7 +93,6 @@ private:
 
 	main_renderer* renderer;
 
-	render_camera camera;
 	camera_controller cameraController;
 
 	scene appScene;

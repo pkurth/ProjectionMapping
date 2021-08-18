@@ -14,15 +14,15 @@ projector_manager::projector_manager()
 	}
 }
 
-void projector_manager::update()
+void projector_manager::updateAndRender(const render_camera& viewerCamera)
 {
 	if (ImGui::Begin("Projectors"))
 	{
 		if (ImGui::TreeNode("Physical projectors"))
 		{
-			for (uint32 i = 0; i < (uint32)physicalProjectors.size(); ++i)
+			for (auto& p : physicalProjectors)
 			{
-				physicalProjectors[i].edit();
+				p.edit();
 			}
 
 			ImGui::TreePop();
@@ -30,9 +30,9 @@ void projector_manager::update()
 
 		if (ImGui::TreeNode("Dummy projectors"))
 		{
-			for (uint32 i = 0; i < (uint32)dummyProjectors.size(); ++i)
+			for (auto& p : dummyProjectors)
 			{
-				dummyProjectors[i].edit();
+				p.edit();
 			}
 
 			if (ImGui::Button("Add"))
@@ -45,5 +45,16 @@ void projector_manager::update()
 	}
 
 	ImGui::End();
+
+
+	for (auto& p : physicalProjectors)
+	{
+		p.render(viewerCamera);
+	}
+	for (auto& p : dummyProjectors)
+	{
+		p.render(viewerCamera);
+	}
+
 }
 

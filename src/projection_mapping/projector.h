@@ -2,6 +2,7 @@
 
 #include "core/camera.h"
 #include "window/dx_window.h"
+#include "projector_renderer.h"
 
 
 struct projector_base
@@ -9,13 +10,18 @@ struct projector_base
 	virtual void edit() = 0;
 	bool active() { return window.open; }
 
+	uint64 render(const render_camera& viewerCamera);
 
 protected:
+	void editCommon(const std::string& name, uint32 width, uint32 height);
+
 	void activate();
 	void deactivate();
 
 	render_camera camera;
 	dx_window window;
+
+	projector_renderer renderer;
 };
 
 struct physical_projector : projector_base
