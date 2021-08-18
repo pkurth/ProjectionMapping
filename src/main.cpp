@@ -90,12 +90,9 @@ int main(int argc, char** argv)
 
 	initializeJobSystem();
 
-	const color_depth colorDepth = color_depth_8;
-
 	dx_window window;
-	window.initialize(TEXT("Main Window"), 1280, 800, colorDepth);
+	window.initialize(TEXT("Main Window"), 1280, 800);
 	setMainWindow(&window);
-	//window.toggleVSync();
 
 	application app = {};
 	app.loadCustomShaders();
@@ -111,7 +108,7 @@ int main(int argc, char** argv)
 
 	renderer_spec spec = { true, true, true, true };
 	main_renderer renderer;
-	renderer.initialize(colorDepth, 1280, 800, spec);
+	renderer.initialize(window.colorDepth, 1280, 800, spec);
 
 	app.initialize(&renderer);
 
