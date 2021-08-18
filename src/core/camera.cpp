@@ -11,15 +11,12 @@ void render_camera::initializeIngame(vec3 position, quat rotation, float vertica
 	this->farPlane = farPlane;
 }
 
-void render_camera::initializeCalibrated(vec3 position, quat rotation, uint32 width, uint32 height, float fx, float fy, float cx, float cy, float nearPlane, float farPlane)
+void render_camera::initializeCalibrated(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intr, float nearPlane, float farPlane)
 {
 	type = camera_type_calibrated;
 	this->position = position;
 	this->rotation = rotation;
-	this->fx = fx;
-	this->fy = fy;
-	this->cx = cx;
-	this->cy = cy;
+	this->intrinsics = intr;
 	this->width = width;
 	this->height = height;
 	this->nearPlane = nearPlane;
@@ -43,7 +40,7 @@ void render_camera::updateMatrices()
 	else
 	{
 		assert(type == camera_type_calibrated);
-		proj = createPerspectiveProjectionMatrix((float)width, (float)height, fx, fy, cx, cy, nearPlane, farPlane);
+		proj = createPerspectiveProjectionMatrix((float)width, (float)height, intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy, nearPlane, farPlane);
 	}
 
 	invProj = invertPerspectiveProjectionMatrix(proj);

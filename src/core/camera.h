@@ -58,6 +58,14 @@ struct camera_projection_extents
 	float left, right, top, bottom; // Extents of frustum at distance 1.
 };
 
+struct camera_intrinsics
+{
+	float fx;
+	float fy;
+	float cx;
+	float cy;
+};
+
 struct render_camera
 {
 	// Camera properties.
@@ -74,11 +82,7 @@ struct render_camera
 	union
 	{
 		float verticalFOV; // For ingame cameras.
-
-		struct
-		{
-			float fx, fy, cx, cy; // For calibrated cameras.
-		};
+		camera_intrinsics intrinsics; // For calibrated cameras.
 	};
 
 
@@ -98,7 +102,7 @@ struct render_camera
 
 
 	void initializeIngame(vec3 position, quat rotation, float verticalFOV, float nearPlane, float farPlane = -1.f);
-	void initializeCalibrated(vec3 position, quat rotation, uint32 width, uint32 height, float fx, float fy, float cx, float cy, float nearPlane, float farPlane = -1.f);
+	void initializeCalibrated(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intr, float nearPlane, float farPlane = -1.f);
 
 	void setViewport(uint32 width, uint32 height);
 

@@ -11,6 +11,8 @@
 #include "rendering/main_renderer.h"
 #include "editor/asset_editor_panel.h"
 
+#include "projection_mapping/projector_manager.h"
+
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui/imgui_internal.h>
@@ -105,8 +107,9 @@ int main(int argc, char** argv)
 
 	initializeImGui(window);
 
-	renderer_spec spec = { true, true, true, true };
+	projector_manager projectorManager;
 
+	renderer_spec spec = { true, true, true, true };
 	main_renderer renderer;
 	renderer.initialize(colorDepth, 1280, 800, spec);
 
@@ -234,6 +237,7 @@ int main(int argc, char** argv)
 
 		fileBrowser.draw(meshEditor);
 		meshEditor.draw();
+		projectorManager.update();
 
 		fenceValues[window.currentBackbufferIndex] = renderToMainWindow(window);
 

@@ -1703,10 +1703,10 @@ void application::serializeToFile()
 	}
 	else
 	{
-		out << YAML::Key << "Fx" << YAML::Value << camera.fx
-			<< YAML::Key << "Fy" << YAML::Value << camera.fy
-			<< YAML::Key << "Cx" << YAML::Value << camera.cx
-			<< YAML::Key << "Cy" << YAML::Value << camera.cy;
+		out << YAML::Key << "Fx" << YAML::Value << camera.intrinsics.fx
+			<< YAML::Key << "Fy" << YAML::Value << camera.intrinsics.fy
+			<< YAML::Key << "Cx" << YAML::Value << camera.intrinsics.cx
+			<< YAML::Key << "Cy" << YAML::Value << camera.intrinsics.cy;
 	}
 	out	<< YAML::EndMap;
 
@@ -1842,10 +1842,10 @@ bool application::deserializeFromFile()
 	}
 	else
 	{
-		camera.fx = cameraNode["Fx"].as<float>();
-		camera.fy = cameraNode["Fy"].as<float>();
-		camera.cx = cameraNode["Cx"].as<float>();
-		camera.cy = cameraNode["Cy"].as<float>();
+		camera.intrinsics.fx = cameraNode["Fx"].as<float>();
+		camera.intrinsics.fy = cameraNode["Fy"].as<float>();
+		camera.intrinsics.cx = cameraNode["Cx"].as<float>();
+		camera.intrinsics.cy = cameraNode["Cy"].as<float>();
 	}
 
 	auto tonemapNode = data["Tone Map"];
