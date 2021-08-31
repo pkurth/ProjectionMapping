@@ -20,7 +20,7 @@ struct projector_renderer
 	void setEnvironment(const ref<pbr_environment>& environment);
 	void setSun(const directional_light& light);
 
-	void submitRenderPass(opaque_render_pass* renderPass) { assert(!opaqueRenderPass); opaqueRenderPass = renderPass; }
+	void submitRenderPass(const opaque_render_pass* renderPass) { assert(!opaqueRenderPass); opaqueRenderPass = renderPass; }
 
 	uint32 renderWidth;
 	uint32 renderHeight;

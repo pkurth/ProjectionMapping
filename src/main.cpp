@@ -226,10 +226,12 @@ int main(int argc, char** argv)
 		dxContext.renderQueue.waitForFence(fenceValues[window.currentBackbufferIndex]);
 		dxContext.newFrame(frameID);
 
+		projectorManager.beginFrame();
+
 		shadow_map_renderer::beginFrame();
 		renderer.beginFrame(renderWidth, renderHeight);
 		
-		app.update(input, dt);
+		app.update(input, projectorManager.opaqueRenderPass, dt);
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();

@@ -1479,7 +1479,7 @@ void application::renderDynamicGeometryToShadowMap(point_shadow_render_pass& ren
 	}
 }
 
-void application::update(const user_input& input, float dt)
+void application::update(const user_input& input, opaque_render_pass& projectorOpaqueRenderPass, float dt)
 {
 	//dt = min(dt, 1.f / 30.f);
 	//dt = 1.f / 60.f;
@@ -1636,6 +1636,7 @@ void application::update(const user_input& input, float dt)
 						else
 						{
 							opaqueRenderPass.renderStaticObject<opaque_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
+							projectorOpaqueRenderPass.renderStaticObject<opaque_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 					}
 

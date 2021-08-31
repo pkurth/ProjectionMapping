@@ -26,12 +26,18 @@ void dummy_projector::edit()
 	editCommon(name, camera.width, camera.height);
 }
 
-uint64 projector_base::render(const render_camera& viewerCamera)
+uint64 projector_base::render(const render_camera& viewerCamera, const opaque_render_pass* opaqueRenderPass)
 {
 	if (!active())
 	{
 		return 0;
 	}
+
+	directional_light sun;
+	sun.direction = normalize(vec3(-0.6f, -1.f, -0.3f));
+	sun.color = vec3(1.f, 0.93f, 0.76f);
+	sun.intensity = 50.f;
+	sun.numShadowCascades = 0;
 
 	camera.setViewport(window.clientWidth, window.clientHeight);
 	camera.updateMatrices();
@@ -39,6 +45,8 @@ uint64 projector_base::render(const render_camera& viewerCamera)
 	renderer.beginFrame(camera.width, camera.height);
 	renderer.setProjectorCamera(camera);
 	renderer.setViewerCamera(viewerCamera);
+	renderer.setSun(sun);
+	renderer.submitRenderPass(opaqueRenderPass);
 	
 	renderer.endFrame();
 
@@ -56,7 +64,6 @@ uint64 projector_base::render(const render_camera& viewerCamera)
 	window.swapBuffers();
 
 	return result;
-
 }
 
 void projector_base::editCommon(const std::string& name, uint32 width, uint32 height)

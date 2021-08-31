@@ -21,13 +21,13 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	reflectanceTexture = createTexture(0, renderWidth, renderHeight, reflectanceFormat, false, true, false, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	SET_NAME(reflectanceTexture->resource, "Reflectance");
 
-	depthStencilBuffer = createDepthTexture(renderWidth, renderHeight, hdrDepthStencilFormat);
+	depthStencilBuffer = createDepthTexture(renderWidth, renderHeight, depthStencilFormat);
 	SET_NAME(depthStencilBuffer->resource, "Depth buffer");
 
-	hdrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, hdrPostProcessFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	hdrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, hdrFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(hdrPostProcessingTexture->resource, "HDR Post processing");
 
-	ldrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, ldrPostProcessFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	ldrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, ldrFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(ldrPostProcessingTexture->resource, "LDR Post processing");
 
 	frameResult = createTexture(0, renderWidth, renderHeight, colorDepthToFormat(colorDepth), false, true, true);
@@ -132,8 +132,8 @@ void projector_renderer::endFrame()
 	dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
 
-	cl->clearDepthAndStencil(depthStencilBuffer->dsvHandle);
-	cl->clearRTV(hdrColorTexture, 1.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors.
+	cl->clearDepthAndStencil(depthStencilBuffer);
+	cl->clearRTV(hdrColorTexture, 0.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors.
 	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 
@@ -142,7 +142,7 @@ void projector_renderer::endFrame()
 	// ----------------------------------------
 
 	dx_render_target depthOnlyRenderTarget({ }, depthStencilBuffer);
-	depthPrePass(cl, depthOnlyRenderTarget, depthOnlyPipeline, animatedDepthOnlyPipeline, opaqueRenderPass,
+	depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
 		projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
 
 

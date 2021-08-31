@@ -23,7 +23,7 @@ struct application
 {
 	void loadCustomShaders();
 	void initialize(main_renderer* renderer);
-	void update(const user_input& input, float dt);
+	void update(const user_input& input, opaque_render_pass& projectorOpaqueRenderPass, float dt);
 
 	void setEnvironment(const std::string& filename);
 

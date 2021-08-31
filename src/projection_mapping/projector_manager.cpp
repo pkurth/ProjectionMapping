@@ -14,6 +14,11 @@ projector_manager::projector_manager()
 	}
 }
 
+void projector_manager::beginFrame()
+{
+	opaqueRenderPass.reset();
+}
+
 void projector_manager::updateAndRender(const render_camera& viewerCamera)
 {
 	if (ImGui::Begin("Projectors"))
@@ -49,11 +54,11 @@ void projector_manager::updateAndRender(const render_camera& viewerCamera)
 
 	for (auto& p : physicalProjectors)
 	{
-		p.render(viewerCamera);
+		p.render(viewerCamera, &opaqueRenderPass);
 	}
 	for (auto& p : dummyProjectors)
 	{
-		p.render(viewerCamera);
+		p.render(viewerCamera, &opaqueRenderPass);
 	}
 
 }
