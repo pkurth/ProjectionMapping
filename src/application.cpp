@@ -12,6 +12,7 @@
 #include "core/threading.h"
 #include "rendering/mesh_shader.h"
 #include "rendering/shadow_map_cache.h"
+#include "rendering/shadow_map_renderer.h"
 #include "editor/file_dialog.h"
 #include "core/yaml.h"
 #include "learning/locomotion_learning.h"
@@ -175,6 +176,35 @@ void application::initialize(main_renderer* renderer)
 
 #if 0
 	{
+		auto lollipopMaterial = createPBRMaterial(
+			"assets/sphere/Tiles074_2K_Color.jpg",
+			"assets/sphere/Tiles074_2K_Normal.jpg",
+			"assets/sphere/Tiles074_2K_Roughness.jpg",
+			{}, vec4(0.f), vec4(1.f), 1.f, 1.f);
+
+		cpu_mesh primitiveMesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals | mesh_creation_flags_with_tangents);
+		auto testMesh = make_ref<composite_mesh>();
+		testMesh->submeshes.push_back({ primitiveMesh.pushSphere(15, 15, 5.f, vec3(0.f, 0.f, 0.f)), {}, trs::identity, lollipopMaterial });
+		testMesh->mesh = primitiveMesh.createDXMesh();
+
+		float extents = 100.f;
+		for (float z = -extents; z < extents; z += 10.f)
+		{
+			for (float y = -extents; y < extents; y += 10.f)
+			{
+				for (float x = -extents; x < extents; x += 10.f)
+				{
+					appScene.createEntity("Ball")
+						.addComponent<trs>(vec3(x, y, z), quat::identity, 1.f)
+						.addComponent<raster_component>(testMesh);
+				}
+			}
+		}
+	}
+#endif
+
+#if 0
+	{
 		cpu_mesh primitiveMesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals | mesh_creation_flags_with_tangents);
 
 		auto lollipopMaterial = createPBRMaterial(
@@ -310,7 +340,7 @@ void application::initialize(main_renderer* renderer)
 
 
 
-	//setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");
+	setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");
 
 
 
@@ -964,6 +994,7 @@ void application::resetRenderPasses()
 	opaqueRenderPass.reset();
 	transparentRenderPass.reset();
 	overlayRenderPass.reset();
+	outlineRenderPass.reset();
 	sunShadowRenderPass.reset();
 
 	for (uint32 i = 0; i < numSpotShadowRenderPasses; ++i)
@@ -988,16 +1019,18 @@ void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 num
 	renderer->submitRenderPass(&opaqueRenderPass);
 	renderer->submitRenderPass(&transparentRenderPass);
 	renderer->submitRenderPass(&overlayRenderPass);
-	renderer->submitRenderPass(&sunShadowRenderPass);
+	renderer->submitRenderPass(&outlineRenderPass);
+
+	shadow_map_renderer::submitRenderPass(&sunShadowRenderPass);
 
 	for (uint32 i = 0; i < numSpotLightShadowPasses; ++i)
 	{
-		renderer->submitRenderPass(&spotShadowRenderPasses[i]);
+		shadow_map_renderer::submitRenderPass(&spotShadowRenderPasses[i]);
 	}
 
 	for (uint32 i = 0; i < numPointLightShadowPasses; ++i)
 	{
-		renderer->submitRenderPass(&pointShadowRenderPasses[i]);
+		shadow_map_renderer::submitRenderPass(&pointShadowRenderPasses[i]);
 	}
 }
 
@@ -1205,12 +1238,20 @@ void application::renderSunShadowMap(bool objectDragged)
 
 	bool staticCacheAvailable = !objectDragged;
 
+	sunShadowRenderPass.numCascades = sun.numShadowCascades;
+
+	uint64 sunMovementHash = getLightMovementHash(sun);
+
 	for (uint32 i = 0; i < sun.numShadowCascades; ++i)
 	{
-		uint64 sunMovementHash = getLightMovementHash(sun, i);
 		auto [vp, cache] = assignShadowMapViewport(i, sunMovementHash, sun.shadowDimensions);
-		sunShadowRenderPass.viewports[i] = vp;
+		
+		sun.shadowMapViewports[i] = vec4(vp.x, vp.y, vp.size, vp.size) / vec4((float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT, (float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT);
 
+		sun_cascade_render_pass& cascadePass = sunShadowRenderPass.cascades[i];
+		cascadePass.viewport = vp;
+		cascadePass.viewProj = sun.viewProjs[i];
+		
 		staticCacheAvailable &= cache;
 	}
 
@@ -1559,12 +1600,19 @@ void application::update(const user_input& input, float dt)
 
 					if (material->albedoTint.a < 1.f)
 					{
-						transparentRenderPass.renderObject(controller->currentVertexBuffer, mesh.indexBuffer, submesh, material, m, outline);
+						transparentRenderPass.renderObject<transparent_pbr_pipeline>(m, controller->currentVertexBuffer, mesh.indexBuffer, submesh, material);
 					}
 					else
 					{
-						opaqueRenderPass.renderAnimatedObject(controller->currentVertexBuffer, controller->prevFrameVertexBuffer, mesh.indexBuffer, submesh, prevFrameSubmesh, material, m, lastM,
-							(uint32)entityHandle, outline);
+						opaqueRenderPass.renderAnimatedObject<opaque_pbr_pipeline>(m, lastM, 
+							controller->currentVertexBuffer, controller->prevFrameVertexBuffer, mesh.indexBuffer, 
+							submesh, prevFrameSubmesh, material,
+							(uint32)entityHandle);
+					}
+
+					if (outline)
+					{
+						outlineRenderPass.renderOutline(m, controller->currentVertexBuffer, mesh.indexBuffer, submesh);
 					}
 				}
 			}
@@ -1577,18 +1625,23 @@ void application::update(const user_input& input, float dt)
 
 					if (material->albedoTint.a < 1.f)
 					{
-						transparentRenderPass.renderObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, material, m, outline);
+						transparentRenderPass.renderObject<transparent_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material);
 					}
 					else
 					{
 						if (dynamic)
 						{
-							opaqueRenderPass.renderDynamicObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, material, m, lastM, (uint32)entityHandle, outline);
+							opaqueRenderPass.renderDynamicObject<opaque_pbr_pipeline>(m, lastM, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 						else
 						{
-							opaqueRenderPass.renderStaticObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, material, m, (uint32)entityHandle, outline);
+							opaqueRenderPass.renderStaticObject<opaque_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
+					}
+
+					if (outline)
+					{
+						outlineRenderPass.renderOutline(m, mesh.vertexBuffer, mesh.indexBuffer, submesh);
 					}
 				}
 			}

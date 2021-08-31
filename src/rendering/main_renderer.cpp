@@ -36,10 +36,8 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 	{
 		D3D12_RESOURCE_DESC prevFrameHDRColorDesc = CD3DX12_RESOURCE_DESC::Tex2D(hdrFormat, renderWidth / 2, renderHeight / 2, 1,
 			8, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-		prevFrameHDRColorTexture = createTexture(prevFrameHDRColorDesc, 0, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		prevFrameHDRColorTempTexture = createTexture(prevFrameHDRColorDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		allocateMipUAVs(prevFrameHDRColorTexture);
-		allocateMipUAVs(prevFrameHDRColorTempTexture);
+		prevFrameHDRColorTexture = createTexture(prevFrameHDRColorDesc, 0, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, true);
+		prevFrameHDRColorTempTexture = createTexture(prevFrameHDRColorDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 
 		SET_NAME(prevFrameHDRColorTexture->resource, "Prev frame HDR Color");
 		SET_NAME(prevFrameHDRColorTempTexture->resource, "Prev frame HDR Color Temp");
@@ -60,12 +58,11 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 	SET_NAME(reflectanceTexture->resource, "Reflectance");
 
 
-	depthStencilBuffer = createDepthTexture(renderWidth, renderHeight, hdrDepthStencilFormat);
-	opaqueDepthBuffer = createDepthTexture(renderWidth, renderHeight, hdrDepthStencilFormat, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	depthStencilBuffer = createDepthTexture(renderWidth, renderHeight, depthStencilFormat);
+	opaqueDepthBuffer = createDepthTexture(renderWidth, renderHeight, depthStencilFormat, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 	D3D12_RESOURCE_DESC linearDepthDesc = CD3DX12_RESOURCE_DESC::Tex2D(linearDepthFormat, renderWidth, renderHeight, 1,
 		6, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-	linearDepthBuffer = createTexture(linearDepthDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	allocateMipUAVs(linearDepthBuffer);
+	linearDepthBuffer = createTexture(linearDepthDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 	SET_NAME(depthStencilBuffer->resource, "Depth buffer");
 	SET_NAME(opaqueDepthBuffer->resource, "Opaque depth buffer");
 	SET_NAME(linearDepthBuffer->resource, "Linear depth buffer");
@@ -73,10 +70,10 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 
 	if (spec.allowSSR)
 	{
-		ssrRaycastTexture = createTexture(0, SSR_RAYCAST_WIDTH, SSR_RAYCAST_HEIGHT, reflectionFormat, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		ssrResolveTexture = createTexture(0, SSR_RESOLVE_WIDTH, SSR_RESOLVE_HEIGHT, reflectionFormat, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		ssrTemporalTextures[ssrHistoryIndex] = createTexture(0, SSR_RESOLVE_WIDTH, SSR_RESOLVE_HEIGHT, reflectionFormat, false, false, true, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		ssrTemporalTextures[1 - ssrHistoryIndex] = createTexture(0, SSR_RESOLVE_WIDTH, SSR_RESOLVE_HEIGHT, reflectionFormat, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		ssrRaycastTexture = createTexture(0, SSR_RAYCAST_WIDTH, SSR_RAYCAST_HEIGHT, hdrFormat, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		ssrResolveTexture = createTexture(0, SSR_RESOLVE_WIDTH, SSR_RESOLVE_HEIGHT, hdrFormat, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		ssrTemporalTextures[ssrHistoryIndex] = createTexture(0, SSR_RESOLVE_WIDTH, SSR_RESOLVE_HEIGHT, hdrFormat, false, false, true, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		ssrTemporalTextures[1 - ssrHistoryIndex] = createTexture(0, SSR_RESOLVE_WIDTH, SSR_RESOLVE_HEIGHT, hdrFormat, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 		SET_NAME(ssrRaycastTexture->resource, "SSR Raycast");
 		SET_NAME(ssrResolveTexture->resource, "SSR Resolve");
@@ -85,18 +82,18 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 	}
 
 
-	hdrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, hdrPostProcessFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	hdrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, hdrFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(hdrPostProcessingTexture->resource, "HDR Post processing");
 
 
-	ldrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, ldrPostProcessFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	ldrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, ldrFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(ldrPostProcessingTexture->resource, "LDR Post processing");
 
 
 	if (spec.allowTAA)
 	{
-		taaTextures[taaHistoryIndex] = createTexture(0, renderWidth, renderHeight, hdrPostProcessFormat, false, true, true, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		taaTextures[1 - taaHistoryIndex] = createTexture(0, renderWidth, renderHeight, hdrPostProcessFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		taaTextures[taaHistoryIndex] = createTexture(0, renderWidth, renderHeight, hdrFormat, false, true, true, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		taaTextures[1 - taaHistoryIndex] = createTexture(0, renderWidth, renderHeight, hdrFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 		SET_NAME(taaTextures[0]->resource, "TAA 0");
 		SET_NAME(taaTextures[1]->resource, "TAA 1");
@@ -104,12 +101,10 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 
 	if (spec.allowBloom)
 	{
-		D3D12_RESOURCE_DESC bloomDesc = CD3DX12_RESOURCE_DESC::Tex2D(hdrPostProcessFormat, renderWidth / 4, renderHeight / 4, 1,
+		D3D12_RESOURCE_DESC bloomDesc = CD3DX12_RESOURCE_DESC::Tex2D(hdrFormat, renderWidth / 4, renderHeight / 4, 1,
 			5, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-		bloomTexture = createTexture(bloomDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		bloomTempTexture = createTexture(bloomDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		allocateMipUAVs(bloomTexture);
-		allocateMipUAVs(bloomTempTexture);
+		bloomTexture = createTexture(bloomDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
+		bloomTempTexture = createTexture(bloomDesc, 0, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, true);
 
 		SET_NAME(bloomTexture->resource, "Bloom");
 		SET_NAME(bloomTempTexture->resource, "Bloom Temp");
@@ -163,11 +158,9 @@ void main_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 	}
 
 	opaqueRenderPass = 0;
-	overlayRenderPass = 0;
 	transparentRenderPass = 0;
-	sunShadowRenderPass = 0;
-	numSpotLightShadowRenderPasses = 0;
-	numPointLightShadowRenderPasses = 0;
+	overlayRenderPass = 0;
+	outlineRenderPass = 0;
 
 	pointLights = 0;
 	spotLights = 0;
@@ -259,7 +252,8 @@ void main_renderer::setSun(const directional_light& light)
 	sun.radiance = light.color * light.intensity;
 	sun.numShadowCascades = light.numShadowCascades;
 
-	memcpy(sun.vp, light.vp, sizeof(mat4) * light.numShadowCascades);
+	memcpy(sun.viewProjs, light.viewProjs, sizeof(mat4) * light.numShadowCascades);
+	memcpy(sun.viewports, light.shadowMapViewports, sizeof(vec4) * light.numShadowCascades);
 }
 
 void main_renderer::setPointLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer)
@@ -293,8 +287,6 @@ void main_renderer::endFrame(const user_input& input)
 	{
 		recalculateViewport(true);
 	}
-
-	assignSunShadowMapViewports(sunShadowRenderPass, sun);
 
 	auto jitteredCameraCBV = dxContext.uploadDynamicConstantBuffer(jitteredCamera);
 	auto unjitteredCameraCBV = dxContext.uploadDynamicConstantBuffer(unjitteredCamera);
@@ -357,7 +349,7 @@ void main_renderer::endFrame(const user_input& input)
 
 
 
-			cl->clearDepthAndStencil(depthStencilBuffer->dsvHandle);
+			cl->clearDepthAndStencil(depthStencilBuffer);
 			cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 			waitForSkinningToFinish();
@@ -368,7 +360,7 @@ void main_renderer::endFrame(const user_input& input)
 			// ----------------------------------------
 
 			dx_render_target depthOnlyRenderTarget({ screenVelocitiesTexture, objectIDsTexture }, depthStencilBuffer);
-			depthPrePass(cl, depthOnlyRenderTarget, depthOnlyPipeline, animatedDepthOnlyPipeline, opaqueRenderPass,
+			depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
 				jitteredCamera.viewProj, jitteredCamera.prevFrameViewProj, jitteredCamera.jitter, jitteredCamera.prevFrameJitter);
 
 
@@ -395,22 +387,6 @@ void main_renderer::endFrame(const user_input& input)
 				.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 
-			// ----------------------------------------
-			// SHADOW MAP PASS
-			// ----------------------------------------
-
-			shadowPasses(cl, shadowPipeline, pointLightShadowPipeline,
-				sunShadowRenderPass, sun,
-				spotLightShadowRenderPasses, numSpotLightShadowRenderPasses,
-				pointLightShadowRenderPasses, numPointLightShadowRenderPasses);
-
-
-
-
-			barrier_batcher(cl)
-				.transition(render_resources::shadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-
-
 			cls[0] = cl;
 		});
 
@@ -426,12 +402,12 @@ void main_renderer::endFrame(const user_input& input)
 			dx_render_target skyRenderTarget({ hdrColorTexture, screenVelocitiesTexture, objectIDsTexture }, depthStencilBuffer);
 			if (environment)
 			{
-				texturedSky(cl, skyRenderTarget, textureSkyPipeline, jitteredCamera.proj, jitteredCamera.view, environment->sky, skyIntensity);
+				texturedSky(cl, skyRenderTarget, jitteredCamera.proj, jitteredCamera.view, environment->sky, skyIntensity);
 			}
 			else
 			{
 				//proceduralSky(cl, skyRenderTarget, textureSkyPipeline, jitteredCamera.proj, jitteredCamera.view, skyIntensity);
-				preethamSky(cl, skyRenderTarget, preethamSkyPipeline, jitteredCamera.proj, jitteredCamera.view, sun.direction, skyIntensity);
+				preethamSky(cl, skyRenderTarget, jitteredCamera.proj, jitteredCamera.view, sun.direction, skyIntensity);
 			}
 
 			cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // Sky renders a triangle strip, so reset back to triangle list.
@@ -479,7 +455,6 @@ void main_renderer::endFrame(const user_input& input)
 					.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 					.transitionEnd(linearDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			}
-
 
 			{
 				DX_PROFILE_BLOCK(cl, "Copy depth buffer");
@@ -552,7 +527,7 @@ void main_renderer::endFrame(const user_input& input)
 			// ----------------------------------------
 
 
-			if (transparentRenderPass && (transparentRenderPass->drawCalls.size() > 0 || transparentRenderPass->particleDrawCalls.size() > 0))
+			if (transparentRenderPass && transparentRenderPass->pass.size() > 0)
 			{
 				barrier_batcher(cl)
 					.transition(hdrResult, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
@@ -560,7 +535,7 @@ void main_renderer::endFrame(const user_input& input)
 
 				dx_render_target hdrTransparentRenderTarget({ hdrResult }, depthStencilBuffer);
 
-				transparentLightPass(cl, hdrTransparentRenderTarget, transparentRenderPass, materialInfo, particleCommandSignature, unjitteredCamera.viewProj);
+				transparentLightPass(cl, hdrTransparentRenderTarget, transparentRenderPass, materialInfo, unjitteredCamera.viewProj);
 
 				barrier_batcher(cl)
 					.transition(hdrResult, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
@@ -617,9 +592,8 @@ void main_renderer::endFrame(const user_input& input)
 			// LDR RENDERING
 			// ----------------------------------------
 
-			bool renderingOverlays = overlayRenderPass && overlayRenderPass->drawCalls.size();
-			bool renderingOutlines = opaqueRenderPass && opaqueRenderPass->outlinedObjects.size() > 0 ||
-				transparentRenderPass && transparentRenderPass->outlinedObjects.size() > 0;
+			bool renderingOverlays = overlayRenderPass && overlayRenderPass->pass.size();
+			bool renderingOutlines = outlineRenderPass && outlineRenderPass->pass.size();
 			if (renderingOverlays || renderingOutlines)
 			{
 				barrier_batcher(cl)
@@ -634,7 +608,7 @@ void main_renderer::endFrame(const user_input& input)
 				}
 				if (renderingOutlines)
 				{
-					outlines(cl, ldrRenderTarget, depthStencilBuffer, outlineMarkerPipeline, outlineDrawerPipeline, opaqueRenderPass, unjitteredCamera.viewProj, stencil_flag_selected_object);
+					outlines(cl, ldrRenderTarget, depthStencilBuffer, outlineRenderPass, unjitteredCamera.viewProj);
 				}
 
 				barrier_batcher(cl)
@@ -656,7 +630,6 @@ void main_renderer::endFrame(const user_input& input)
 
 			barrier_batcher(cl)
 				//.uav(frameResult)
-				.transition(render_resources::shadowMap, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE)
 				.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
 				.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 				.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)

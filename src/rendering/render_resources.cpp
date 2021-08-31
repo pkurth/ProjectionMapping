@@ -42,7 +42,7 @@ void render_resources::initializeGlobalResources()
 
 	noiseTexture = loadTextureFromFile("assets/noise/blue_noise.dds", texture_load_flags_noncolor); // Already compressed and in DDS format.
 
-	shadowMap = createDepthTexture(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, shadowDepthFormat);
+	shadowMap = createDepthTexture(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, shadowDepthFormat, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 	SET_NAME(shadowMap->resource, "Shadow map");
 
 	staticShadowMapCache = createDepthTexture(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, shadowDepthFormat, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -54,8 +54,8 @@ void render_resources::initializeGlobalResources()
 		dxContext.executeCommandList(cl);
 	}
 
-	nullTextureSRV = dxContext.descriptorAllocatorCPU.getFreeHandle().createNullTextureSRV();
-	nullBufferSRV = dxContext.descriptorAllocatorCPU.getFreeHandle().createNullBufferSRV();
+	nullTextureSRV = dx_cpu_descriptor_handle(dxContext.srvUavAllocator.allocate(1).cpuAt(0)).createNullTextureSRV();
+	nullBufferSRV = dx_cpu_descriptor_handle(dxContext.srvUavAllocator.allocate(1).cpuAt(0)).createNullBufferSRV();
 }
 
 void render_resources::declareTemporaryResourceNeeds(uint64 id, const std::vector<render_resource_desc>& descs)
@@ -186,11 +186,6 @@ void render_resources::allocateResources(temporary_render_resources& resources)
 			? createPlacedDepthTexture(resourceHeap, offset, desc.desc, desc.initialState)
 			: createPlacedTexture(resourceHeap, offset, desc.desc, desc.initialState);
 		texture->setName(desc.name);
-
-		if (texture->numMipLevels > 1 && texture->supportsUAV)
-		{
-			allocateMipUAVs(texture);
-		}
 
 		resources.textures.push_back(texture);
 	}

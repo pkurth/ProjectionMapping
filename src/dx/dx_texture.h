@@ -1,16 +1,14 @@
 #pragma once
 
 #include "dx_descriptor.h"
+#include "dx_descriptor_allocation.h"
 #include "core/math.h"
 
 #include <string>
 
 // If the texture_load_flags_cache_to_dds flags is set, the system will cache the texture as DDS to disk for faster loading next time.
-// This is not done if the original file has a newer write time.
-// It is also not done if the cache was created with different flags.
-// Therefore: If you change these flags, delete the texture cache!
-
-// If you want the mip chain to be computed on the GPU, you must call this yourself. This system only supports CPU mip levels for now.
+// Loading from cache is not done if the original file has a newer write time or if the cache was created with different flags.
+// Therefore: If you change these flags in code, delete the texture cache!
 
 enum texture_load_flags
 {
@@ -35,13 +33,25 @@ struct dx_texture
 	dx_resource resource;
 	D3D12MA::Allocation* allocation = 0;
 
+
+	dx_descriptor_allocation srvUavAllocation = {};
+	dx_descriptor_allocation rtvAllocation = {};
+	dx_descriptor_allocation dsvAllocation = {};
+
+
+
 	dx_cpu_descriptor_handle defaultSRV; // SRV for the whole texture (all mip levels).
 	dx_cpu_descriptor_handle defaultUAV; // UAV for the first mip level.
+	dx_cpu_descriptor_handle uavAt(uint32 index) { return srvUavAllocation.cpuAt(1 + index); }
 
 	dx_cpu_descriptor_handle stencilSRV; // For depth stencil textures.
 
-	dx_rtv_descriptor_handle rtvHandles;
-	dx_dsv_descriptor_handle dsvHandle;
+
+	dx_rtv_descriptor_handle defaultRTV;
+	dx_rtv_descriptor_handle rtvAt(uint32 index) { return rtvAllocation.cpuAt(index); }
+
+	dx_dsv_descriptor_handle defaultDSV;
+
 
 	uint32 width, height, depth;
 	DXGI_FORMAT format;
@@ -55,8 +65,6 @@ struct dx_texture
 
 	uint32 requestedNumMipLevels;
 	uint32 numMipLevels;
-
-	std::vector<dx_cpu_descriptor_handle> mipUAVs; // UAVs for the mip levels. Attention: These start at level 1, since level 0 is stored in defaultUAV.
 
 	void setName(const wchar* name);
 	std::wstring getName() const;
@@ -94,13 +102,9 @@ struct texture_grave
 {
 	dx_resource resource;
 
-	dx_cpu_descriptor_handle srv;
-	dx_cpu_descriptor_handle uav;
-	dx_cpu_descriptor_handle stencil;
-	dx_rtv_descriptor_handle rtv;
-	dx_dsv_descriptor_handle dsv;
-
-	std::vector<dx_cpu_descriptor_handle> mipUAVs;
+	dx_descriptor_allocation srvUavAllocation = {};
+	dx_descriptor_allocation rtvAllocation = {};
+	dx_descriptor_allocation dsvAllocation = {};
 
 	texture_grave() {}
 	texture_grave(const texture_grave& o) = delete;
@@ -115,16 +119,15 @@ struct texture_grave
 D3D12_RESOURCE_ALLOCATION_INFO getTextureAllocationInfo(uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips, D3D12_RESOURCE_FLAGS flags);
 
 void uploadTextureSubresourceData(ref<dx_texture> texture, D3D12_SUBRESOURCE_DATA* subresourceData, uint32 firstSubresource, uint32 numSubresources);
-ref<dx_texture> createTexture(D3D12_RESOURCE_DESC textureDesc, D3D12_SUBRESOURCE_DATA* subresourceData, uint32 numSubresources, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON);
-ref<dx_texture> createTexture(const void* data, uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips = false, bool allowRenderTarget = false, bool allowUnorderedAccess = false, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON);
+ref<dx_texture> createTexture(D3D12_RESOURCE_DESC textureDesc, D3D12_SUBRESOURCE_DATA* subresourceData, uint32 numSubresources, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON, bool mipUAVs = false);
+ref<dx_texture> createTexture(const void* data, uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips = false, bool allowRenderTarget = false, bool allowUnorderedAccess = false, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON, bool mipUAVs = false);
 ref<dx_texture> createDepthTexture(uint32 width, uint32 height, DXGI_FORMAT format, uint32 arrayLength = 1, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_DEPTH_WRITE);
-ref<dx_texture> createCubeTexture(const void* data, uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips = false, bool allowRenderTarget = false, bool allowUnorderedAccess = false, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON);
+ref<dx_texture> createCubeTexture(const void* data, uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips = false, bool allowRenderTarget = false, bool allowUnorderedAccess = false, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON, bool mipUAVs = false);
 ref<dx_texture> createVolumeTexture(const void* data, uint32 width, uint32 height, uint32 depth, DXGI_FORMAT format, bool allowUnorderedAccess, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON);
 void resizeTexture(ref<dx_texture> texture, uint32 newWidth, uint32 newHeight, D3D12_RESOURCE_STATES initialState = (D3D12_RESOURCE_STATES )-1);
-void allocateMipUAVs(ref<dx_texture> texture);
 
-ref<dx_texture> createPlacedTexture(dx_heap heap, uint64 offset, uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips = false, bool allowRenderTarget = false, bool allowUnorderedAccess = false, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON);
-ref<dx_texture> createPlacedTexture(dx_heap heap, uint64 offset, D3D12_RESOURCE_DESC textureDesc, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON);
+ref<dx_texture> createPlacedTexture(dx_heap heap, uint64 offset, uint32 width, uint32 height, DXGI_FORMAT format, bool allocateMips = false, bool allowRenderTarget = false, bool allowUnorderedAccess = false, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON, bool mipUAVs = false);
+ref<dx_texture> createPlacedTexture(dx_heap heap, uint64 offset, D3D12_RESOURCE_DESC textureDesc, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON, bool mipUAVs = false);
 
 ref<dx_texture> createPlacedDepthTexture(dx_heap heap, uint64 offset, uint32 width, uint32 height, DXGI_FORMAT format, uint32 arrayLength = 1, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_DEPTH_WRITE, bool allowDepthStencil = true);
 ref<dx_texture> createPlacedDepthTexture(dx_heap heap, uint64 offset, D3D12_RESOURCE_DESC textureDesc, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_DEPTH_WRITE);

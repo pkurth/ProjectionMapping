@@ -3,6 +3,8 @@
 #include "core/math.h"
 #include "render_pass.h"
 
+#include "particles_rs.hlsli"
+
 struct dx_command_list;
 
 enum sort_mode
@@ -55,7 +57,32 @@ private:
 
 
 	static ref<dx_buffer> particleDrawCommandBuffer;
+	static dx_command_signature particleCommandSignature;
 
 	friend void initializeRenderUtils();
+	template <typename T> friend struct particle_render_pipeline;
 };
 
+template <typename derived_pipeline_t>
+struct particle_render_pipeline
+{
+	static void render(dx_command_list* cl, const mat4& viewProj, const particle_render_command<derived_pipeline_t>& rc);
+};
+
+template<typename derived_pipeline_t>
+inline void particle_render_pipeline<derived_pipeline_t>::render(dx_command_list* cl, const mat4& viewProj, const particle_render_command<derived_pipeline_t>& rc)
+{
+	const particle_draw_info& info = rc.drawInfo;
+
+	cl->setRootGraphicsSRV(info.rootParameterOffset + PARTICLE_RENDERING_RS_PARTICLES, info.particleBuffer->gpuVirtualAddress);
+	cl->setRootGraphicsSRV(info.rootParameterOffset + PARTICLE_RENDERING_RS_ALIVE_LIST, info.aliveList->gpuVirtualAddress + info.aliveListOffset);
+
+	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
+	if (rc.vertexBuffer.others)
+	{
+		cl->setVertexBuffer(1, rc.vertexBuffer.others);
+	}
+	cl->setIndexBuffer(rc.indexBuffer);
+
+	cl->drawIndirect(particle_system::particleCommandSignature, 1, info.commandBuffer, info.commandBufferOffset);
+}

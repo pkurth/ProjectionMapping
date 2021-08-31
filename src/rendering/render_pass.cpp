@@ -4,59 +4,51 @@
 #include "dx/dx_context.h"
 
 
-
-void geometry_render_pass::reset()
+void sun_cascade_render_pass::renderStaticObject(const vertex_buffer_group& vertexBuffer, const ref<dx_index_buffer>& indexBuffer, submesh_info submesh, const mat4& transform)
 {
-	drawCalls.clear();
-	outlinedObjects.clear();
+	staticDrawCalls.push_back(
+		{
+			transform,
+			vertexBuffer.positions,
+			indexBuffer,
+			submesh,
+		}
+	);
 }
 
-void opaque_render_pass::reset()
+void sun_cascade_render_pass::renderDynamicObject(const vertex_buffer_group& vertexBuffer, const ref<dx_index_buffer>& indexBuffer, submesh_info submesh, const mat4& transform)
 {
-	geometry_render_pass::reset();
-
-	staticDepthOnlyDrawCalls.clear();
-	dynamicDepthOnlyDrawCalls.clear();
-	animatedDepthOnlyDrawCalls.clear();
+	dynamicDrawCalls.push_back(
+		{
+			transform,
+			vertexBuffer.positions,
+			indexBuffer,
+			submesh,
+		}
+	);
 }
 
-void transparent_render_pass::reset()
+void sun_cascade_render_pass::reset()
 {
-	geometry_render_pass::reset();
-
-	particleDrawCalls.clear();
+	staticDrawCalls.clear();
+	dynamicDrawCalls.clear();
 }
 
 void sun_shadow_render_pass::renderStaticObject(uint32 cascadeIndex, const vertex_buffer_group& vertexBuffer, const ref<dx_index_buffer>& indexBuffer, submesh_info submesh, const mat4& transform)
 {
-	staticDrawCalls[cascadeIndex].push_back(
-		{
-			transform,
-			vertexBuffer.positions,
-			indexBuffer,
-			submesh,
-		}
-	);
+	cascades[cascadeIndex].renderStaticObject(vertexBuffer, indexBuffer, submesh, transform);
 }
 
 void sun_shadow_render_pass::renderDynamicObject(uint32 cascadeIndex, const vertex_buffer_group& vertexBuffer, const ref<dx_index_buffer>& indexBuffer, submesh_info submesh, const mat4& transform)
 {
-	dynamicDrawCalls[cascadeIndex].push_back(
-		{
-			transform,
-			vertexBuffer.positions,
-			indexBuffer,
-			submesh,
-		}
-	);
+	cascades[cascadeIndex].renderDynamicObject(vertexBuffer, indexBuffer, submesh, transform);
 }
 
 void sun_shadow_render_pass::reset()
 {
 	for (uint32 i = 0; i < MAX_NUM_SUN_SHADOW_CASCADES; ++i)
 	{
-		staticDrawCalls[i].clear();
-		dynamicDrawCalls[i].clear();
+		cascades[i].reset();
 	}
 
 	copyFromStaticCache = false;

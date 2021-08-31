@@ -5,8 +5,8 @@
 #include "geometry/geometry.h"
 #include "physics/bounding_volumes.h"
 #include "rendering/render_utils.h"
+#include "rendering/debug_visualization.h"
 
-#include "flat_simple_rs.hlsli"
 
 enum gizmo_axis
 {
@@ -59,26 +59,6 @@ static gizmo_rectangle rectangles[] =
 };
 
 static dx_mesh mesh;
-static dx_pipeline gizmoPipeline;
-static ref<struct gizmo_material> materials[6];
-
-struct gizmo_material : material_base
-{
-	vec4 color;
-
-	static void setupOpaquePipeline(dx_command_list* cl, const common_material_info& info)
-	{
-		cl->setPipelineState(*gizmoPipeline.pipeline);
-		cl->setGraphicsRootSignature(*gizmoPipeline.rootSignature);
-
-		cl->setGraphicsDynamicConstantBuffer(2, info.cameraCBV);
-	}
-
-	void prepareForRendering(dx_command_list* cl)
-	{
-		cl->setGraphics32BitConstants(1, color);
-	}
-};
 
 
 void initializeTransformationGizmos()
@@ -105,20 +85,6 @@ void initializeTransformationGizmos()
 
 		rectangles[i].position *= shaftLength * 0.35f;
 		rectangles[i].radius *= shaftLength * 0.2f;
-	}
-
-	{
-		auto desc = CREATE_GRAPHICS_PIPELINE
-			.inputLayout(inputLayout_position_normal)
-			.renderTargets(overlayFormat, overlayDepthFormat)
-			;
-
-		gizmoPipeline = createReloadablePipeline(desc, { "flat_simple_vs", "flat_simple_ps" });
-
-		for (uint32 i = 0; i < 6; ++i)
-		{
-			materials[i] = make_ref<gizmo_material>();
-		}
 	}
 }
 
@@ -507,25 +473,19 @@ bool transformation_gizmo::manipulateTransformation(trs& transform, const render
 
 		for (uint32 i = 0; i < 3; ++i)
 		{
-			materials[i]->color = colors[i] * (highlightAxis == i ? 0.5f : 1.f);
-
-			overlayRenderPass->renderObject(mesh.vertexBuffer, mesh.indexBuffer,
+			overlayRenderPass->renderObject<debug_simple_pipeline>(createModelMatrix(transform.position, rotations[i], scaling), 
+				mesh.vertexBuffer, mesh.indexBuffer,
 				submeshes[type],
-				materials[i],
-				createModelMatrix(transform.position, rotations[i], scaling),
-				true
+				debug_material{ colors[i] * (highlightAxis == i ? 0.5f : 1.f) }
 			);
 		}
 
 		if (type == transformation_type_scale)
 		{
-			materials[3]->color = vec4(0.5f) * (highlightAxis == 3 ? 0.5f : 1.f);
-
-			overlayRenderPass->renderObject(mesh.vertexBuffer, mesh.indexBuffer,
+			overlayRenderPass->renderObject<debug_simple_pipeline>(createModelMatrix(transform.position, rot, scaling), 
+				mesh.vertexBuffer, mesh.indexBuffer,
 				boxSubmesh,
-				materials[3],
-				createModelMatrix(transform.position, rot, scaling),
-				true
+				debug_material{ vec4(0.5f) * (highlightAxis == 3 ? 0.5f : 1.f) }
 			);
 		}
 	}
@@ -548,13 +508,10 @@ bool transformation_gizmo::manipulateTransformation(trs& transform, const render
 
 		for (uint32 i = 0; i < 3; ++i)
 		{
-			materials[i + 3]->color = colors[i] * (highlightAxis == i + 3 ? 0.5f : 1.f);
-
-			overlayRenderPass->renderObject(mesh.vertexBuffer, mesh.indexBuffer,
+			overlayRenderPass->renderObject<debug_simple_pipeline>(createModelMatrix(transform.position, rotations[i], scaling), 
+				mesh.vertexBuffer, mesh.indexBuffer,
 				planeSubmesh,
-				materials[i + 3],
-				createModelMatrix(transform.position, rotations[i], scaling),
-				true
+				debug_material{ colors[i] * (highlightAxis == i + 3 ? 0.5f : 1.f) }
 			);
 		}
 	}
