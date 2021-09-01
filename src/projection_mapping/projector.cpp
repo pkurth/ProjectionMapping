@@ -30,52 +30,48 @@ void dummy_projector::edit()
 
 void projector_base::render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera)
 {
-	if (!active())
+	if (window.open)
 	{
-		return;
+		renderer.beginFrame(window.clientWidth, window.clientHeight);
+		if (renderer.active)
+		{
+			camera.setViewport(window.clientWidth, window.clientHeight);
+			camera.updateMatrices();
+
+			renderer.setProjectorCamera(camera);
+			renderer.setViewerCamera(viewerCamera);
+			renderer.setSun(sun);
+			renderer.setEnvironment(environment);
+			renderer.submitRenderPass(opaqueRenderPass);
+
+			renderer.endFrame();
+		}
 	}
-
-	camera.setViewport(window.clientWidth, window.clientHeight);
-	camera.updateMatrices();
-
-	renderer.beginFrame(camera.width, camera.height);
-	renderer.setProjectorCamera(camera);
-	renderer.setViewerCamera(viewerCamera);
-	renderer.setSun(sun);
-	renderer.setEnvironment(environment);
-	renderer.submitRenderPass(opaqueRenderPass);
-	
-	renderer.endFrame();
 }
 
 void projector_base::presentToBackBuffer(bool applySolverIntensity)
 {
-	if (!active())
+	if (active())
 	{
-		return;
+		dx_command_list* cl = dxContext.getFreeRenderCommandList();
+
+		renderer.finalizeImage(cl, applySolverIntensity);
+
+		dx_resource backbuffer = window.backBuffers[window.currentBackbufferIndex];
+		cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+		cl->copyResource(renderer.frameResult->resource, backbuffer);
+		cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+
+		dxContext.executeCommandList(cl);
 	}
-
-
-	dx_command_list* cl = dxContext.getFreeRenderCommandList();
-
-	renderer.finalizeImage(cl, applySolverIntensity);
-
-	dx_resource backbuffer = window.backBuffers[window.currentBackbufferIndex];
-	cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-	cl->copyResource(renderer.frameResult->resource, backbuffer);
-	cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-
-	dxContext.executeCommandList(cl);
 }
 
 void projector_base::swapBuffers()
 {
-	if (!active())
+	if (active())
 	{
-		return;
+		window.swapBuffers();
 	}
-
-	window.swapBuffers();
 }
 
 projector_solver_input projector_base::getSolverInput() const

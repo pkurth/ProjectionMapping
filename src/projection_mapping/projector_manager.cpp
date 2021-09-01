@@ -72,17 +72,17 @@ void projector_manager::updateAndRender()
 
 	for (auto& p : physicalProjectors)
 	{
+		p.render(opaqueRenderPass, sun, environment, viewerCamera);
 		if (p.active())
 		{
-			p.render(opaqueRenderPass, sun, environment, viewerCamera);
 			solverInput.push_back(p.getSolverInput());
 		}
 	}
 	for (auto& p : dummyProjectors)
 	{
+		p.render(opaqueRenderPass, sun, environment, viewerCamera);
 		if (p.active())
 		{
-			p.render(opaqueRenderPass, sun, environment, viewerCamera);
 			solverInput.push_back(p.getSolverInput());
 		}
 	}
@@ -94,19 +94,13 @@ void projector_manager::updateAndRender()
 	// Present and swap buffers.
 	for (auto& p : physicalProjectors)
 	{
-		if (p.active())
-		{
-			p.presentToBackBuffer(applySolverIntensity);
-			p.swapBuffers();
-		}
+		p.presentToBackBuffer(applySolverIntensity);
+		p.swapBuffers();
 	}
 	for (auto& p : dummyProjectors)
 	{
-		if (p.active())
-		{
-			p.presentToBackBuffer(applySolverIntensity);
-			p.swapBuffers();
-		}
+		p.presentToBackBuffer(applySolverIntensity);
+		p.swapBuffers();
 	}
 }
 
