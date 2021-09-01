@@ -17,7 +17,7 @@ SamplerState borderSampler					: register(s0);
 
 
 [RootSignature(PROJECTOR_SOLVER_RS)]
-[numthreads(PROJECTOR_SOLVER_BLOCK_SIZE, PROJECTOR_SOLVER_BLOCK_SIZE, 1)]
+[numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
 void main(cs_input IN)
 {
 	uint index = cb.currentIndex;

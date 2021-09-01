@@ -4,8 +4,17 @@
 #include "dx/dx_profiling.h"
 #include "dx/dx_barrier_batcher.h"
 
+#include "projector_rs.hlsli"
+
 
 tonemap_settings projector_renderer::tonemapSettings;
+
+static dx_pipeline projectorPresentPipeline;
+
+void projector_renderer::initializeCommon()
+{
+	projectorPresentPipeline = createReloadablePipeline("projector_present_cs");
+}
 
 void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint32 windowHeight)
 {
@@ -144,40 +153,24 @@ void projector_renderer::endFrame()
 	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 
-	// ----------------------------------------
-	// DEPTH-ONLY PASS
-	// ----------------------------------------
-
 	dx_render_target depthOnlyRenderTarget({ }, depthStencilBuffer);
 	depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
 		projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
 
 
-	// ----------------------------------------
-	// OPAQUE LIGHT PASS
-	// ----------------------------------------
-
 	dx_render_target hdrOpaqueRenderTarget({ hdrColorTexture, worldNormalsTexture, reflectanceTexture }, depthStencilBuffer);
 	opaqueLightPass(cl, hdrOpaqueRenderTarget, opaqueRenderPass, materialInfo, projectorCamera.viewProj);
 
 
-	{
-		DX_PROFILE_BLOCK(cl, "Transition textures");
+	barrier_batcher(cl)
+		.transition(hdrColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+		.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+		.transition(reflectanceTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-		barrier_batcher(cl)
-			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-			.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-			.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	}
-
-
-	// ----------------------------------------
-	// SPECULAR AMBIENT
-	// ----------------------------------------
 
 	specularAmbient(cl, hdrColorTexture, 0, worldNormalsTexture, reflectanceTexture,
 		environment ? environment->environment : 0, hdrPostProcessingTexture, materialInfo.cameraCBV);
+
 
 	barrier_batcher(cl)
 		//.uav(hdrPostProcessingTexture)
@@ -187,35 +180,54 @@ void projector_renderer::endFrame()
 
 	ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
 
-
-	// ----------------------------------------
-	// POST PROCESSING
-	// ----------------------------------------
-		
-
 	tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
 
-
 	barrier_batcher(cl)
-		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-
-	// TODO: If we really care we should sharpen before rendering overlays and outlines.
-
-	present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
-
-
-
-	barrier_batcher(cl)
-		//.uav(frameResult)
 		.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
 		.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 		.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON)
 		.transition(reflectanceTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 
 	dxContext.executeCommandList(cl);
+}
+
+void projector_renderer::present(dx_command_list* cl,
+	ref<dx_texture> ldrInput,
+	ref<dx_texture> solverIntensity,
+	ref<dx_texture> output,
+	sharpen_settings sharpenSettings)
+{
+	DX_PROFILE_BLOCK(cl, "Present");
+
+	cl->setPipelineState(*projectorPresentPipeline.pipeline);
+	cl->setComputeRootSignature(*projectorPresentPipeline.rootSignature);
+
+	cl->setDescriptorHeapUAV(PROJECTOR_PRESENT_RS_TEXTURES, 0, output);
+	cl->setDescriptorHeapSRV(PROJECTOR_PRESENT_RS_TEXTURES, 1, ldrInput);
+	cl->setDescriptorHeapSRV(PROJECTOR_PRESENT_RS_TEXTURES, 2, solverIntensity);
+	cl->setCompute32BitConstants(PROJECTOR_PRESENT_RS_CB, present_cb{ present_sdr, 0.f, sharpenSettings.strength, 0 });
+
+	cl->dispatch(bucketize(output->width, PROJECTOR_BLOCK_SIZE), bucketize(output->height, PROJECTOR_BLOCK_SIZE));
+}
+
+void projector_renderer::finalizeImage(dx_command_list* cl, bool applySolverIntensity)
+{
+	barrier_batcher(cl)
+		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+	if (applySolverIntensity)
+	{
+		present(cl, ldrPostProcessingTexture, solverIntensity, frameResult, sharpen_settings{ 0.f });
+	}
+	else
+	{
+		::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
+	}
+
+	barrier_batcher(cl)
+		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+		.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
 }
 

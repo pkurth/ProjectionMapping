@@ -15,5 +15,5 @@ struct projector_solver_input
 };
 
 void initializeProjectorSolver();
-uint64 solveProjectorIntensities(const std::vector<projector_solver_input>& input, uint32 iterations);
+void solveProjectorIntensities(dx_command_list* cl, const std::vector<projector_solver_input>& input, uint32 iterations);
 

@@ -29,4 +29,6 @@ private:
 	render_camera viewerCamera;
 	ref<pbr_environment> environment;
 	directional_light sun;
+
+	bool applySolverIntensity = false;
 };

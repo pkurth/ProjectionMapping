@@ -19,7 +19,7 @@ void initializeProjectorSolver()
 	}
 }
 
-uint64 solveProjectorIntensities(const std::vector<projector_solver_input>& input, uint32 iterations)
+void solveProjectorIntensities(dx_command_list* cl, const std::vector<projector_solver_input>& input, uint32 iterations)
 {
 	uint32 numProjectors = (uint32)input.size();
 
@@ -67,8 +67,6 @@ uint64 solveProjectorIntensities(const std::vector<projector_solver_input>& inpu
 	}
 
 
-	dx_command_list* cl = dxContext.getFreeRenderCommandList();
-
 	cl->setPipelineState(*solverPipeline.pipeline);
 	cl->setComputeRootSignature(*solverPipeline.rootSignature);
 
@@ -95,13 +93,11 @@ uint64 solveProjectorIntensities(const std::vector<projector_solver_input>& inpu
 			cl->transitionBarrier(input[proj].outIntensities, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			cl->setCompute32BitConstants(PROJECTOR_SOLVER_RS_CB, cb);
 
-			cl->dispatch(bucketize(width, PROJECTOR_SOLVER_BLOCK_SIZE), bucketize(height, PROJECTOR_SOLVER_BLOCK_SIZE));
+			cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
 			cl->uavBarrier(input[proj].outIntensities);
 			cl->transitionBarrier(input[proj].outIntensities, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 		}
 	}
 
 	cl->resetToDynamicDescriptorHeap();
-
-	return dxContext.executeCommandList(cl);
 }

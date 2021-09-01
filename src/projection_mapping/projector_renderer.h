@@ -6,12 +6,15 @@
 
 struct projector_renderer
 {
+	static void initializeCommon();
+
 	projector_renderer() {}
 	void initialize(color_depth colorDepth, uint32 windowWidth, uint32 windowHeight);
 	void shutdown();
 
 	void beginFrame(uint32 windowWidth, uint32 windowHeight);
 	void endFrame();
+	void finalizeImage(dx_command_list* cl, bool applySolverIntensity);
 
 
 	// Set these with your application.
@@ -31,6 +34,12 @@ struct projector_renderer
 
 private:
 
+	static void present(dx_command_list* cl,
+		ref<dx_texture> ldrInput,
+		ref<dx_texture> solverIntensity,
+		ref<dx_texture> output,
+		sharpen_settings sharpenSettings);
+
 	const opaque_render_pass* opaqueRenderPass;
 
 
@@ -49,5 +58,6 @@ private:
 	camera_cb viewerCamera;
 	directional_light_cb sun;
 
+	friend struct projector_base;
 	friend struct projector_manager;
 };

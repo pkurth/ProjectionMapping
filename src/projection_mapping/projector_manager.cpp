@@ -30,6 +30,8 @@ void projector_manager::updateAndRender()
 {
 	if (ImGui::Begin("Projectors"))
 	{
+		ImGui::Checkbox("Apply solver intensity", &applySolverIntensity);
+
 		if (ImGui::TreeNode("Physical projectors"))
 		{
 			for (auto& p : physicalProjectors)
@@ -65,7 +67,7 @@ void projector_manager::updateAndRender()
 		if (p.active())
 		{
 			p.render(opaqueRenderPass, sun, environment, viewerCamera);
-			solverInput.push_back({ p.renderer.frameResult, p.renderer.worldNormalsTexture, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj, p.camera.position });
+			solverInput.push_back(p.getSolverInput());
 		}
 	}
 	for (auto& p : dummyProjectors)
@@ -73,11 +75,51 @@ void projector_manager::updateAndRender()
 		if (p.active())
 		{
 			p.render(opaqueRenderPass, sun, environment, viewerCamera);
-			solverInput.push_back({ p.renderer.frameResult, p.renderer.worldNormalsTexture, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj, p.camera.position });
+			solverInput.push_back(p.getSolverInput());
 		}
 	}
 
-	solveProjectorIntensities(solverInput, 1);
+
+	dx_command_list* cl = dxContext.getFreeRenderCommandList();
+
+	solveProjectorIntensities(cl, solverInput, 1);
+
+
+	// Present.
+	for (auto& p : physicalProjectors)
+	{
+		if (p.active())
+		{
+			p.presentToBackBuffer(cl, applySolverIntensity);
+		}
+	}
+	for (auto& p : dummyProjectors)
+	{
+		if (p.active())
+		{
+			p.presentToBackBuffer(cl, applySolverIntensity);
+		}
+	}
+
+	dxContext.executeCommandList(cl);
+
+
+
+	// Swap buffers.
+	for (auto& p : physicalProjectors)
+	{
+		if (p.active())
+		{
+			p.swapBuffers();
+		}
+	}
+	for (auto& p : dummyProjectors)
+	{
+		if (p.active())
+		{
+			p.swapBuffers();
+		}
+	}
 }
 
 void projector_manager::debugDraw()

@@ -2,7 +2,7 @@
 #define PROJECTOR_HLSLI
 
 
-#define PROJECTOR_SOLVER_BLOCK_SIZE 16
+#define PROJECTOR_BLOCK_SIZE 16
 
 
 struct projector_cb
@@ -45,5 +45,37 @@ struct projector_solver_cb
 #define PROJECTOR_SOLVER_RS_DEPTH_TEXTURES      4
 #define PROJECTOR_SOLVER_RS_INTENSITIES         5
 #define PROJECTOR_SOLVER_RS_OUT_INTENSITIES     6
+
+
+
+
+
+
+
+
+#define present_sdr 0
+#define present_hdr 1
+
+
+struct present_cb
+{
+    uint32 displayMode;
+    float standardNits;
+    float sharpenStrength;
+    uint32 offset; // x-offset | y-offset.
+};
+
+#define PROJECTOR_PRESENT_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=4, b0),"  \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 2) )"
+
+#define PROJECTOR_PRESENT_RS_CB               0
+#define PROJECTOR_PRESENT_RS_TEXTURES         1
+
+
+
+
+
 
 #endif

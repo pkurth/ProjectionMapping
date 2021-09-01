@@ -2,16 +2,18 @@
 #include "projector.h"
 #include "core/yaml.h"
 #include "core/imgui.h"
+#include "core/string.h"
 
 physical_projector::physical_projector(const monitor_info& monitor)
 {
 	this->monitor = monitor;
+	this->name = monitor.name;
 	//camera.initializeCalibrated(); // TODO
 }
 
 void physical_projector::edit()
 {
-	editCommon(monitor.name, monitor.width, monitor.height);
+	editCommon(monitor.width, monitor.height);
 }
 
 dummy_projector::dummy_projector(std::string name, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intr)
@@ -23,14 +25,14 @@ dummy_projector::dummy_projector(std::string name, vec3 position, quat rotation,
 
 void dummy_projector::edit()
 {
-	editCommon(name, camera.width, camera.height);
+	editCommon(camera.width, camera.height);
 }
 
-uint64 projector_base::render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera)
+void projector_base::render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera)
 {
 	if (!active())
 	{
-		return 0;
+		return;
 	}
 
 	camera.setViewport(window.clientWidth, window.clientHeight);
@@ -44,24 +46,29 @@ uint64 projector_base::render(const opaque_render_pass* opaqueRenderPass, const 
 	renderer.submitRenderPass(opaqueRenderPass);
 	
 	renderer.endFrame();
+}
 
-
-	// We could eventually bundle these into a single command list for all projectors. These are probably too light weight.
-	dx_command_list* cl = dxContext.getFreeRenderCommandList();
+void projector_base::presentToBackBuffer(dx_command_list* cl, bool applySolverIntensity)
+{
+	renderer.finalizeImage(cl, applySolverIntensity);
 
 	dx_resource backbuffer = window.backBuffers[window.currentBackbufferIndex];
 	cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 	cl->copyResource(renderer.frameResult->resource, backbuffer);
 	cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-
-	uint64 result = dxContext.executeCommandList(cl);
-
-	window.swapBuffers();
-
-	return result;
 }
 
-void projector_base::editCommon(const std::string& name, uint32 width, uint32 height)
+void projector_base::swapBuffers()
+{
+	window.swapBuffers();
+}
+
+projector_solver_input projector_base::getSolverInput() const
+{
+	return projector_solver_input{ renderer.frameResult, renderer.worldNormalsTexture, renderer.depthStencilBuffer, renderer.solverIntensity, camera.viewProj, camera.position };
+}
+
+void projector_base::editCommon(uint32 width, uint32 height)
 {
 	if (ImGui::TreeNode(this, "%s (%ux%u)", name.c_str(), width, height))
 	{
@@ -84,7 +91,11 @@ void projector_base::editCommon(const std::string& name, uint32 width, uint32 he
 
 void projector_base::activate()
 {
-	window.initialize(TEXT("Projector"), camera.width, camera.height, color_depth_8);
+#ifdef UNICODE
+		window.initialize(stringToWstring(name).c_str(), camera.width, camera.height, color_depth_8);
+#else
+		window.initialize(name.c_str(), camera.width, camera.height, color_depth_8);
+#endif
 	renderer.initialize(window.colorDepth, camera.width, camera.height);
 }
 

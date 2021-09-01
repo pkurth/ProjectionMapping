@@ -100,6 +100,7 @@ int main(int argc, char** argv)
 
 	window.setFileDropCallback([&app](const std::string& s) { app.handleFileDrop(s); });
 
+	projector_renderer::initializeCommon();
 	projector_manager projectorManager;
 
 	initializeTransformationGizmos();
