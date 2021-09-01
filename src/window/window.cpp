@@ -61,7 +61,7 @@ static void setFullscreen(HWND windowHandle, bool fullscreen, WINDOWPLACEMENT& w
 	}
 }
 
-bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clientHeight, bool visible)
+bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clientHeight, bool visible, bool disableResizing)
 {
 	if (!windowClassInitialized)
 	{
@@ -91,6 +91,11 @@ bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clie
 		this->clientHeight = clientHeight;
 
 		DWORD windowStyle = WS_OVERLAPPEDWINDOW;
+		if (disableResizing)
+		{
+			windowStyle ^= WS_THICKFRAME;
+			windowStyle ^= WS_MAXIMIZEBOX;
+		}
 
 		RECT r = { 0, 0, (LONG)clientWidth, (LONG)clientHeight };
 		AdjustWindowRect(&r, windowStyle, FALSE);

@@ -92,9 +92,9 @@ void projector_base::editCommon(uint32 width, uint32 height)
 void projector_base::activate()
 {
 #ifdef UNICODE
-		window.initialize(stringToWstring(name).c_str(), camera.width, camera.height, color_depth_8);
+		window.initialize(stringToWstring(name).c_str(), camera.width, camera.height, color_depth_8, false, true);
 #else
-		window.initialize(name.c_str(), camera.width, camera.height, color_depth_8);
+		window.initialize(name.c_str(), camera.width, camera.height, color_depth_8, false, true);
 #endif
 	renderer.initialize(window.colorDepth, camera.width, camera.height);
 }

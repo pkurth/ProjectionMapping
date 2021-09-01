@@ -8,7 +8,7 @@ struct win32_window
 	win32_window(win32_window&) = delete;
 	win32_window(win32_window&& o);
 
-	bool initialize(const TCHAR* name, uint32 clientWidth, uint32 clientHeight, bool visible = true);
+	bool initialize(const TCHAR* name, uint32 clientWidth, uint32 clientHeight, bool visible = true, bool disableResizing = false);
 	virtual void shutdown();
 
 	virtual ~win32_window();
