@@ -19,8 +19,10 @@ void initializeProjectorSolver()
 	}
 }
 
-void solveProjectorIntensities(dx_command_list* cl, const std::vector<projector_solver_input>& input, uint32 iterations)
+void solveProjectorIntensities(const std::vector<projector_solver_input>& input, uint32 iterations)
 {
+	dx_command_list* cl = dxContext.getFreeRenderCommandList();
+
 	uint32 numProjectors = (uint32)input.size();
 
 	dx_pushable_descriptor_heap& heap = heaps[dxContext.bufferedFrameID];
@@ -100,4 +102,6 @@ void solveProjectorIntensities(dx_command_list* cl, const std::vector<projector_
 	}
 
 	cl->resetToDynamicDescriptorHeap();
+
+	dxContext.executeCommandList(cl);
 }

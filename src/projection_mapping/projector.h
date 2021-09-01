@@ -9,10 +9,10 @@
 struct projector_base
 {
 	virtual void edit() = 0;
-	bool active() { return window.open; }
+	bool active() { return window.open && renderer.active; }
 
 	void render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera);
-	void presentToBackBuffer(dx_command_list* cl, bool applySolverIntensity);
+	void presentToBackBuffer(bool applySolverIntensity);
 	void swapBuffers();
 
 	projector_solver_input getSolverInput() const;

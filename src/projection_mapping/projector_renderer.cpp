@@ -65,6 +65,15 @@ void projector_renderer::shutdown()
 
 void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 {
+	opaqueRenderPass = 0;
+	environment = 0;
+
+	active = windowWidth > 0 && windowHeight > 0;
+	if (!active)
+	{
+		return;
+	}
+
 	if (this->renderWidth != windowWidth || this->renderHeight != windowHeight)
 	{
 		this->renderWidth = windowWidth;
@@ -82,10 +91,6 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 
 		resizeTexture(solverIntensity, renderWidth, renderHeight);
 	}
-
-	opaqueRenderPass = 0;
-	
-	environment = 0;
 }
 
 void projector_renderer::setProjectorCamera(const render_camera& camera)
@@ -112,6 +117,11 @@ void projector_renderer::setSun(const directional_light& light)
 
 void projector_renderer::endFrame()
 {
+	if (!active)
+	{
+		return;
+	}
+
 	auto viewerCameraCBV = dxContext.uploadDynamicConstantBuffer(viewerCamera);
 	auto sunCBV = dxContext.uploadDynamicConstantBuffer(sun);
 
@@ -213,6 +223,11 @@ void projector_renderer::present(dx_command_list* cl,
 
 void projector_renderer::finalizeImage(dx_command_list* cl, bool applySolverIntensity)
 {
+	if (!active)
+	{
+		return;
+	}
+
 	barrier_batcher(cl)
 		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

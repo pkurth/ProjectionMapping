@@ -58,7 +58,15 @@ void projector_manager::updateAndRender()
 		}
 	}
 
+	for (auto& p : physicalProjectors)	{ if (p.active()) { ImGui::Image(p.renderer.solverIntensity, 400, 300); } }
+	for (auto& p : dummyProjectors)		{ if (p.active()) { ImGui::Image(p.renderer.solverIntensity, 400, 300); } }
+
 	ImGui::End();
+
+
+
+
+
 
 	std::vector<projector_solver_input> solverInput;
 
@@ -80,9 +88,7 @@ void projector_manager::updateAndRender()
 	}
 
 
-	dx_command_list* cl = dxContext.getFreeRenderCommandList();
-
-	solveProjectorIntensities(cl, solverInput, 1);
+	solveProjectorIntensities(solverInput, 1);
 
 
 	// Present.
@@ -90,18 +96,18 @@ void projector_manager::updateAndRender()
 	{
 		if (p.active())
 		{
-			p.presentToBackBuffer(cl, applySolverIntensity);
+			p.presentToBackBuffer(applySolverIntensity);
+			p.swapBuffers();
 		}
 	}
 	for (auto& p : dummyProjectors)
 	{
 		if (p.active())
 		{
-			p.presentToBackBuffer(cl, applySolverIntensity);
+			p.presentToBackBuffer(applySolverIntensity);
+			p.swapBuffers();
 		}
 	}
-
-	dxContext.executeCommandList(cl);
 
 
 
@@ -110,23 +116,13 @@ void projector_manager::updateAndRender()
 	{
 		if (p.active())
 		{
-			p.swapBuffers();
 		}
 	}
 	for (auto& p : dummyProjectors)
 	{
 		if (p.active())
 		{
-			p.swapBuffers();
 		}
-	}
-}
-
-void projector_manager::debugDraw()
-{
-	for (auto& p : dummyProjectors)
-	{
-		ImGui::Image(p.renderer.solverIntensity, 400, 300);
 	}
 }
 

@@ -15,8 +15,6 @@ struct projector_manager
 
 	void submitRenderPass(const opaque_render_pass* renderPass) { assert(!opaqueRenderPass); opaqueRenderPass = renderPass; }
 
-	void debugDraw();
-
 private:
 	void addDummyProjector();
 

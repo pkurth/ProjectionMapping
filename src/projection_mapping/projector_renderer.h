@@ -34,6 +34,8 @@ struct projector_renderer
 
 private:
 
+	bool active = true;
+
 	static void present(dx_command_list* cl,
 		ref<dx_texture> ldrInput,
 		ref<dx_texture> solverIntensity,

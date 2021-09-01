@@ -48,18 +48,33 @@ void projector_base::render(const opaque_render_pass* opaqueRenderPass, const di
 	renderer.endFrame();
 }
 
-void projector_base::presentToBackBuffer(dx_command_list* cl, bool applySolverIntensity)
+void projector_base::presentToBackBuffer(bool applySolverIntensity)
 {
+	if (!active())
+	{
+		return;
+	}
+
+
+	dx_command_list* cl = dxContext.getFreeRenderCommandList();
+
 	renderer.finalizeImage(cl, applySolverIntensity);
 
 	dx_resource backbuffer = window.backBuffers[window.currentBackbufferIndex];
 	cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 	cl->copyResource(renderer.frameResult->resource, backbuffer);
 	cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+
+	dxContext.executeCommandList(cl);
 }
 
 void projector_base::swapBuffers()
 {
+	if (!active())
+	{
+		return;
+	}
+
 	window.swapBuffers();
 }
 
