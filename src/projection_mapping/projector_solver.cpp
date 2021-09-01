@@ -26,13 +26,15 @@ uint64 solveProjectorIntensities(const std::vector<projector_solver_input>& inpu
 	dx_pushable_descriptor_heap& heap = heaps[dxContext.bufferedFrameID];
 	heap.reset();
 
-	dx_allocation alloc = dxContext.allocateDynamicBuffer(numProjectors * sizeof(mat4));
-	mat4* viewProjs = (mat4*)alloc.cpuPtr;
+	dx_allocation alloc = dxContext.allocateDynamicBuffer(numProjectors * sizeof(projector_vp));
+	projector_vp* viewProjs = (projector_vp*)alloc.cpuPtr;
 
 	dx_gpu_descriptor_handle renderResultsBaseDescriptor = heap.currentGPU;
 	for (const projector_solver_input& in : input)
 	{
-		*viewProjs++ = in.viewProj;
+		projector_vp& vp = *viewProjs++;
+		vp.viewProj = in.viewProj;
+		vp.invViewProj = invert(in.viewProj);
 		heap.push().create2DTextureSRV(in.renderResult);
 	}
 
