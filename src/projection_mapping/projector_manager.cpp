@@ -91,7 +91,7 @@ void projector_manager::updateAndRender()
 	solveProjectorIntensities(solverInput, 1);
 
 
-	// Present.
+	// Present and swap buffers.
 	for (auto& p : physicalProjectors)
 	{
 		if (p.active())
@@ -106,22 +106,6 @@ void projector_manager::updateAndRender()
 		{
 			p.presentToBackBuffer(applySolverIntensity);
 			p.swapBuffers();
-		}
-	}
-
-
-
-	// Swap buffers.
-	for (auto& p : physicalProjectors)
-	{
-		if (p.active())
-		{
-		}
-	}
-	for (auto& p : dummyProjectors)
-	{
-		if (p.active())
-		{
 		}
 	}
 }
