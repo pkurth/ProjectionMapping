@@ -89,8 +89,12 @@ struct dx_pushable_descriptor_heap
 {
 	void initialize(uint32 maxSize, bool shaderVisible = true);
 	dx_cpu_descriptor_handle push();
+	void reset();
 
 	com<ID3D12DescriptorHeap> descriptorHeap;
 	dx_cpu_descriptor_handle currentCPU;
 	dx_gpu_descriptor_handle currentGPU;
+
+	dx_cpu_descriptor_handle baseCPU;
+	dx_gpu_descriptor_handle baseGPU;
 };

@@ -373,12 +373,19 @@ void dx_pushable_descriptor_heap::initialize(uint32 maxSize, bool shaderVisible)
 
 	checkResult(dxContext.device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
 
-	currentCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	currentGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	reset();
 }
 
 dx_cpu_descriptor_handle dx_pushable_descriptor_heap::push()
 {
 	++currentGPU;
 	return currentCPU++;
+}
+
+void dx_pushable_descriptor_heap::reset()
+{
+	currentCPU = baseCPU;
+	currentGPU = baseGPU;
 }
