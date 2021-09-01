@@ -16,22 +16,20 @@
 #include "rendering/path_tracing.h"
 
 #include "scene/scene.h"
-
+#include "projection_mapping/projector_manager.h"
 
 
 struct application
 {
 	void loadCustomShaders();
-	void initialize(main_renderer* renderer);
-	void update(const user_input& input, opaque_render_pass& projectorOpaqueRenderPass, float dt);
+	void initialize(main_renderer* renderer, projector_manager* projectorManager);
+	void update(const user_input& input, float dt);
 
 	void setEnvironment(const std::string& filename);
 
 	void handleFileDrop(const std::string& filename);
 	void serializeToFile();
 	bool deserializeFromFile();
-
-	render_camera camera;
 
 private:
 	void setSelectedEntityEulerRotation();
@@ -67,6 +65,8 @@ private:
 
 	ref<pbr_environment> environment;
 
+	render_camera camera;
+
 
 	ref<dx_buffer> pointLightBuffer[NUM_BUFFERED_FRAMES];
 	ref<dx_buffer> spotLightBuffer[NUM_BUFFERED_FRAMES];
@@ -92,6 +92,7 @@ private:
 	directional_light sun;
 
 	main_renderer* renderer;
+	projector_manager* projectorManager;
 
 	camera_controller cameraController;
 

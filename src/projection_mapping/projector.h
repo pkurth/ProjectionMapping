@@ -10,7 +10,7 @@ struct projector_base
 	virtual void edit() = 0;
 	bool active() { return window.open; }
 
-	uint64 render(const render_camera& viewerCamera, const opaque_render_pass* opaqueRenderPass);
+	uint64 render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera);
 
 protected:
 	void editCommon(const std::string& name, uint32 width, uint32 height);

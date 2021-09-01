@@ -12,14 +12,18 @@ projector_manager::projector_manager()
 	{
 		physicalProjectors.emplace_back(monitor);
 	}
+
+	addDummyProjector();
+	addDummyProjector();
 }
 
 void projector_manager::beginFrame()
 {
-	opaqueRenderPass.reset();
+	opaqueRenderPass = 0;
+	environment = 0;
 }
 
-void projector_manager::updateAndRender(const render_camera& viewerCamera)
+void projector_manager::updateAndRender()
 {
 	if (ImGui::Begin("Projectors"))
 	{
@@ -42,7 +46,7 @@ void projector_manager::updateAndRender(const render_camera& viewerCamera)
 
 			if (ImGui::Button("Add"))
 			{
-				dummyProjectors.emplace_back("Dummy " + std::to_string(dummyProjectors.size()), vec3(0.f, 0.f, 0.f), quat::identity, 640, 480, camera_intrinsics{ 400.f, 400.f, 320.f, 240.f });
+				addDummyProjector();
 			}
 
 			ImGui::TreePop();
@@ -54,12 +58,33 @@ void projector_manager::updateAndRender(const render_camera& viewerCamera)
 
 	for (auto& p : physicalProjectors)
 	{
-		p.render(viewerCamera, &opaqueRenderPass);
+		p.render(opaqueRenderPass, sun, environment, viewerCamera);
 	}
 	for (auto& p : dummyProjectors)
 	{
-		p.render(viewerCamera, &opaqueRenderPass);
+		p.render(opaqueRenderPass, sun, environment, viewerCamera);
 	}
 
+}
+
+void projector_manager::addDummyProjector()
+{
+	static const vec3 possiblePositions[] =
+	{
+		vec3(0.5f, 1.f, 2.1f),
+		vec3(-0.5f, 1.f, 2.1f),
+	};
+
+	static const quat possibleRotations[] =
+	{
+		quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)),
+		quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)),
+	};
+
+	uint32 index = (uint32)dummyProjectors.size();
+	if (index < arraysize(possiblePositions))
+	{
+		dummyProjectors.emplace_back("Dummy " + std::to_string(dummyProjectors.size()), possiblePositions[index], possibleRotations[index], 640, 480, camera_intrinsics{ 400.f, 400.f, 320.f, 240.f });
+	}
 }
 

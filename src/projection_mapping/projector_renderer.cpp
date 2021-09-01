@@ -133,7 +133,7 @@ void projector_renderer::endFrame()
 
 
 	cl->clearDepthAndStencil(depthStencilBuffer);
-	cl->clearRTV(hdrColorTexture, 0.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors.
+	cl->clearRTV(hdrColorTexture, 0.f, 0.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors. Clear alpha to zero too, to indicate background.
 	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 

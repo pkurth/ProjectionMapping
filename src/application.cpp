@@ -93,9 +93,10 @@ void application::loadCustomShaders()
 	}
 }
 
-void application::initialize(main_renderer* renderer)
+void application::initialize(main_renderer* renderer, projector_manager* projectorManager)
 {
 	this->renderer = renderer;
+	this->projectorManager = projectorManager;
 
 	camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 	cameraController.initialize(&camera);
@@ -104,6 +105,13 @@ void application::initialize(main_renderer* renderer)
 	{
 		pathTracer.initialize();
 		raytracingTLAS.initialize();
+	}
+
+	if (auto augustusMesh = loadMeshFromFile("assets/augustus/augustus.obj"))
+	{
+		appScene.createEntity("Augustus")
+			.addComponent<trs>(vec3(0.f, 0.f, 0.f), quat::identity, 4.f)
+			.addComponent<raster_component>(augustusMesh);
 	}
 
 #if 0
@@ -1032,6 +1040,8 @@ void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 num
 	{
 		shadow_map_renderer::submitRenderPass(&pointShadowRenderPasses[i]);
 	}
+
+	projectorManager->submitRenderPass(&opaqueRenderPass);
 }
 
 bool application::handleUserInput(const user_input& input, float dt)
@@ -1479,7 +1489,7 @@ void application::renderDynamicGeometryToShadowMap(point_shadow_render_pass& ren
 	}
 }
 
-void application::update(const user_input& input, opaque_render_pass& projectorOpaqueRenderPass, float dt)
+void application::update(const user_input& input, float dt)
 {
 	//dt = min(dt, 1.f / 30.f);
 	//dt = 1.f / 60.f;
@@ -1522,6 +1532,10 @@ void application::update(const user_input& input, opaque_render_pass& projectorO
 	renderer->setCamera(camera);
 	renderer->setSun(sun);
 	renderer->setEnvironment(environment);
+
+	projectorManager->setViewerCamera(camera);
+	projectorManager->setSun(sun);
+	projectorManager->setEnvironment(environment);
 
 #if 1
 	if (renderer->mode == renderer_mode_rasterized)
@@ -1636,7 +1650,6 @@ void application::update(const user_input& input, opaque_render_pass& projectorO
 						else
 						{
 							opaqueRenderPass.renderStaticObject<opaque_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
-							projectorOpaqueRenderPass.renderStaticObject<opaque_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 					}
 

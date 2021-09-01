@@ -26,18 +26,12 @@ void dummy_projector::edit()
 	editCommon(name, camera.width, camera.height);
 }
 
-uint64 projector_base::render(const render_camera& viewerCamera, const opaque_render_pass* opaqueRenderPass)
+uint64 projector_base::render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera)
 {
 	if (!active())
 	{
 		return 0;
 	}
-
-	directional_light sun;
-	sun.direction = normalize(vec3(-0.6f, -1.f, -0.3f));
-	sun.color = vec3(1.f, 0.93f, 0.76f);
-	sun.intensity = 50.f;
-	sun.numShadowCascades = 0;
 
 	camera.setViewport(window.clientWidth, window.clientHeight);
 	camera.updateMatrices();
@@ -46,6 +40,7 @@ uint64 projector_base::render(const render_camera& viewerCamera, const opaque_re
 	renderer.setProjectorCamera(camera);
 	renderer.setViewerCamera(viewerCamera);
 	renderer.setSun(sun);
+	renderer.setEnvironment(environment);
 	renderer.submitRenderPass(opaqueRenderPass);
 	
 	renderer.endFrame();

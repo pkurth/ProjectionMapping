@@ -111,7 +111,7 @@ int main(int argc, char** argv)
 	main_renderer renderer;
 	renderer.initialize(window.colorDepth, 1280, 800, spec);
 
-	app.initialize(&renderer);
+	app.initialize(&renderer, &projectorManager);
 
 	file_browser fileBrowser;
 	mesh_editor_panel meshEditor;
@@ -231,7 +231,7 @@ int main(int argc, char** argv)
 		shadow_map_renderer::beginFrame();
 		renderer.beginFrame(renderWidth, renderHeight);
 		
-		app.update(input, projectorManager.opaqueRenderPass, dt);
+		app.update(input, dt);
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();
@@ -239,7 +239,7 @@ int main(int argc, char** argv)
 
 		fileBrowser.draw(meshEditor);
 		meshEditor.draw();
-		projectorManager.updateAndRender(app.camera);
+		projectorManager.updateAndRender();
 
 		fenceValues[window.currentBackbufferIndex] = renderToMainWindow(window);
 
