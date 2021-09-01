@@ -65,7 +65,7 @@ void projector_manager::updateAndRender()
 		if (p.active())
 		{
 			p.render(opaqueRenderPass, sun, environment, viewerCamera);
-			solverInput.push_back({ p.renderer.frameResult, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj });
+			solverInput.push_back({ p.renderer.frameResult, p.renderer.worldNormalsTexture, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj, p.camera.position });
 		}
 	}
 	for (auto& p : dummyProjectors)
@@ -73,7 +73,7 @@ void projector_manager::updateAndRender()
 		if (p.active())
 		{
 			p.render(opaqueRenderPass, sun, environment, viewerCamera);
-			solverInput.push_back({ p.renderer.frameResult, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj });
+			solverInput.push_back({ p.renderer.frameResult, p.renderer.worldNormalsTexture, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj, p.camera.position });
 		}
 	}
 

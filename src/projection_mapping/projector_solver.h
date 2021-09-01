@@ -7,9 +7,11 @@
 struct projector_solver_input
 {
 	ref<dx_texture> renderResult;
+	ref<dx_texture> worldNormals;
 	ref<dx_texture> depthBuffer;
 	ref<dx_texture> outIntensities;
 	mat4 viewProj;
+	vec3 position;
 };
 
 void initializeProjectorSolver();
