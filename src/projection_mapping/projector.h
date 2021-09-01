@@ -22,6 +22,8 @@ protected:
 	dx_window window;
 
 	projector_renderer renderer;
+
+	friend struct projector_manager;
 };
 
 struct physical_projector : projector_base

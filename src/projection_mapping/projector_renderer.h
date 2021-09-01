@@ -38,6 +38,7 @@ private:
 	ref<dx_texture> worldNormalsTexture;
 	ref<dx_texture> reflectanceTexture;
 	ref<dx_texture> depthStencilBuffer;
+	ref<dx_texture> solverIntensity;
 	
 	ref<dx_texture> hdrPostProcessingTexture;
 	ref<dx_texture> ldrPostProcessingTexture;
@@ -47,4 +48,6 @@ private:
 	camera_cb projectorCamera;
 	camera_cb viewerCamera;
 	directional_light_cb sun;
+
+	friend struct projector_manager;
 };

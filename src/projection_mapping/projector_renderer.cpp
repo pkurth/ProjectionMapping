@@ -32,6 +32,9 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 
 	frameResult = createTexture(0, renderWidth, renderHeight, colorDepthToFormat(colorDepth), false, true, true);
 	SET_NAME(frameResult->resource, "Frame result");
+
+	solverIntensity = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	SET_NAME(solverIntensity->resource, "Solver intensity");
 }
 
 void projector_renderer::shutdown()
@@ -45,6 +48,8 @@ void projector_renderer::shutdown()
 
 	hdrPostProcessingTexture = 0;
 	ldrPostProcessingTexture = 0;
+
+	solverIntensity = 0;
 
 	environment = 0;
 }
@@ -65,6 +70,8 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(ldrPostProcessingTexture, renderWidth, renderHeight);
 
 		resizeTexture(frameResult, renderWidth, renderHeight);
+
+		resizeTexture(solverIntensity, renderWidth, renderHeight);
 	}
 
 	opaqueRenderPass = 0;

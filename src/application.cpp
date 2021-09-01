@@ -1537,6 +1537,8 @@ void application::update(const user_input& input, float dt)
 	projectorManager->setSun(sun);
 	projectorManager->setEnvironment(environment);
 
+	projectorManager->debugDraw();
+
 #if 1
 	if (renderer->mode == renderer_mode_rasterized)
 	{

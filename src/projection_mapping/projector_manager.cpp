@@ -3,6 +3,7 @@
 #include "window/dx_window.h"
 #include "core/imgui.h"
 
+#include "projector_solver.h"
 
 projector_manager::projector_manager()
 {
@@ -15,6 +16,8 @@ projector_manager::projector_manager()
 
 	addDummyProjector();
 	addDummyProjector();
+
+	initializeProjectorSolver();
 }
 
 void projector_manager::beginFrame()
@@ -55,16 +58,34 @@ void projector_manager::updateAndRender()
 
 	ImGui::End();
 
+	std::vector<projector_solver_input> solverInput;
 
 	for (auto& p : physicalProjectors)
 	{
-		p.render(opaqueRenderPass, sun, environment, viewerCamera);
+		if (p.active())
+		{
+			p.render(opaqueRenderPass, sun, environment, viewerCamera);
+			solverInput.push_back({ p.renderer.frameResult, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj });
+		}
 	}
 	for (auto& p : dummyProjectors)
 	{
-		p.render(opaqueRenderPass, sun, environment, viewerCamera);
+		if (p.active())
+		{
+			p.render(opaqueRenderPass, sun, environment, viewerCamera);
+			solverInput.push_back({ p.renderer.frameResult, p.renderer.depthStencilBuffer, p.renderer.solverIntensity, p.camera.viewProj });
+		}
 	}
 
+	solveProjectorIntensities(solverInput, 1);
+}
+
+void projector_manager::debugDraw()
+{
+	for (auto& p : dummyProjectors)
+	{
+		ImGui::Image(p.renderer.solverIntensity, 400, 300);
+	}
 }
 
 void projector_manager::addDummyProjector()
