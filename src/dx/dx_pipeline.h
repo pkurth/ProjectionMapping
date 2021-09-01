@@ -17,6 +17,8 @@ struct dx_root_signature
 	uint32 numDescriptorTables;
 	uint32 tableRootParameterMask;
 	uint32 totalNumParameters;
+
+	bool containsUnboundedDescriptorTables;
 };
 
 dx_root_signature createRootSignature(dx_blob rootSignatureBlob);

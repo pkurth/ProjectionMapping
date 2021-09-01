@@ -103,7 +103,6 @@ void dx_dynamic_descriptor_heap::parseRootSignature(const dx_root_signature& roo
 	staleDescriptorTableBitMask = 0;
 
 	descriptorTableBitMask = rootSignature.tableRootParameterMask;
-	uint32 numDescriptorTables = rootSignature.numDescriptorTables;
 
 	uint32 bitmask = descriptorTableBitMask;
 	uint32 currentOffset = 0;
@@ -113,11 +112,18 @@ void dx_dynamic_descriptor_heap::parseRootSignature(const dx_root_signature& roo
 	{
 		uint32 numDescriptors = rootSignature.descriptorTableSizes[descriptorTableIndex++];
 
-		descriptor_table_cache& cache = descriptorTableCache[rootIndex];
-		cache.numDescriptors = numDescriptors;
-		cache.baseDescriptor = &descriptorHandleCache[currentOffset];
+		if (numDescriptors != UNBOUNDED_DESCRIPTOR_RANGE)
+		{
+			descriptor_table_cache& cache = descriptorTableCache[rootIndex];
+			cache.numDescriptors = numDescriptors;
+			cache.baseDescriptor = &descriptorHandleCache[currentOffset];
 
-		currentOffset += numDescriptors;
+			currentOffset += numDescriptors;
+		}
+		else
+		{
+			unsetBit(descriptorTableBitMask, rootIndex);
+		}
 
 		// Flip the descriptor table bit so it's not scanned again for the current index.
 		unsetBit(bitmask, rootIndex);

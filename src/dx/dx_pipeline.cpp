@@ -580,9 +580,11 @@ static DWORD checkForFileChanges(void*)
 	return 0;
 }
 
-static void copyRootSignatureDesc(const D3D12_ROOT_SIGNATURE_DESC* desc, dx_root_signature& result)
+template <typename desc_t>
+static void copyRootSignatureDesc(const desc_t* desc, dx_root_signature& result)
 {
 	result.totalNumParameters = desc->NumParameters;
+	result.containsUnboundedDescriptorTables = false;
 
 	uint32 numDescriptorTables = 0;
 	for (uint32 i = 0; i < desc->NumParameters; ++i)
@@ -606,40 +608,17 @@ static void copyRootSignatureDesc(const D3D12_ROOT_SIGNATURE_DESC* desc, dx_root
 			result.descriptorTableSizes[index] = 0;
 			for (uint32 r = 0; r < numRanges; ++r)
 			{
-				result.descriptorTableSizes[index] += desc->pParameters[i].DescriptorTable.pDescriptorRanges[r].NumDescriptors;
-			}
-			++index;
-		}
-	}
-}
-
-static void copyRootSignatureDesc(const D3D12_ROOT_SIGNATURE_DESC1* desc, dx_root_signature& result)
-{
-	result.totalNumParameters = desc->NumParameters;
-
-	uint32 numDescriptorTables = 0;
-	for (uint32 i = 0; i < desc->NumParameters; ++i)
-	{
-		if (desc->pParameters[i].ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
-		{
-			++numDescriptorTables;
-			setBit(result.tableRootParameterMask, i);
-		}
-	}
-
-	result.descriptorTableSizes = new uint32[numDescriptorTables];
-	result.numDescriptorTables = numDescriptorTables;
-
-	uint32 index = 0;
-	for (uint32 i = 0; i < desc->NumParameters; ++i)
-	{
-		if (desc->pParameters[i].ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
-		{
-			uint32 numRanges = desc->pParameters[i].DescriptorTable.NumDescriptorRanges;
-			result.descriptorTableSizes[index] = 0;
-			for (uint32 r = 0; r < numRanges; ++r)
-			{
-				result.descriptorTableSizes[index] += desc->pParameters[i].DescriptorTable.pDescriptorRanges[r].NumDescriptors;
+				uint32 numDescriptorsInRange = desc->pParameters[i].DescriptorTable.pDescriptorRanges[r].NumDescriptors;
+				if (numDescriptorsInRange == UNBOUNDED_DESCRIPTOR_RANGE)
+				{
+					result.descriptorTableSizes[index] = UNBOUNDED_DESCRIPTOR_RANGE;
+					result.containsUnboundedDescriptorTables = true;
+					break;
+				}
+				else
+				{
+					result.descriptorTableSizes[index] += numDescriptorsInRange;
+				}
 			}
 			++index;
 		}
