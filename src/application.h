@@ -43,19 +43,6 @@ private:
 	void submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 numPointLightShadowPasses);
 	bool handleUserInput(const user_input& input, float dt);
 
-	void renderSunShadowMap(bool objectDragged);
-	void renderShadowMap(spot_light_cb& spotLight, uint32 lightIndex, bool objectDragged);
-	void renderShadowMap(point_light_cb& pointLight, uint32 lightIndex, bool objectDragged);
-
-	void renderStaticGeometryToSunShadowMap();
-	void renderStaticGeometryToShadowMap(spot_shadow_render_pass& renderPass);
-	void renderStaticGeometryToShadowMap(point_shadow_render_pass& renderPass);
-
-	void renderDynamicGeometryToSunShadowMap();
-	void renderDynamicGeometryToShadowMap(spot_shadow_render_pass& renderPass);
-	void renderDynamicGeometryToShadowMap(point_shadow_render_pass& renderPass);
-	
-
 	undo_stack undoStack;
 
 	transformation_gizmo gizmo;
@@ -75,9 +62,6 @@ private:
 	ref<dx_buffer> spotLightShadowInfoBuffer[NUM_BUFFERED_FRAMES];
 	ref<dx_buffer> pointLightShadowInfoBuffer[NUM_BUFFERED_FRAMES];
 
-
-	std::vector<point_light_cb> pointLights;
-	std::vector<spot_light_cb> spotLights;
 	std::vector<pbr_decal_cb> decals;
 
 	std::vector<spot_shadow_info> spotLightShadowInfos;
@@ -106,7 +90,8 @@ private:
 
 	humanoid_ragdoll ragdoll;
 	float testPhysicsForce = 300.f;
-	uint32 numPhysicsSolverIterations = 30;
+
+	physics_settings physicsSettings;
 
 	opaque_render_pass opaqueRenderPass;
 	transparent_render_pass transparentRenderPass;

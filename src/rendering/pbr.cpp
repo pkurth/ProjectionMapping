@@ -17,6 +17,7 @@
 #include <memory>
 
 static dx_pipeline opaquePBRPipeline;
+static dx_pipeline opaqueDoubleSidedPBRPipeline;
 static dx_pipeline transparentPBRPipeline;
 
 struct material_key
@@ -25,6 +26,7 @@ struct material_key
 	vec4 emission;
 	vec4 albedoTint;
 	float roughnessOverride, metallicOverride;
+	bool doubleSided;
 };
 
 namespace std
@@ -44,6 +46,7 @@ namespace std
 			hash_combine(seed, x.albedoTint);
 			hash_combine(seed, x.roughnessOverride);
 			hash_combine(seed, x.metallicOverride);
+			hash_combine(seed, x.doubleSided);
 
 			return seed;
 		}
@@ -59,7 +62,8 @@ static bool operator==(const material_key& a, const material_key& b)
 		&& a.emission == b.emission
 		&& a.albedoTint == b.albedoTint
 		&& a.roughnessOverride == b.roughnessOverride
-		&& a.metallicOverride == b.metallicOverride;
+		&& a.metallicOverride == b.metallicOverride
+		&& a.doubleSided == b.doubleSided;
 }
 
 ref<pbr_material> createPBRMaterial(
@@ -70,7 +74,8 @@ ref<pbr_material> createPBRMaterial(
 	const vec4& emission, 
 	const vec4& albedoTint, 
 	float roughOverride, 
-	float metallicOverride)
+	float metallicOverride, 
+	bool doubleSided)
 {
 	material_key s =
 	{
@@ -82,6 +87,7 @@ ref<pbr_material> createPBRMaterial(
 		albedoTint,
 		!roughTex.empty() ? 1.f : roughOverride,			// If texture is set, override does not matter, so set it to consistent value.
 		!metallicTex.empty() ? 0.f : metallicOverride,		// If texture is set, override does not matter, so set it to consistent value.
+		doubleSided,
 	};
 
 
@@ -103,6 +109,7 @@ ref<pbr_material> createPBRMaterial(
 		material->albedoTint = albedoTint;
 		material->roughnessOverride = roughOverride;
 		material->metallicOverride = metallicOverride;
+		material->doubleSided = doubleSided;
 
 		cache[s] = sp = material;
 	}
@@ -113,7 +120,7 @@ ref<pbr_material> createPBRMaterial(
 
 ref<pbr_material> getDefaultPBRMaterial()
 {
-	static ref<pbr_material> material = make_ref<pbr_material>(nullptr, nullptr, nullptr, nullptr, vec4(0.f), vec4(1.f, 0.f, 1.f, 1.f), 1.f, 0.f);
+	static ref<pbr_material> material = make_ref<pbr_material>(nullptr, nullptr, nullptr, nullptr, vec4(0.f), vec4(1.f, 0.f, 1.f, 1.f), 1.f, 0.f, false);
 	return material;
 }
 
@@ -166,50 +173,6 @@ ref<pbr_environment> createEnvironment(const std::string& filename, uint32 skyRe
 	return sp;
 }
 
-template <typename pipeline_t>
-static void renderPBRCommon(dx_command_list* cl, const mat4& viewProj, const default_render_command<pipeline_t>& rc)
-{
-	const auto& mat = rc.material;
-
-	uint32 flags = 0;
-
-	if (mat->albedo)
-	{
-		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 0, mat->albedo);
-		flags |= USE_ALBEDO_TEXTURE;
-	}
-	if (mat->normal)
-	{
-		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 1, mat->normal);
-		flags |= USE_NORMAL_TEXTURE;
-	}
-	if (mat->roughness)
-	{
-		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 2, mat->roughness);
-		flags |= USE_ROUGHNESS_TEXTURE;
-	}
-	if (mat->metallic)
-	{
-		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 3, mat->metallic);
-		flags |= USE_METALLIC_TEXTURE;
-	}
-
-	cl->setGraphics32BitConstants(DEFAULT_PBR_RS_MATERIAL,
-		pbr_material_cb(mat->albedoTint, mat->emission.xyz, mat->roughnessOverride, mat->metallicOverride, flags)
-	);
-
-
-	const mat4& m = rc.transform;
-	const submesh_info& submesh = rc.submesh;
-
-	cl->setGraphics32BitConstants(DEFAULT_PBR_RS_MVP, transform_cb{ viewProj * m, m });
-
-	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
-	cl->setVertexBuffer(1, rc.vertexBuffer.others);
-	cl->setIndexBuffer(rc.indexBuffer);
-	cl->drawIndexed(submesh.numTriangles * 3, 1, submesh.firstTriangle * 3, submesh.baseVertex, 0);
-}
-
 static void setupPBRCommon(dx_command_list* cl, const common_material_info& info)
 {
 	dx_cpu_descriptor_handle nullTexture = render_resources::nullTextureSRV;
@@ -246,6 +209,50 @@ static void setupPBRCommon(dx_command_list* cl, const common_material_info& info
 	cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 3, nullTexture);
 }
 
+template <typename pipeline_t>
+static void renderPBRCommon(dx_command_list* cl, const mat4& viewProj, const default_render_command<pipeline_t>& rc)
+{
+	const auto& mat = rc.material;
+
+	uint32 flags = 0;
+
+	if (mat->albedo)
+	{
+		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 0, mat->albedo);
+		flags |= USE_ALBEDO_TEXTURE;
+	}
+	if (mat->normal)
+	{
+		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 1, mat->normal);
+		flags |= USE_NORMAL_TEXTURE;
+	}
+	if (mat->roughness)
+	{
+		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 2, mat->roughness);
+		flags |= USE_ROUGHNESS_TEXTURE;
+	}
+	if (mat->metallic)
+	{
+		cl->setDescriptorHeapSRV(DEFAULT_PBR_RS_PBR_TEXTURES, 3, mat->metallic);
+		flags |= USE_METALLIC_TEXTURE;
+	}
+
+	cl->setGraphics32BitConstants(DEFAULT_PBR_RS_MATERIAL,
+		pbr_material_cb(mat->albedoTint, mat->emission.xyz, mat->roughnessOverride, mat->metallicOverride, flags, 1.f, 0.f, mat->doubleSided)
+	);
+
+
+	const mat4& m = rc.transform;
+	const submesh_info& submesh = rc.submesh;
+
+	cl->setGraphics32BitConstants(DEFAULT_PBR_RS_MVP, transform_cb{ viewProj * m, m });
+
+	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
+	cl->setVertexBuffer(1, rc.vertexBuffer.others);
+	cl->setIndexBuffer(rc.indexBuffer);
+	cl->drawIndexed(submesh.numTriangles * 3, 1, submesh.firstTriangle * 3, submesh.baseVertex, 0);
+}
+
 void opaque_pbr_pipeline::initialize()
 {
 	auto desc = CREATE_GRAPHICS_PIPELINE
@@ -254,19 +261,9 @@ void opaque_pbr_pipeline::initialize()
 		.depthSettings(true, false, D3D12_COMPARISON_FUNC_EQUAL);
 
 	opaquePBRPipeline = createReloadablePipeline(desc, { "default_vs", "default_pbr_ps" });
-}
 
-void opaque_pbr_pipeline::setupCommon(dx_command_list* cl, const common_material_info& materialInfo)
-{
-	cl->setPipelineState(*opaquePBRPipeline.pipeline);
-	cl->setGraphicsRootSignature(*opaquePBRPipeline.rootSignature);
-
-	setupPBRCommon(cl, materialInfo);
-}
-
-void opaque_pbr_pipeline::render(dx_command_list* cl, const mat4& viewProj, const default_render_command<opaque_pbr_pipeline>& rc)
-{
-	renderPBRCommon(cl, viewProj, rc);
+	desc.cullingOff();
+	opaqueDoubleSidedPBRPipeline = createReloadablePipeline(desc, { "default_vs", "default_pbr_ps" });
 }
 
 void transparent_pbr_pipeline::initialize()
@@ -279,7 +276,31 @@ void transparent_pbr_pipeline::initialize()
 	transparentPBRPipeline = createReloadablePipeline(desc, { "default_vs", "default_pbr_transparent_ps" });
 }
 
-void transparent_pbr_pipeline::setupCommon(dx_command_list* cl, const common_material_info& materialInfo)
+
+
+
+PIPELINE_SETUP_IMPL(opaque_pbr_pipeline::standard)
+{
+	cl->setPipelineState(*opaquePBRPipeline.pipeline);
+	cl->setGraphicsRootSignature(*opaquePBRPipeline.rootSignature);
+
+	setupPBRCommon(cl, materialInfo);
+}
+
+PIPELINE_SETUP_IMPL(opaque_pbr_pipeline::double_sided)
+{
+	cl->setPipelineState(*opaqueDoubleSidedPBRPipeline.pipeline);
+	cl->setGraphicsRootSignature(*opaqueDoubleSidedPBRPipeline.rootSignature);
+
+	setupPBRCommon(cl, materialInfo);
+}
+
+PIPELINE_RENDER_IMPL(opaque_pbr_pipeline)
+{
+	renderPBRCommon(cl, viewProj, rc);
+}
+
+PIPELINE_SETUP_IMPL(transparent_pbr_pipeline)
 {
 	cl->setPipelineState(*transparentPBRPipeline.pipeline);
 	cl->setGraphicsRootSignature(*transparentPBRPipeline.rootSignature);
@@ -287,7 +308,7 @@ void transparent_pbr_pipeline::setupCommon(dx_command_list* cl, const common_mat
 	setupPBRCommon(cl, materialInfo);
 }
 
-void transparent_pbr_pipeline::render(dx_command_list* cl, const mat4& viewProj, const default_render_command<transparent_pbr_pipeline>& rc)
+PIPELINE_RENDER_IMPL(transparent_pbr_pipeline)
 {
 	renderPBRCommon(cl, viewProj, rc);
 }

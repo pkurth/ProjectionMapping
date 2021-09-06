@@ -645,6 +645,7 @@ static bool operator==(mat4 a, mat4 b)
 	return true;
 }
 
+static float cross(vec2 a, vec2 b) { return a.x * b.y - a.y * b.x; }
 static vec3 cross(vec3 a, vec3 b) { vec3 result = { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x }; return result; }
 
 static float squaredLength(vec2 a) { return dot(a, a); }
@@ -800,6 +801,7 @@ mat4 createOrthographicProjectionMatrix(float r, float l, float t, float b, floa
 mat4 invertPerspectiveProjectionMatrix(const mat4& m);
 mat4 invertOrthographicProjectionMatrix(const mat4& m);
 mat4 createModelMatrix(vec3 position, quat rotation, vec3 scale = vec3(1.f, 1.f, 1.f));
+mat4 createBillboardModelMatrix(vec3 position, vec3 eye, vec3 scale);
 mat4 createViewMatrix(vec3 eye, float pitch, float yaw);
 mat4 createSkyViewMatrix(const mat4& v);
 mat4 lookAt(vec3 eye, vec3 target, vec3 up);

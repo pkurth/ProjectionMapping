@@ -11,8 +11,9 @@
 #include "physics/physics.h"
 #include "core/threading.h"
 #include "rendering/mesh_shader.h"
-#include "rendering/shadow_map_cache.h"
+#include "rendering/shadow_map.h"
 #include "rendering/shadow_map_renderer.h"
+#include "rendering/debug_visualization.h"
 #include "editor/file_dialog.h"
 #include "core/yaml.h"
 #include "learning/locomotion_learning.h"
@@ -184,35 +185,10 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 #if 0
 	{
-		auto lollipopMaterial = createPBRMaterial(
-			"assets/sphere/Tiles074_2K_Color.jpg",
-			"assets/sphere/Tiles074_2K_Normal.jpg",
-			"assets/sphere/Tiles074_2K_Roughness.jpg",
-			{}, vec4(0.f), vec4(1.f), 1.f, 1.f);
+		appScene.createEntity("Force field")
+			.addComponent<trs>(vec3(0.f), quat::identity)
+			.addComponent<force_field_component>(vec3(0.f, 0.f, -1.f));
 
-		cpu_mesh primitiveMesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals | mesh_creation_flags_with_tangents);
-		auto testMesh = make_ref<composite_mesh>();
-		testMesh->submeshes.push_back({ primitiveMesh.pushSphere(15, 15, 5.f, vec3(0.f, 0.f, 0.f)), {}, trs::identity, lollipopMaterial });
-		testMesh->mesh = primitiveMesh.createDXMesh();
-
-		float extents = 100.f;
-		for (float z = -extents; z < extents; z += 10.f)
-		{
-			for (float y = -extents; y < extents; y += 10.f)
-			{
-				for (float x = -extents; x < extents; x += 10.f)
-				{
-					appScene.createEntity("Ball")
-						.addComponent<trs>(vec3(x, y, z), quat::identity, 1.f)
-						.addComponent<raster_component>(testMesh);
-				}
-			}
-		}
-	}
-#endif
-
-#if 0
-	{
 		cpu_mesh primitiveMesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals | mesh_creation_flags_with_tangents);
 
 		auto lollipopMaterial = createPBRMaterial(
@@ -244,23 +220,23 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		auto test1 = appScene.createEntity("Lollipop 1")
 			.addComponent<trs>(vec3(20.f, 5.f, 0.f), quat::identity)
 			.addComponent<raster_component>(testMesh)
-			.addComponent<collider_component>(bounding_capsule{ vec3(0.f, -0.5f, 0.f), vec3(0.f, 0.5f, 0.f), 0.1f }, 0.2f, 0.5f, 4.f)
-			.addComponent<collider_component>(bounding_sphere{ vec3(0.f, 0.5f + 0.1f + 0.4f, 0.f), 0.4f }, 0.2f, 0.5f, 4.f)
+			.addComponent<collider_component>(collider_component::asCapsule({ vec3(0.f, -0.5f, 0.f), vec3(0.f, 0.5f, 0.f), 0.1f }, 0.2f, 0.5f, 4.f))
+			.addComponent<collider_component>(collider_component::asSphere({ vec3(0.f, 0.5f + 0.1f + 0.4f, 0.f), 0.4f }, 0.2f, 0.5f, 4.f))
 			.addComponent<rigid_body_component>(true, 1.f);
 
 		auto test2 = appScene.createEntity("Lollipop 2")
 			.addComponent<trs>(vec3(20.f, 5.f, -2.f), quat::identity)
 			.addComponent<raster_component>(testMesh)
-			.addComponent<collider_component>(bounding_capsule{ vec3(0.f, -0.5f, 0.f), vec3(0.f, 0.5f, 0.f), 0.1f }, 0.2f, 0.5f, 4.f)
-			.addComponent<collider_component>(bounding_sphere{ vec3(0.f, 0.5f + 0.1f + 0.4f, 0.f), 0.4f }, 0.2f, 0.5f, 4.f)
+			.addComponent<collider_component>(collider_component::asCapsule({ vec3(0.f, -0.5f, 0.f), vec3(0.f, 0.5f, 0.f), 0.1f }, 0.2f, 0.5f, 4.f))
+			.addComponent<collider_component>(collider_component::asSphere({ vec3(0.f, 0.5f + 0.1f + 0.4f, 0.f), 0.4f }, 0.2f, 0.5f, 4.f))
 			.addComponent<rigid_body_component>(true, 1.f);
 
 		for (uint32 i = 0; i < 10; ++i)
 		{
 			appScene.createEntity("Cube")
-				.addComponent<trs>(vec3(50.f, 10.f + i * 3.f, -5.f), quat(vec3(0.f, 0.f, 1.f), deg2rad(1.f)))
+				.addComponent<trs>(vec3(25.f, 10.f + i * 3.f, -5.f), quat(vec3(0.f, 0.f, 1.f), deg2rad(1.f)))
 				.addComponent<raster_component>(boxMesh)
-				.addComponent<collider_component>(bounding_box::fromCenterRadius(vec3(0.f, 0.f, 0.f), vec3(1.f, 1.f, 2.f)), 0.1f, 0.5f, 1.f)
+				.addComponent<collider_component>(collider_component::asAABB(bounding_box::fromCenterRadius(vec3(0.f, 0.f, 0.f), vec3(1.f, 1.f, 2.f)), 0.1f, 0.5f, 1.f))
 				.addComponent<rigid_body_component>(false, 1.f);
 		}
 
@@ -276,20 +252,20 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 			appScene.createEntity("Hull")
 				.addComponent<trs>(vec3(20.f, 15.f, 0.f), quat::identity)
 				.addComponent<raster_component>(loadMeshFromFile("assets/colliders/hull.fbx"))
-				.addComponent<collider_component>(hull, 0.1f, 0.5f, 0.1f)
+				.addComponent<collider_component>(collider_component::asHull(hull, 0.1f, 0.5f, 0.1f))
 				.addComponent<rigid_body_component>(false, 0.f);
 		}
 
 		appScene.createEntity("Test ground")
-			.addComponent<trs>(vec3(0.f, -4.f, 0.f), quat(vec3(1.f, 0.f, 0.f), deg2rad(0.f)))
+			.addComponent<trs>(vec3(30.f, -4.f, 0.f), quat(vec3(1.f, 0.f, 0.f), deg2rad(0.f)))
 			.addComponent<raster_component>(groundMesh)
-			.addComponent<collider_component>(bounding_box::fromCenterRadius(vec3(0.f, 0.f, 0.f), vec3(20.f, 4.f, 20.f)), 0.1f, 1.f, 4.f)
+			.addComponent<collider_component>(collider_component::asAABB(bounding_box::fromCenterRadius(vec3(0.f, 0.f, 0.f), vec3(20.f, 4.f, 20.f)), 0.1f, 1.f, 4.f))
 			.addComponent<rigid_body_component>(true);
 
 		/*appScene.createEntity("Test ground")
 			.addComponent<trs>(vec3(20.f, -5.f, 0.f), quat(vec3(1.f, 0.f, 0.f), deg2rad(0.f)))
 			.addComponent<raster_component>(groundMesh)
-			.addComponent<collider_component>(bounding_box::fromCenterRadius(vec3(0.f, 0.f, 0.f), vec3(20.f, 4.f, 20.f)), 0.1f, 0.5f, 4.f)
+			.addComponent<collider_component>(collider_component::asAABB(bounding_box::fromCenterRadius(vec3(0.f, 0.f, 0.f), vec3(20.f, 4.f, 20.f)), 0.1f, 1.f, 4.f))
 			.addComponent<rigid_body_component>(true);*/
 
 
@@ -300,7 +276,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		auto fixed = appScene.createEntity("Fixed")
 			.addComponent<trs>(vec3(37.f, 15.f, -2.f), quat(vec3(0.f, 0.f, 1.f), deg2rad(90.f)))
 			.addComponent<raster_component>(chainMesh)
-			.addComponent<collider_component>(bounding_capsule{ vec3(0.f, -1.f, 0.f), vec3(0.f, 1.f, 0.f), 0.18f }, 0.2f, 0.5f, 1.f)
+			.addComponent<collider_component>(collider_component::asCapsule({ vec3(0.f, -1.f, 0.f), vec3(0.f, 1.f, 0.f), 0.18f }, 0.2f, 0.5f, 1.f))
 			.addComponent<rigid_body_component>(true, 1.f);
 
 		//fixed.getComponent<rigid_body_component>().angularVelocity = vec3(0.f, 0.1f, 0.f);
@@ -316,7 +292,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 			auto chain = appScene.createEntity("Chain")
 				.addComponent<trs>(vec3(xCurr, 15.f, -2.f), quat(vec3(0.f, 0.f, 1.f), deg2rad(90.f)))
 				.addComponent<raster_component>(chainMesh)
-				.addComponent<collider_component>(bounding_capsule{ vec3(0.f, -1.f, 0.f), vec3(0.f, 1.f, 0.f), 0.18f }, 0.2f, 0.5f, 1.f)
+				.addComponent<collider_component>(collider_component::asCapsule({ vec3(0.f, -1.f, 0.f), vec3(0.f, 1.f, 0.f), 0.18f }, 0.2f, 0.5f, 1.f))
 				.addComponent<rigid_body_component>(false, 1.f);
 
 			//addHingeJointConstraintFromGlobalPoints(prev, chain, vec3(xPrev + 1.18f, 15.f, -2.f), vec3(0.f, 0.f, 1.f), deg2rad(5.f), deg2rad(20.f));
@@ -336,7 +312,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 #endif
 
 	//ragdoll.initialize(appScene, vec3(60.f, 1.25f, -2.f));
-	//ragdoll.initialize(appScene, vec3(0.f, 1.25f, 0.f));
+	ragdoll.initialize(appScene, vec3(20.f, 1.25f, 0.f));
 
 	//initializeLocomotionEval(appScene, ragdoll);
 
@@ -355,36 +331,35 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	random_number_generator rng = { 14878213 };
 
 #if 0
-	spotLights.resize(2);
-
-	spotLights[0].initialize(
-		{ 2.f, 3.f, 0.f },
-		{ 1.f, 0.f, 0.f },
-		randomRGB(rng) * 5.f,
-		deg2rad(20.f),
-		deg2rad(30.f),
-		25.f,
-		0
-	);
+	appScene.createEntity("Spot light 0")
+		.addComponent<spot_light_component>(
+			vec3(2.f, 3.f, 0.f),
+			vec3(1.f, 0.f, 0.f),
+			randomRGB(rng) * 5.f,
+			deg2rad(20.f),
+			deg2rad(30.f),
+			25.f,
+			0
+		);
 	
-	spotLights[1].initialize(
-		{ -2.f, 3.f, 0.f },
-		{ -1.f, 0.f, 0.f },
-		randomRGB(rng) * 5.f,
-		deg2rad(20.f),
-		deg2rad(30.f),
-		25.f,
-		0
-	);
+	appScene.createEntity("Spot light 1")
+		.addComponent<spot_light_component>(
+			vec3(-2.f, 3.f, 0.f),
+			vec3(-1.f, 0.f, 0.f),
+			randomRGB(rng) * 5.f,
+			deg2rad(20.f),
+			deg2rad(30.f),
+			25.f,
+			0
+		);
 
-	pointLights.resize(1);
-
-	pointLights[0].initialize(
-		{ 0.f, 8.f, 0.f },
-		randomRGB(rng),
-		10,
-		0
-	);
+	appScene.createEntity("Point light 0")
+		.addComponent<point_light_component>(
+			vec3(0.f, 8.f, 0.f),
+			randomRGB(rng),
+			10.f,
+			0
+		);
 #endif
 
 #if 0
@@ -989,7 +964,12 @@ void application::drawSettings(float dt)
 			editBoidParticleSystem(boidParticleSystem);
 
 			//ragdoll.edit();
-			ImGui::SliderInt("Physics solver iterations", (int*)&numPhysicsSolverIterations, 1, 200);
+			ImGui::SliderInt("Physics rigid solver iterations", (int*)&physicsSettings.numRigidSolverIterations, 1, 200);
+
+			ImGui::SliderInt("Physics cloth velocity iterations", (int*)&physicsSettings.numClothVelocityIterations, 0, 10);
+			ImGui::SliderInt("Physics cloth position iterations", (int*)&physicsSettings.numClothPositionIterations, 0, 10);
+			ImGui::SliderInt("Physics cloth drift iterations", (int*)&physicsSettings.numClothDriftIterations, 0, 10);
+
 			ImGui::SliderFloat("Physics test force", &testPhysicsForce, 1.f, 10000.f);
 		}
 	}
@@ -1024,6 +1004,10 @@ void application::resetRenderPasses()
 
 void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 numPointLightShadowPasses)
 {
+	opaqueRenderPass.sort();
+	transparentRenderPass.sort();
+	overlayRenderPass.sort();
+
 	renderer->submitRenderPass(&opaqueRenderPass);
 	renderer->submitRenderPass(&transparentRenderPass);
 	renderer->submitRenderPass(&overlayRenderPass);
@@ -1048,11 +1032,11 @@ bool application::handleUserInput(const user_input& input, float dt)
 {
 	// Returns true, if the user dragged an object using a gizmo.
 
-	if (input.keyboard['F'].pressEvent && selectedEntity)
+	if (input.keyboard['F'].pressEvent && selectedEntity && selectedEntity.hasComponent<trs>())
 	{
 		auto& transform = selectedEntity.getComponent<trs>();
 
-		auto aabb = selectedEntity.hasComponent<raster_component>() ? selectedEntity.getComponent<raster_component>().mesh->aabb : bounding_box::fromCenterRadius(0.f, 0.f);
+		auto aabb = selectedEntity.hasComponent<raster_component>() ? selectedEntity.getComponent<raster_component>().mesh->aabb : bounding_box::fromCenterRadius(0.f, 1.f);
 		aabb.minCorner *= transform.scale;
 		aabb.maxCorner *= transform.scale;
 
@@ -1082,22 +1066,22 @@ bool application::handleUserInput(const user_input& input, float dt)
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 
 			ImGui::PushID(&gizmo.space);
-			ImGui::IconRadioButton(imgui_icon_global, (int*)&space, transformation_global, gizmo.type != transformation_type_scale, iconSize);
+			ImGui::IconRadioButton(imgui_icon_global, (int*)&space, transformation_global, iconSize, gizmo.type != transformation_type_scale);
 			ImGui::SameLine(0, 0);
-			ImGui::IconRadioButton(imgui_icon_local, (int*)&space, transformation_local, gizmo.type != transformation_type_scale, iconSize);
+			ImGui::IconRadioButton(imgui_icon_local, (int*)&space, transformation_local, iconSize, gizmo.type != transformation_type_scale);
 			ImGui::PopID();
 
 			ImGui::SameLine(0.f, (float)iconSize);
 
 
 			ImGui::PushID(&gizmo.type);
-			ImGui::IconRadioButton(imgui_icon_translate, (int*)&gizmo.type, transformation_type_translation, true, iconSize);
+			ImGui::IconRadioButton(imgui_icon_translate, (int*)&gizmo.type, transformation_type_translation, iconSize, true);
 			ImGui::SameLine(0, 0);
-			ImGui::IconRadioButton(imgui_icon_rotate, (int*)&gizmo.type, transformation_type_rotation, true, iconSize);
+			ImGui::IconRadioButton(imgui_icon_rotate, (int*)&gizmo.type, transformation_type_rotation, iconSize, true);
 			ImGui::SameLine(0, 0);
-			ImGui::IconRadioButton(imgui_icon_scale, (int*)&gizmo.type, transformation_type_scale, true, iconSize);
+			ImGui::IconRadioButton(imgui_icon_scale, (int*)&gizmo.type, transformation_type_scale, iconSize, true);
 			ImGui::SameLine(0, 0);
-			ImGui::IconRadioButton(imgui_icon_cross, (int*)&gizmo.type, transformation_type_none, true, iconSize);
+			ImGui::IconRadioButton(imgui_icon_cross, (int*)&gizmo.type, transformation_type_none, iconSize, true);
 			ImGui::PopID();
 
 			ImGui::SameLine(0.f, (float)iconSize);
@@ -1158,6 +1142,14 @@ bool application::handleUserInput(const user_input& input, float dt)
 					rb.invMass = invMass;
 					saved = false;
 				}
+			}
+		}
+		else if (selectedEntity.hasComponent<point_light_component>())
+		{
+			point_light_component& pl = selectedEntity.getComponent<point_light_component>();
+			if (gizmo.manipulatePosition(pl.position, camera, input, !inputCaptured, &overlayRenderPass))
+			{
+				inputCaptured = true;
 			}
 		}
 
@@ -1242,253 +1234,6 @@ bool application::handleUserInput(const user_input& input, float dt)
 	return objectMovedByGizmo;
 }
 
-void application::renderSunShadowMap(bool objectDragged)
-{
-	sun_shadow_render_pass& renderPass = sunShadowRenderPass;
-
-	bool staticCacheAvailable = !objectDragged;
-
-	sunShadowRenderPass.numCascades = sun.numShadowCascades;
-
-	uint64 sunMovementHash = getLightMovementHash(sun);
-
-	for (uint32 i = 0; i < sun.numShadowCascades; ++i)
-	{
-		auto [vp, cache] = assignShadowMapViewport(i, sunMovementHash, sun.shadowDimensions);
-		
-		sun.shadowMapViewports[i] = vec4(vp.x, vp.y, vp.size, vp.size) / vec4((float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT, (float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT);
-
-		sun_cascade_render_pass& cascadePass = sunShadowRenderPass.cascades[i];
-		cascadePass.viewport = vp;
-		cascadePass.viewProj = sun.viewProjs[i];
-		
-		staticCacheAvailable &= cache;
-	}
-
-	if (staticCacheAvailable)
-	{
-		renderPass.copyFromStaticCache = true;
-	}
-	else
-	{
-		renderStaticGeometryToSunShadowMap();
-	}
-
-	renderDynamicGeometryToSunShadowMap();
-}
-
-void application::renderShadowMap(spot_light_cb& spotLight, uint32 lightIndex, bool objectDragged)
-{
-	uint32 uniqueID = lightIndex + 1;
-
-	int32 index = numSpotShadowRenderPasses++;
-	spot_shadow_render_pass& renderPass = spotShadowRenderPasses[index];
-
-	spotLight.shadowInfoIndex = index;
-	renderPass.viewProjMatrix = getSpotLightViewProjectionMatrix(spotLight);
-
-	auto [vp, staticCacheAvailable] = assignShadowMapViewport(uniqueID << 10, 0, 512);
-	renderPass.viewport = vp;
-
-	if (staticCacheAvailable && !objectDragged)
-	{
-		renderPass.copyFromStaticCache = true;
-	}
-	else
-	{
-		renderStaticGeometryToShadowMap(renderPass);
-	}
-
-	renderDynamicGeometryToShadowMap(renderPass);
-
-	spot_shadow_info si;
-	si.viewport = vec4(vp.x, vp.y, vp.size, vp.size) / vec4((float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT, (float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT);
-	si.viewProj = renderPass.viewProjMatrix;
-	si.bias = 0.00002f;
-
-	assert(spotLightShadowInfos.size() == index);
-	spotLightShadowInfos.push_back(si);
-}
-
-void application::renderShadowMap(point_light_cb& pointLight, uint32 lightIndex, bool objectDragged)
-{
-	uint32 uniqueID = lightIndex + 1;
-
-	int32 index = numPointShadowRenderPasses++;
-	point_shadow_render_pass& renderPass = pointShadowRenderPasses[index];
-
-	pointLight.shadowInfoIndex = index;
-	renderPass.lightPosition = pointLight.position;
-	renderPass.maxDistance = pointLight.radius;
-
-	auto [vp0, staticCacheAvailable0] = assignShadowMapViewport((2 * uniqueID + 0) << 20, 0, 512);
-	auto [vp1, staticCacheAvailable1] = assignShadowMapViewport((2 * uniqueID + 1) << 20, 0, 512);
-	renderPass.viewport0 = vp0;
-	renderPass.viewport1 = vp1;
-
-	if (staticCacheAvailable0 && staticCacheAvailable1 && !objectDragged) // TODO
-	{
-		renderPass.copyFromStaticCache0 = true;
-		renderPass.copyFromStaticCache1 = true;
-	}
-	else
-	{
-		renderStaticGeometryToShadowMap(renderPass);
-	}
-
-	renderDynamicGeometryToShadowMap(renderPass);
-
-
-	point_shadow_info si;
-	si.viewport0 = vec4(vp0.x, vp0.y, vp0.size, vp0.size) / vec4((float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT, (float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT);
-	si.viewport1 = vec4(vp1.x, vp1.y, vp1.size, vp1.size) / vec4((float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT, (float)SHADOW_MAP_WIDTH, (float)SHADOW_MAP_HEIGHT);
-
-	assert(pointLightShadowInfos.size() == index);
-	pointLightShadowInfos.push_back(si);
-}
-
-void application::renderStaticGeometryToSunShadowMap()
-{
-	sun_shadow_render_pass& renderPass = sunShadowRenderPass;
-
-	for (auto [entityHandle, raster, transform] : appScene.group(entt::get<raster_component, trs>, entt::exclude<dynamic_geometry_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (auto& sm : raster.mesh->submeshes)
-		{
-			submesh_info submesh = sm.info;
-			const ref<pbr_material>& material = sm.material;
-
-			renderPass.renderStaticObject(0, mesh.vertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-}
-
-void application::renderStaticGeometryToShadowMap(spot_shadow_render_pass& renderPass)
-{
-	for (auto [entityHandle, raster, transform] : appScene.group(entt::get<raster_component, trs>, entt::exclude<dynamic_geometry_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (auto& sm : raster.mesh->submeshes)
-		{
-			submesh_info submesh = sm.info;
-			const ref<pbr_material>& material = sm.material;
-
-			renderPass.renderStaticObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-}
-
-void application::renderStaticGeometryToShadowMap(point_shadow_render_pass& renderPass)
-{
-	for (auto [entityHandle, raster, transform] : appScene.group(entt::get<raster_component, trs>, entt::exclude<dynamic_geometry_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (auto& sm : raster.mesh->submeshes)
-		{
-			submesh_info submesh = sm.info;
-			const ref<pbr_material>& material = sm.material;
-
-			renderPass.renderStaticObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-}
-
-void application::renderDynamicGeometryToSunShadowMap()
-{
-	sun_shadow_render_pass& renderPass = sunShadowRenderPass;
-
-	for (auto [entityHandle, raster, transform, dynamic] : appScene.group(entt::get<raster_component, trs, dynamic_geometry_component>, entt::exclude<animation_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (auto& sm : raster.mesh->submeshes)
-		{
-			submesh_info submesh = sm.info;
-			const ref<pbr_material>& material = sm.material;
-
-			renderPass.renderDynamicObject(0, mesh.vertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-
-	for (auto [entityHandle, raster, anim, transform, dynamic] : appScene.group(entt::get<raster_component, animation_component, trs, dynamic_geometry_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (uint32 i = 0; i < (uint32)raster.mesh->submeshes.size(); ++i)
-		{
-			submesh_info submesh = anim.controller->currentSubmeshes[i];
-			renderPass.renderDynamicObject(0, anim.controller->currentVertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-}
-
-void application::renderDynamicGeometryToShadowMap(spot_shadow_render_pass& renderPass)
-{
-	for (auto [entityHandle, raster, transform, dynamic] : appScene.group(entt::get<raster_component, trs, dynamic_geometry_component>, entt::exclude<animation_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (auto& sm : raster.mesh->submeshes)
-		{
-			submesh_info submesh = sm.info;
-			const ref<pbr_material>& material = sm.material;
-
-			renderPass.renderDynamicObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-
-	for (auto [entityHandle, raster, anim, transform, dynamic] : appScene.group(entt::get<raster_component, animation_component, trs, dynamic_geometry_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (uint32 i = 0; i < (uint32)raster.mesh->submeshes.size(); ++i)
-		{
-			submesh_info submesh = anim.controller->currentSubmeshes[i];
-			renderPass.renderDynamicObject(anim.controller->currentVertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-}
-
-void application::renderDynamicGeometryToShadowMap(point_shadow_render_pass& renderPass)
-{
-	for (auto [entityHandle, raster, transform, dynamic] : appScene.group(entt::get<raster_component, trs, dynamic_geometry_component>, entt::exclude<animation_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (auto& sm : raster.mesh->submeshes)
-		{
-			submesh_info submesh = sm.info;
-			const ref<pbr_material>& material = sm.material;
-
-			renderPass.renderDynamicObject(mesh.vertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-
-	for (auto [entityHandle, raster, anim, transform, dynamic] : appScene.group(entt::get<raster_component, animation_component, trs, dynamic_geometry_component>).each())
-	{
-		const dx_mesh& mesh = raster.mesh->mesh;
-		mat4 m = trsToMat4(transform);
-
-		for (uint32 i = 0; i < (uint32)raster.mesh->submeshes.size(); ++i)
-		{
-			submesh_info submesh = anim.controller->currentSubmeshes[i];
-			renderPass.renderDynamicObject(anim.controller->currentVertexBuffer, mesh.indexBuffer, submesh, m);
-		}
-	}
-}
-
 void application::update(const user_input& input, float dt)
 {
 	//dt = min(dt, 1.f / 30.f);
@@ -1508,7 +1253,7 @@ void application::update(const user_input& input, float dt)
 	//undoStack.verify();
 	//undoStack.display();
 	
-	physicsStep(appScene, dt, numPhysicsSolverIterations);
+	physicsStep(appScene, dt, physicsSettings);
 	
 	// Particles.
 
@@ -1566,21 +1311,25 @@ void application::update(const user_input& input, float dt)
 
 
 		// Render shadow maps.
-		renderSunShadowMap(objectDragged);
+		renderSunShadowMap(sun, &sunShadowRenderPass, appScene, objectDragged);
 
-		for (uint32 i = 0; i < (uint32)spotLights.size(); ++i)
+		for (auto [entityHandle, sl] : appScene.view<spot_light_component>().each())
 		{
-			if (spotLights[i].shadowInfoIndex >= 0)
+			if (sl.shadowInfoIndex >= 0)
 			{
-				renderShadowMap(spotLights[i], i, objectDragged);
+				uint32 renderPassIndex = numSpotShadowRenderPasses++;
+				spot_shadow_info shadowInfo = renderSpotShadowMap(sl, (uint32)entityHandle, &spotShadowRenderPasses[renderPassIndex], renderPassIndex, appScene, objectDragged);
+				spotLightShadowInfos.push_back(shadowInfo);
 			}
 		}
 
-		for (uint32 i = 0; i < (uint32)pointLights.size(); ++i)
+		for (auto [entityHandle, pl] : appScene.view<point_light_component>().each())
 		{
-			if (pointLights[i].shadowInfoIndex >= 0)
+			if (pl.shadowInfoIndex >= 0)
 			{
-				renderShadowMap(pointLights[i], i, objectDragged);
+				uint32 renderPassIndex = numPointShadowRenderPasses++;
+				point_shadow_info shadowInfo = renderPointShadowMap(pl, (uint32)entityHandle, &pointShadowRenderPasses[renderPassIndex], renderPassIndex, appScene, objectDragged);
+				pointLightShadowInfos.push_back(shadowInfo);
 			}
 		}
 
@@ -1607,20 +1356,20 @@ void application::update(const user_input& input, float dt)
 
 				for (uint32 i = 0; i < numSubmeshes; ++i)
 				{
-					submesh_info submesh = controller->currentSubmeshes[i];
-					submesh_info prevFrameSubmesh = controller->prevFrameSubmeshes[i];
+					submesh_info submesh = raster.mesh->submeshes[i].info;
+					submesh.baseVertex -= raster.mesh->submeshes[0].info.baseVertex; // Vertex buffer from skinning already points to first vertex.
 
 					const ref<pbr_material>& material = raster.mesh->submeshes[i].material;
 
 					if (material->albedoTint.a < 1.f)
 					{
-						transparentRenderPass.renderObject<transparent_pbr_pipeline>(m, controller->currentVertexBuffer, mesh.indexBuffer, submesh, material);
+						transparentRenderPass.renderObject(m, controller->currentVertexBuffer, mesh.indexBuffer, submesh, material);
 					}
 					else
 					{
-						opaqueRenderPass.renderAnimatedObject<opaque_pbr_pipeline>(m, lastM, 
+						opaqueRenderPass.renderAnimatedObject(m, lastM, 
 							controller->currentVertexBuffer, controller->prevFrameVertexBuffer, mesh.indexBuffer, 
-							submesh, prevFrameSubmesh, material,
+							submesh, material,
 							(uint32)entityHandle);
 					}
 
@@ -1639,17 +1388,17 @@ void application::update(const user_input& input, float dt)
 
 					if (material->albedoTint.a < 1.f)
 					{
-						transparentRenderPass.renderObject<transparent_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material);
+						transparentRenderPass.renderObject(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material);
 					}
 					else
 					{
 						if (dynamic)
 						{
-							opaqueRenderPass.renderDynamicObject<opaque_pbr_pipeline>(m, lastM, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
+							opaqueRenderPass.renderDynamicObject(m, lastM, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 						else
 						{
-							opaqueRenderPass.renderStaticObject<opaque_pbr_pipeline>(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
+							opaqueRenderPass.renderStaticObject(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 					}
 
@@ -1664,28 +1413,34 @@ void application::update(const user_input& input, float dt)
 		void collisionDebugDraw(transparent_render_pass* renderPass);
 		collisionDebugDraw(&transparentRenderPass);
 
-		submitRenderPasses(numSpotShadowRenderPasses, numPointShadowRenderPasses);
 
+		uint32 numPointLights = appScene.numberOfComponentsOfType<point_light_component>();
+		uint32 numSpotLights = appScene.numberOfComponentsOfType<spot_light_component>();
 
 
 		// Upload and set lights.
-		if (pointLights.size())
+		if (numPointLights > 0)
 		{
-			updateUploadBufferData(pointLightBuffer[dxContext.bufferedFrameID], pointLights.data(), (uint32)(sizeof(point_light_cb) * pointLights.size()));
+			updateUploadBufferData(pointLightBuffer[dxContext.bufferedFrameID], appScene.raw<point_light_component>(), (uint32)(sizeof(point_light_component) * numPointLights));
 			updateUploadBufferData(pointLightShadowInfoBuffer[dxContext.bufferedFrameID], pointLightShadowInfos.data(), (uint32)(sizeof(point_shadow_info) * numPointShadowRenderPasses));
-			renderer->setPointLights(pointLightBuffer[dxContext.bufferedFrameID], (uint32)pointLights.size(), pointLightShadowInfoBuffer[dxContext.bufferedFrameID]);
+			renderer->setPointLights(pointLightBuffer[dxContext.bufferedFrameID], numPointLights, pointLightShadowInfoBuffer[dxContext.bufferedFrameID]);
 		}
-		if (spotLights.size())
+		if (numSpotLights > 0)
 		{
-			updateUploadBufferData(spotLightBuffer[dxContext.bufferedFrameID], spotLights.data(), (uint32)(sizeof(spot_light_cb) * spotLights.size()));
+			updateUploadBufferData(spotLightBuffer[dxContext.bufferedFrameID], appScene.raw<spot_light_component>(), (uint32)(sizeof(spot_light_component) * numSpotLights));
 			updateUploadBufferData(spotLightShadowInfoBuffer[dxContext.bufferedFrameID], spotLightShadowInfos.data(), (uint32)(sizeof(spot_shadow_info) * numSpotShadowRenderPasses));
-			renderer->setSpotLights(spotLightBuffer[dxContext.bufferedFrameID], (uint32)spotLights.size(), spotLightShadowInfoBuffer[dxContext.bufferedFrameID]);
+			renderer->setSpotLights(spotLightBuffer[dxContext.bufferedFrameID], numSpotLights, spotLightShadowInfoBuffer[dxContext.bufferedFrameID]);
 		}
+
+
 		if (decals.size())
 		{
 			updateUploadBufferData(decalBuffer[dxContext.bufferedFrameID], decals.data(), (uint32)(sizeof(pbr_decal_cb) * decals.size()));
 			renderer->setDecals(decalBuffer[dxContext.bufferedFrameID], (uint32)decals.size(), decalTexture);
 		}
+
+
+		submitRenderPasses(numSpotShadowRenderPasses, numPointShadowRenderPasses);
 	}
 	else
 	{

@@ -9,6 +9,9 @@
 struct debug_material
 {
 	vec4 color;
+	ref<dx_texture> texture; // Multiplied with color. Can be null, in which case this is white * color.
+	vec2 uv0 = vec2(0.f, 0.f);
+	vec2 uv1 = vec2(1.f, 1.f);
 };
 
 struct debug_simple_pipeline
@@ -16,8 +19,9 @@ struct debug_simple_pipeline
 	using material_t = debug_material;
 
 	static void initialize();
-	static void setupCommon(dx_command_list* cl, const common_material_info& materialInfo);
-	static void render(dx_command_list* cl, const mat4& viewProj, const default_render_command<debug_simple_pipeline>& rc);
+
+	PIPELINE_SETUP_DECL;
+	PIPELINE_RENDER_DECL;
 };
 
 struct debug_unlit_pipeline
@@ -25,9 +29,12 @@ struct debug_unlit_pipeline
 	using material_t = debug_material;
 
 	static void initialize();
-	static void setupCommon(dx_command_list* cl, const common_material_info& materialInfo);
-	static void render(dx_command_list* cl, const mat4& viewProj, const default_render_command<debug_unlit_pipeline>& rc);
+
+	PIPELINE_SETUP_DECL;
+	PIPELINE_RENDER_DECL;
 };
+
+
 
 
 

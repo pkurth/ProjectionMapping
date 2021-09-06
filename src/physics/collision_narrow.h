@@ -1,7 +1,11 @@
 #pragma once
 
 #include "core/math.h"
+#include "physics.h"
 
+struct collider_union;
+struct rigid_body_global_state;
+struct broadphase_collision;
 
 struct contact_info
 {
@@ -11,15 +15,15 @@ struct contact_info
 
 struct contact_manifold
 {
-	uint16 colliderA;
-	uint16 colliderB;
-
 	contact_info contacts[4];
 
 	vec3 collisionNormal; // From a to b.
 	vec3 collisionTangent;
 	vec3 collisionBitangent;
 	uint32 numContacts;
+
+	uint16 colliderA;
+	uint16 colliderB;
 };
 
 struct collision_point
@@ -47,7 +51,23 @@ struct collision_constraint
 	float friction;
 };
 
-uint32 narrowphase(struct collider_union* worldSpaceColliders, struct rigid_body_global_state* rbs, struct broadphase_collision* possibleCollisions, uint32 numPossibleCollisions, float dt,
-	collision_constraint* outCollisionConstraints);
+struct non_collision_interaction
+{
+	uint16 rigidBodyIndex;
+	uint16 otherIndex;
+	physics_object_type otherType;
+};
+
+struct narrowphase_result
+{
+	uint32 numCollisions;
+	uint32 numNonCollisionInteractions;
+};
+
+narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_collision* possibleCollisions, uint32 numPossibleCollisions,
+	collision_constraint* outCollisionConstraints, non_collision_interaction* outNonCollisionInteractions);
+
+void finalizeCollisionVelocityConstraintInitialization(collider_union* worldSpaceColliders, rigid_body_global_state* rbs,
+	collision_constraint* collisionConstraints, uint32 numCollisionConstraints, float dt);
 
 void solveCollisionVelocityConstraints(collision_constraint* constraints, uint32 count, rigid_body_global_state* rbs);

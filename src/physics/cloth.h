@@ -1,42 +1,47 @@
 #pragma once
 
-#include "core/math.h"
 #include "bounding_volumes.h"
-
-struct cloth_particle
-{
-	vec3 position;
-	vec3 prevPosition;
-	bool locked;
-};
+#include "geometry/geometry.h"
 
 struct cloth_constraint
 {
 	uint32 a, b;
 	float restDistance;
-};
-
-struct cloth_collider
-{
-	bounding_sphere sphere;
+	float inverseMassSum;
 };
 
 struct cloth_component
 {
-	cloth_component(float width, float height, uint32 gridSizeX, uint32 gridSizeY, float totalMass, float thickness = 0.1f, float gravityFactor = 1.f, float damping = 0.05f);
-	void simulate(uint32 iterations, float dt);
-	void collide(cloth_collider c);
+	cloth_component(float width, float height, uint32 gridSizeX, uint32 gridSizeY, float totalMass, float thickness = 0.1f, float damping = 0.3f, float gravityFactor = 1.f);
 
-	std::vector<cloth_particle> particles;
-	std::vector<cloth_constraint> constraints;
+	void setWorldPositionOfFixedVertices(const trs& transform);
+	void applyWindForce(vec3 force);
+	void simulate(uint32 velocityIterations, uint32 positionIterations, uint32 driftIterations, float dt);
+
+	uint32 getRenderableVertexCount() const;
+	uint32 getRenderableTriangleCount() const;
+	submesh_info getRenderData(vec3* positions, vertex_uv_normal_tangent* others, indexed_triangle16* triangles) const;
 
 	float gravityFactor;
 	float damping;
 	float thickness;
+	float stiffness = 0.5f;
 
 private:
+	std::vector<vec3> positions;
+	std::vector<vec3> prevPositions;
+	std::vector<vec3> velocities;
+	std::vector<vec3> forceAccumulators;
+	std::vector<float> invMasses;
+	std::vector<cloth_constraint> constraints;
+
 	uint32 gridSizeX, gridSizeY;
-	uint32 numStretchConstraints;
+	float width, height;
+
+	void solveVelocities(const std::vector<struct cloth_constraint_temp>& constraintsTemp);
+	void solvePositions();
+
+	vec3 getParticlePosition(float relX, float relY);
 
 	void addConstraint(uint32 a, uint32 b);
 };
