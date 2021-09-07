@@ -915,6 +915,8 @@ void application::drawSettings(float dt)
 
 		ImGui::Dropdown("Aspect ratio", aspectRatioNames, aspect_ratio_mode_count, (uint32&)renderer->aspectRatioMode);
 
+		ImGui::Checkbox("Visualize projector intensities", &visualizeProjIntensities);
+
 		plotAndEditTonemapping(renderer->tonemapSettings);
 		editSunShadowParameters(sun);
 
@@ -982,6 +984,7 @@ void application::drawSettings(float dt)
 void application::resetRenderPasses()
 {
 	opaqueRenderPass.reset();
+	projectorOpaqueRenderPass.reset();
 	transparentRenderPass.reset();
 	ldrRenderPass.reset();
 	sunShadowRenderPass.reset();
@@ -1006,6 +1009,7 @@ void application::resetRenderPasses()
 void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 numPointLightShadowPasses)
 {
 	opaqueRenderPass.sort();
+	projectorOpaqueRenderPass.sort();
 	transparentRenderPass.sort();
 	ldrRenderPass.sort();
 
@@ -1025,7 +1029,7 @@ void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 num
 		shadow_map_renderer::submitRenderPass(&pointShadowRenderPasses[i]);
 	}
 
-	projectorManager->submitRenderPass(&opaqueRenderPass);
+	projectorManager->submitRenderPass(&projectorOpaqueRenderPass);
 }
 
 bool application::handleUserInput(const user_input& input, float dt)
@@ -1373,6 +1377,10 @@ void application::update(const user_input& input, float dt)
 							controller->currentVertexBuffer, controller->prevFrameVertexBuffer, mesh.indexBuffer, 
 							submesh, material,
 							(uint32)entityHandle);
+
+						projectorOpaqueRenderPass.renderAnimatedObject(m, lastM,
+							controller->currentVertexBuffer, controller->prevFrameVertexBuffer, mesh.indexBuffer,
+							submesh, material);
 					}
 
 					if (outline)
@@ -1397,10 +1405,19 @@ void application::update(const user_input& input, float dt)
 						if (dynamic)
 						{
 							opaqueRenderPass.renderDynamicObject(m, lastM, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
+							projectorOpaqueRenderPass.renderDynamicObject(m, lastM, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 						else
 						{
-							opaqueRenderPass.renderStaticObject(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
+							if (visualizeProjIntensities)
+							{
+								visualizeProjectorIntensities(&opaqueRenderPass, m, mesh.vertexBuffer, mesh.indexBuffer, submesh);
+							}
+							else
+							{
+								opaqueRenderPass.renderStaticObject(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
+							}
+							projectorOpaqueRenderPass.renderStaticObject(m, mesh.vertexBuffer, mesh.indexBuffer, submesh, material, (uint32)entityHandle);
 						}
 					}
 

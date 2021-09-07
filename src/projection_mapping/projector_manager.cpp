@@ -4,7 +4,6 @@
 #include "core/imgui.h"
 #include "rendering/debug_visualization.h"
 
-#include "projector_solver.h"
 
 projector_manager::projector_manager()
 {

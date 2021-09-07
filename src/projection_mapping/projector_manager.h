@@ -1,6 +1,7 @@
 #pragma once
 
 #include "projector.h"
+#include "projector_solver.h"
 
 struct projector_manager
 {

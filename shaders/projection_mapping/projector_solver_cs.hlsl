@@ -34,6 +34,10 @@ void main(cs_input IN)
 
 	uint numProjectors = cb.numProjectors;
 	float depth = depthTextures[index][texCoord];
+	if (depth == 1.f)
+	{
+		return;
+	}
 
 	float3 worldPosition = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));

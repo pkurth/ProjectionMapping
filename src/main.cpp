@@ -236,11 +236,11 @@ int main(int argc, char** argv)
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();
+		projectorManager.updateAndRender();
 		renderer.endFrame(input);
 
 		fileBrowser.draw(meshEditor);
 		meshEditor.draw();
-		projectorManager.updateAndRender();
 
 		fenceValues[window.currentBackbufferIndex] = renderToMainWindow(window);
 

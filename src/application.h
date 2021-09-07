@@ -94,12 +94,14 @@ private:
 	physics_settings physicsSettings;
 
 	opaque_render_pass opaqueRenderPass;
+	opaque_render_pass projectorOpaqueRenderPass;
 	transparent_render_pass transparentRenderPass;
 	sun_shadow_render_pass sunShadowRenderPass;
 	spot_shadow_render_pass spotShadowRenderPasses[16];
 	point_shadow_render_pass pointShadowRenderPasses[16];
 	ldr_render_pass ldrRenderPass;
 
+	bool visualizeProjIntensities = false;
 
 
 	friend void undoSelection(void* d);
