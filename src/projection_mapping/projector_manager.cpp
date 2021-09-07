@@ -2,6 +2,7 @@
 #include "projector_manager.h"
 #include "window/dx_window.h"
 #include "core/imgui.h"
+#include "rendering/debug_visualization.h"
 
 #include "projector_solver.h"
 
@@ -101,6 +102,35 @@ void projector_manager::updateAndRender()
 	{
 		p.presentToBackBuffer(applySolverIntensity);
 		p.swapBuffers();
+	}
+}
+
+void projector_manager::renderProjectorFrusta(ldr_render_pass* renderPass)
+{
+	static const vec4 colorTable[] =
+	{
+		vec4(1.f, 0.f, 0.f, 1.f),
+		vec4(0.f, 1.f, 0.f, 1.f),
+		vec4(0.f, 0.f, 1.f, 1.f),
+		vec4(1.f, 1.f, 0.f, 1.f),
+		vec4(0.f, 1.f, 1.f, 1.f),
+		vec4(1.f, 0.f, 1.f, 1.f),
+	};
+
+	uint32 colorIndex = 0;
+	for (auto& p : physicalProjectors)
+	{
+		if (p.active())
+		{
+			debug_unlit_line_pipeline::renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
+		}
+	}
+	for (auto& p : dummyProjectors)
+	{
+		if (p.active())
+		{
+			debug_unlit_line_pipeline::renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
+		}
 	}
 }
 

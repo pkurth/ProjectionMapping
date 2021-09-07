@@ -285,7 +285,7 @@ static void depthPrePassInternal(dx_command_list* cl,
 
 			cl->setVertexBuffer(0, dc.vertexBuffer);
 			cl->setIndexBuffer(dc.indexBuffer);
-			cl->drawIndexed(dc.submesh.numTriangles * 3, 1, dc.submesh.firstTriangle * 3, dc.submesh.baseVertex, 0);
+			cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, dc.submesh.baseVertex, 0);
 		}
 	}
 
@@ -301,7 +301,7 @@ static void depthPrePassInternal(dx_command_list* cl,
 
 			cl->setVertexBuffer(0, dc.vertexBuffer);
 			cl->setIndexBuffer(dc.indexBuffer);
-			cl->drawIndexed(dc.submesh.numTriangles * 3, 1, dc.submesh.firstTriangle * 3, dc.submesh.baseVertex, 0);
+			cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, dc.submesh.baseVertex, 0);
 		}
 	}
 }
@@ -329,7 +329,7 @@ static void depthPrePassInternal(dx_command_list* cl,
 
 			cl->setVertexBuffer(0, dc.vertexBuffer);
 			cl->setIndexBuffer(dc.indexBuffer);
-			cl->drawIndexed(dc.submesh.numTriangles * 3, 1, dc.submesh.firstTriangle * 3, dc.submesh.baseVertex, 0);
+			cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, dc.submesh.baseVertex, 0);
 		}
 	}
 }
@@ -537,7 +537,7 @@ void shadowPasses(dx_command_list* cl,
 				cl->setVertexBuffer(0, dc.vertexBuffer);
 				cl->setIndexBuffer(dc.indexBuffer);
 
-				cl->drawIndexed(submesh.numTriangles * 3, 1, submesh.firstTriangle * 3, submesh.baseVertex, 0);
+				cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, submesh.baseVertex, 0);
 			}
 		};
 		auto renderSpotShadow = [](dx_command_list* cl, const std::vector<shadow_render_command>& drawCalls, const mat4& viewProj)
@@ -551,7 +551,7 @@ void shadowPasses(dx_command_list* cl,
 				cl->setVertexBuffer(0, dc.vertexBuffer);
 				cl->setIndexBuffer(dc.indexBuffer);
 
-				cl->drawIndexed(submesh.numTriangles * 3, 1, submesh.firstTriangle * 3, submesh.baseVertex, 0);
+				cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, submesh.baseVertex, 0);
 			}
 		};
 		auto renderPointShadow = [](dx_command_list* cl, const std::vector<shadow_render_command>& drawCalls, vec3 lightPosition, float maxDistance, float flip)
@@ -572,7 +572,7 @@ void shadowPasses(dx_command_list* cl,
 				cl->setVertexBuffer(0, dc.vertexBuffer);
 				cl->setIndexBuffer(dc.indexBuffer);
 
-				cl->drawIndexed(submesh.numTriangles * 3, 1, submesh.firstTriangle * 3, submesh.baseVertex, 0);
+				cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, submesh.baseVertex, 0);
 			}
 		};
 
@@ -805,7 +805,24 @@ void ldrPass(dx_command_list* cl,
 	cl->setViewport(ldrRenderTarget.viewport);
 
 
+	if (ldrRenderPass->ldrPass.size())
+	{
+		DX_PROFILE_BLOCK(cl, "LDR Objects");
 
+		pipeline_setup_func lastSetupFunc = 0;
+
+		for (const auto& dc : ldrRenderPass->ldrPass)
+		{
+			if (dc.setup != lastSetupFunc)
+			{
+				dc.setup(cl, materialInfo);
+				lastSetupFunc = dc.setup;
+			}
+			dc.render(cl, viewProj, dc.data);
+		}
+	}
+
+	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // Just in case.
 
 	if (ldrRenderPass->overlays.size())
 	{
@@ -815,7 +832,7 @@ void ldrPass(dx_command_list* cl,
 
 		pipeline_setup_func lastSetupFunc = 0;
 
-		for (auto dc : ldrRenderPass->overlays)
+		for (const auto& dc : ldrRenderPass->overlays)
 		{
 			if (dc.setup != lastSetupFunc)
 			{
@@ -837,13 +854,13 @@ void ldrPass(dx_command_list* cl,
 
 
 		// Mark objects in stencil.
-		for (const auto& outlined : ldrRenderPass->outlines)
+		for (const auto& dc : ldrRenderPass->outlines)
 		{
-			cl->setGraphics32BitConstants(OUTLINE_RS_MVP, outline_marker_cb{ viewProj * outlined.transform });
+			cl->setGraphics32BitConstants(OUTLINE_RS_MVP, outline_marker_cb{ viewProj * dc.transform });
 
-			cl->setVertexBuffer(0, outlined.vertexBuffer);
-			cl->setIndexBuffer(outlined.indexBuffer);
-			cl->drawIndexed(outlined.submesh.numTriangles * 3, 1, outlined.submesh.firstTriangle * 3, outlined.submesh.baseVertex, 0);
+			cl->setVertexBuffer(0, dc.vertexBuffer);
+			cl->setIndexBuffer(dc.indexBuffer);
+			cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, dc.submesh.baseVertex, 0);
 		}
 
 		// Draw outline.
@@ -1235,14 +1252,7 @@ void downsample(dx_command_list* cl,
 	barrier_batcher(cl)
 		.transition(output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	cl->setPipelineState(*blitPipeline.pipeline);
-	cl->setComputeRootSignature(*blitPipeline.rootSignature);
-
-	cl->setCompute32BitConstants(BLIT_RS_CB, blit_cb{ vec2(1.f / output->width, 1.f / output->height) });
-	cl->setDescriptorHeapUAV(BLIT_RS_TEXTURES, 0, output);
-	cl->setDescriptorHeapSRV(BLIT_RS_TEXTURES, 1, input);
-
-	cl->dispatch(bucketize(output->width, POST_PROCESSING_BLOCK_SIZE), bucketize(output->height, POST_PROCESSING_BLOCK_SIZE));
+	blit(cl, input, output);
 
 	barrier_batcher(cl)
 		//.uav(prevFrameHDRColorTexture)
@@ -1321,6 +1331,20 @@ void tonemap(dx_command_list* cl,
 	cl->setCompute32BitConstants(TONEMAP_RS_CB, settings); // Settings struct is identical to tonemap_cb.
 
 	cl->dispatch(bucketize(ldrOutput->width, POST_PROCESSING_BLOCK_SIZE), bucketize(ldrOutput->height, POST_PROCESSING_BLOCK_SIZE));
+}
+
+void blit(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output)
+{
+	DX_PROFILE_BLOCK(cl, "Blit");
+
+	cl->setPipelineState(*blitPipeline.pipeline);
+	cl->setComputeRootSignature(*blitPipeline.rootSignature);
+
+	cl->setCompute32BitConstants(BLIT_RS_CB, blit_cb{ vec2(1.f / output->width, 1.f / output->height) });
+	cl->setDescriptorHeapUAV(BLIT_RS_TEXTURES, 0, output);
+	cl->setDescriptorHeapSRV(BLIT_RS_TEXTURES, 1, input);
+
+	cl->dispatch(bucketize(output->width, POST_PROCESSING_BLOCK_SIZE), bucketize(output->height, POST_PROCESSING_BLOCK_SIZE));
 }
 
 void present(dx_command_list* cl,

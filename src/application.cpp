@@ -312,7 +312,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 #endif
 
 	//ragdoll.initialize(appScene, vec3(60.f, 1.25f, -2.f));
-	ragdoll.initialize(appScene, vec3(20.f, 1.25f, 0.f));
+	//ragdoll.initialize(appScene, vec3(20.f, 1.25f, 0.f));
 
 	//initializeLocomotionEval(appScene, ragdoll);
 
@@ -920,6 +920,8 @@ void application::drawSettings(float dt)
 
 		if (ImGui::TreeNode("Post processing"))
 		{
+			ImGui::Checkbox("Disable all post processing", &renderer->disableAllPostProcessing);
+
 			if (renderer->spec.allowSSR) { editSSR(renderer->enableSSR, renderer->ssrSettings); }
 			if (renderer->spec.allowTAA) { editTAA(renderer->enableTAA, renderer->taaSettings); }
 			if (renderer->spec.allowBloom) { editBloom(renderer->enableBloom, renderer->bloomSettings); }
@@ -1279,6 +1281,8 @@ void application::update(const user_input& input, float dt)
 	projectorManager->setViewerCamera(camera);
 	projectorManager->setSun(sun);
 	projectorManager->setEnvironment(environment);
+
+	projectorManager->renderProjectorFrusta(&ldrRenderPass);
 
 #if 1
 	if (renderer->mode == renderer_mode_rasterized)

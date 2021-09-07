@@ -227,6 +227,10 @@ void tonemap(dx_command_list* cl,
 	ref<dx_texture> ldrOutput,					// UNORDERED_ACCESS
 	const tonemap_settings& settings);
 
+void blit(dx_command_list* cl,
+	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> output);					// UNORDERED_ACCESS
+
 void present(dx_command_list* cl,
 	ref<dx_texture> ldrInput,					// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> output,						// UNORDERED_ACCESS

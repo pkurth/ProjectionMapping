@@ -121,10 +121,10 @@ struct render_camera
 	float eyeDepthToDepthBufferDepth(float eyeDepth) const;
 	float linearizeDepthBuffer(float depthBufferDepth) const;
 
-	camera_frustum_corners getWorldSpaceFrustumCorners(float alternativeFarPlane = 0.f) const;
+	camera_frustum_corners getWorldSpaceFrustumCorners(float alternativeFarPlane = -1.f) const;
 	camera_frustum_planes getWorldSpaceFrustumPlanes() const;
 
-	camera_frustum_corners getViewSpaceFrustumCorners(float alternativeFarPlane = 0.f) const;
+	camera_frustum_corners getViewSpaceFrustumCorners(float alternativeFarPlane = -1.f) const;
 
 	camera_projection_extents getProjectionExtents() const;
 	float getMinProjectionExtent() const;

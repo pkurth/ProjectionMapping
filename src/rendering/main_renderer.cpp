@@ -233,7 +233,7 @@ void main_renderer::recalculateViewport(bool resizeTextures)
 
 void main_renderer::setCamera(const render_camera& camera)
 {
-	buildCameraConstantBuffer(camera, taaSettings.cameraJitterStrength * enableTAA, this->jitteredCamera);
+	buildCameraConstantBuffer(camera, taaSettings.cameraJitterStrength * enableTAA * !disableAllPostProcessing, this->jitteredCamera);
 	buildCameraConstantBuffer(camera, 0.f, this->unjitteredCamera);
 }
 
@@ -549,42 +549,49 @@ void main_renderer::endFrame(const user_input& input)
 			// POST PROCESSING
 			// ----------------------------------------
 
-
-			// TAA.
-			if (enableTAA)
+			if (!disableAllPostProcessing)
 			{
-				uint32 taaOutputIndex = 1 - taaHistoryIndex;
-				temporalAntiAliasing(cl, hdrResult, screenVelocitiesTexture, opaqueDepthBuffer, taaTextures[taaHistoryIndex], taaTextures[taaOutputIndex], jitteredCamera.projectionParams);
-				hdrResult = taaTextures[taaOutputIndex];
-				taaHistoryIndex = taaOutputIndex;
+
+				// TAA.
+				if (enableTAA)
+				{
+					uint32 taaOutputIndex = 1 - taaHistoryIndex;
+					temporalAntiAliasing(cl, hdrResult, screenVelocitiesTexture, opaqueDepthBuffer, taaTextures[taaHistoryIndex], taaTextures[taaOutputIndex], jitteredCamera.projectionParams);
+					hdrResult = taaTextures[taaOutputIndex];
+					taaHistoryIndex = taaOutputIndex;
+				}
+
+				// At this point hdrResult is either the TAA result or the hdrPostProcessingTexture. Either one is in read state.
+
+
+				// Downsample scene. This is also the copy used in SSR next frame.
+				if (prevFrameHDRColorTexture)
+				{
+					downsample(cl, hdrResult, prevFrameHDRColorTexture, prevFrameHDRColorTempTexture);
+				}
+
+
+
+				// Bloom.
+				if (enableBloom)
+				{
+					barrier_batcher(cl)
+						.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+					bloom(cl, hdrResult, hdrColorTexture, bloomTexture, bloomTempTexture, bloomSettings);
+					hdrResult = hdrColorTexture;
+				}
+
+				// At this point hdrResult is either the TAA result, the hdrColorTexture, or the hdrPostProcessingTexture. Either one is in read state.
+
+
+
+				tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
 			}
-
-			// At this point hdrResult is either the TAA result or the hdrPostProcessingTexture. Either one is in read state.
-
-
-			// Downsample scene. This is also the copy used in SSR next frame.
-			if (prevFrameHDRColorTexture)
+			else
 			{
-				downsample(cl, hdrResult, prevFrameHDRColorTexture, prevFrameHDRColorTempTexture);
+				blit(cl, hdrResult, ldrPostProcessingTexture);
 			}
-
-
-
-			// Bloom.
-			if (enableBloom)
-			{
-				barrier_batcher(cl)
-					.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-				bloom(cl, hdrResult, hdrColorTexture, bloomTexture, bloomTempTexture, bloomSettings);
-				hdrResult = hdrColorTexture;
-			}
-
-			// At this point hdrResult is either the TAA result, the hdrColorTexture, or the hdrPostProcessingTexture. Either one is in read state.
-
-
-
-			tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
 
 
 			// ----------------------------------------
@@ -594,7 +601,7 @@ void main_renderer::endFrame(const user_input& input)
 			bool renderingLDR = ldrRenderPass && ldrRenderPass->ldrPass.size();
 			bool renderingOverlays = ldrRenderPass && ldrRenderPass->overlays.size();
 			bool renderingOutlines = ldrRenderPass && ldrRenderPass->outlines.size();
-			if (renderingOverlays || renderingOutlines)
+			if (renderingLDR || renderingOverlays || renderingOutlines)
 			{
 				barrier_batcher(cl)
 					//.uav(ldrPostProcessingTexture)
@@ -617,7 +624,7 @@ void main_renderer::endFrame(const user_input& input)
 
 			// TODO: If we really care we should sharpen before rendering overlays and outlines.
 
-			present(cl, ldrPostProcessingTexture, frameResult, enableSharpen ? sharpenSettings : sharpen_settings{ 0.f });
+			present(cl, ldrPostProcessingTexture, frameResult, (enableSharpen && !disableAllPostProcessing) ? sharpenSettings : sharpen_settings{ 0.f });
 
 
 

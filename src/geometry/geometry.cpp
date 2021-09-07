@@ -110,8 +110,8 @@ submesh_info cpu_mesh::pushQuad(vec2 radius)
 	pushTriangle(1, 3, 2);
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 2;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 2 * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = 4;
 	return result;
@@ -213,8 +213,8 @@ submesh_info cpu_mesh::pushCube(vec3 radius, bool flipWindingOrder, vec3 center)
 	}
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 12;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 12 * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -291,8 +291,8 @@ submesh_info cpu_mesh::pushSphere(uint16 slices, uint16 rows, float radius, vec3
 	pushTriangle(lastVertex - 1u - slices, lastVertex - 2u, lastVertex - 1u);
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 2 * rows * slices;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 2 * rows * slices * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -414,8 +414,8 @@ submesh_info cpu_mesh::pushIcoSphere(float radius, uint32 refinement)
 	}
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = (uint32)triangles.size();
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = (uint32)triangles.size() * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = (uint32)vertices.size();
 	return result;
@@ -517,8 +517,8 @@ submesh_info cpu_mesh::pushCapsule(uint16 slices, uint16 rows, float height, flo
 	pushTriangle(lastVertex - 1 - slices, lastVertex - 2, lastVertex - 1);
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 2 * (rows + 1) * slices;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 2 * (rows + 1) * slices * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -617,8 +617,8 @@ submesh_info cpu_mesh::pushCylinder(uint16 slices, float radius, float height)
 	pushTriangle(lastVertex - 1 - slices, lastVertex - 2, lastVertex - 1);
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 4 * slices;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 4 * slices * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -747,8 +747,8 @@ submesh_info cpu_mesh::pushArrow(uint16 slices, float shaftRadius, float headRad
 	}
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 7 * slices;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 7 * slices * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -817,8 +817,8 @@ submesh_info cpu_mesh::pushTorus(uint16 slices, uint16 segments, float torusRadi
 	pushTriangle(y * slices + slices - 1, slices - 1, 0);
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = segments * slices * 2;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = segments * slices * 2 * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -967,8 +967,8 @@ submesh_info cpu_mesh::pushMace(uint16 slices, float shaftRadius, float headRadi
 	pushTriangle(lastVertex - 1 - slices, lastVertex - 2, lastVertex - 1);
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = 8 * slices;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = 8 * slices * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = numVertices - baseVertex;
 	return result;
@@ -1108,8 +1108,8 @@ submesh_info cpu_mesh::pushAssimpMesh(const aiMesh* mesh, float scale, bounding_
 	}
 
 	submesh_info result;
-	result.firstTriangle = firstTriangle;
-	result.numTriangles = mesh->mNumFaces;
+	result.firstIndex = firstTriangle * 3;
+	result.numIndices = mesh->mNumFaces * 3;
 	result.baseVertex = baseVertex;
 	result.numVertices = mesh->mNumVertices;
 	return result;

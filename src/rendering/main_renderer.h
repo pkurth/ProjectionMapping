@@ -103,7 +103,7 @@ struct main_renderer
 	bool enableSharpen = true;
 	sharpen_settings sharpenSettings;
 
-
+	bool disableAllPostProcessing = false;
 
 
 

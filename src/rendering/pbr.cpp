@@ -250,7 +250,7 @@ static void renderPBRCommon(dx_command_list* cl, const mat4& viewProj, const def
 	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
 	cl->setVertexBuffer(1, rc.vertexBuffer.others);
 	cl->setIndexBuffer(rc.indexBuffer);
-	cl->drawIndexed(submesh.numTriangles * 3, 1, submesh.firstTriangle * 3, submesh.baseVertex, 0);
+	cl->drawIndexed(submesh.numIndices, 1, submesh.firstIndex, submesh.baseVertex, 0);
 }
 
 void opaque_pbr_pipeline::initialize()

@@ -248,8 +248,8 @@ submesh_info cloth_component::getRenderData(vec3* positions, vertex_uv_normal_ta
 
 	submesh_info result;
 	result.baseVertex = 0;
-	result.firstTriangle = 0;
-	result.numTriangles = getRenderableTriangleCount();
+	result.firstIndex = 0;
+	result.numIndices = getRenderableTriangleCount() * 3;
 	result.numVertices = gridSizeX * gridSizeY;
 	return result;
 }

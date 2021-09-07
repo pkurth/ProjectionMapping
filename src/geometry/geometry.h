@@ -8,8 +8,8 @@
 
 struct submesh_info
 {
-	uint32 numTriangles;
-	uint32 firstTriangle;
+	uint32 numIndices;
+	uint32 firstIndex;
 	uint32 baseVertex;
 	uint32 numVertices;
 };
