@@ -52,8 +52,3 @@ struct debug_unlit_line_pipeline
 	static void renderCameraFrustum(const render_camera& frustum, vec4 color, ldr_render_pass* renderPass, float alternativeFarPlane = -1.f);
 };
 
-
-
-
-
-

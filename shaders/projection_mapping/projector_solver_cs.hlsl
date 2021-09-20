@@ -36,12 +36,14 @@ void main(cs_input IN)
 	float depth = depthTextures[index][texCoord];
 	if (depth == 1.f)
 	{
+		outIntensities[index][texCoord] = 0.f;
 		return;
 	}
 
 	float3 worldPosition = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));
 
+	float maxPhysicalIntensityByOtherProjectors = 0.f;
 
 	float intensityByOtherProjectors = 0.f;
 	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
@@ -64,6 +66,7 @@ void main(cs_input IN)
 				float otherIntensity = intensities[projIndex].SampleLevel(borderSampler, otherUV, 0); // Software intensity.
 
 				intensityByOtherProjectors += otherNdotV * otherIntensity;
+				maxPhysicalIntensityByOtherProjectors = max(maxPhysicalIntensityByOtherProjectors, otherNdotV);
 			}
 		}
 	}
@@ -72,6 +75,12 @@ void main(cs_input IN)
 
 	float3 V = normalize(projectors[index].position.xyz - worldPosition);
 	float possiblePhysicalIntensity = saturate(dot(N, V));
+
+	if (possiblePhysicalIntensity > maxPhysicalIntensityByOtherProjectors)
+	{
+		// We are the best hitting projector.
+		remainingIntensity *= 1.001f;
+	}
 
 	float intensity = saturate(remainingIntensity / possiblePhysicalIntensity);
 
