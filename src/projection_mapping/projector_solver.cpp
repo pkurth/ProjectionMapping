@@ -167,8 +167,8 @@ PIPELINE_RENDER_IMPL(visualize_intensities_pipeline)
 
 void visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass, 
 	const mat4& transform,
-	const material_vertex_buffer_group_view& vertexBuffer,
-	const material_index_buffer_view& indexBuffer,
+	const dx_vertex_buffer_group_view& vertexBuffer,
+	const dx_index_buffer_view& indexBuffer,
 	submesh_info submesh,
 	uint32 objectID)
 {

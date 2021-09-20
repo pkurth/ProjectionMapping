@@ -3,23 +3,7 @@
 //#define ENTT_ID_TYPE uint64
 //#include <entt/entt.hpp>
 #include <entt/entity/registry.hpp>
-#include "core/math.h"
-
-struct tag_component
-{
-	char name[16];
-
-	tag_component(const char* n)
-	{
-		strncpy(name, n, sizeof(name));
-		name[sizeof(name) - 1] = 0;
-	}
-};
-
-struct dynamic_geometry_component
-{
-	trs lastFrameTransform = trs::identity;
-};
+#include "components.h"
 
 struct scene_entity
 {
@@ -28,12 +12,6 @@ struct scene_entity
 	inline scene_entity(uint32 id, struct scene& scene);
 	scene_entity(entt::entity handle, entt::registry* registry) : handle(handle), registry(registry) {}
 	scene_entity(const scene_entity&) = default;
-
-	template <typename component_t>
-	bool hasComponent()
-	{
-		return registry->any_of<component_t>(handle);
-	}
 
 	template <typename component_t, typename... args>
 	scene_entity& addComponent(args&&... a)
@@ -56,30 +34,36 @@ struct scene_entity
 			reference.firstColliderEntity = child;
 
 
-			if (hasComponent<rigid_body_component>())
+			if (rigid_body_component* rb = getComponentIfExists<rigid_body_component>())
 			{
-				getComponent<rigid_body_component>().recalculateProperties(registry, reference);
+				rb->recalculateProperties(registry, reference);
 			}
 		}
 		else
 		{
-			auto& component = registry->emplace<component_t>(handle, std::forward<args>(a)...);
+			auto& component = registry->emplace_or_replace<component_t>(handle, std::forward<args>(a)...);
 
 			// If component is rigid body, calculate properties.
 			if constexpr (std::is_same_v<component_t, struct rigid_body_component>)
 			{
-				if (hasComponent<physics_reference_component>())
+				if (physics_reference_component* ref = getComponentIfExists<physics_reference_component>())
 				{
-					component.recalculateProperties(registry, getComponent<physics_reference_component>());
+					component.recalculateProperties(registry, *ref);
 				}
-				if (!hasComponent<dynamic_geometry_component>())
+				if (!hasComponent<dynamic_transform_component>())
 				{
-					addComponent<dynamic_geometry_component>();
+					addComponent<dynamic_transform_component>();
 				}
 			}
 		}
 
 		return *this;
+	}
+
+	template <typename component_t>
+	bool hasComponent()
+	{
+		return registry->any_of<component_t>(handle);
 	}
 
 	template <typename component_t>
@@ -92,6 +76,18 @@ struct scene_entity
 	const component_t& getComponent() const
 	{
 		return registry->get<component_t>(handle);
+	}
+
+	template <typename component_t>
+	component_t* getComponentIfExists()
+	{
+		return registry->try_get<component_t>(handle);
+	}
+
+	template <typename component_t>
+	const component_t* getComponentIfExists() const
+	{
+		return registry->try_get<component_t>(handle);
 	}
 
 	template <typename component_t>
@@ -156,9 +152,9 @@ struct scene
 	template <typename component_t>
 	void copyComponentIfExists(scene_entity src, scene_entity dst)
 	{
-		if (src.hasComponent<component_t>())
+		if (component_t* comp = src.getComponentIfExists<component_t>())
 		{
-			dst.addComponent<component_t>(src.getComponent<component_t>());
+			dst.addComponent<component_t>(*comp);
 		}
 	}
 
@@ -202,10 +198,7 @@ struct scene
 		return (uint32)registry.size<component_t>();
 	}
 
-private:
 	entt::registry registry;
-
-	friend scene_entity;
 };
 
 inline scene_entity::scene_entity(entt::entity handle, struct scene& scene) : handle(handle), registry(&scene.registry) {}

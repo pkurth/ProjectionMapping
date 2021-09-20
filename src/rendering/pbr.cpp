@@ -22,7 +22,7 @@ static dx_pipeline transparentPBRPipeline;
 
 struct material_key
 {
-	std::string albedoTex, normalTex, roughTex, metallicTex;
+	fs::path albedoTex, normalTex, roughTex, metallicTex;
 	vec4 emission;
 	vec4 albedoTint;
 	float roughnessOverride, metallicOverride;
@@ -67,10 +67,10 @@ static bool operator==(const material_key& a, const material_key& b)
 }
 
 ref<pbr_material> createPBRMaterial(
-	const std::string& albedoTex, 
-	const std::string& normalTex, 
-	const std::string& roughTex, 
-	const std::string& metallicTex, 
+	const fs::path& albedoTex, 
+	const fs::path& normalTex, 
+	const fs::path& roughTex, 
+	const fs::path& metallicTex, 
 	const vec4& emission, 
 	const vec4& albedoTint, 
 	float roughOverride, 
@@ -102,9 +102,9 @@ ref<pbr_material> createPBRMaterial(
 		ref<pbr_material> material = make_ref<pbr_material>();
 
 		if (!albedoTex.empty()) material->albedo = loadTextureFromFile(albedoTex);
-		if (!normalTex.empty()) material->normal = loadTextureFromFile(normalTex, texture_load_flags_default | texture_load_flags_noncolor);
-		if (!roughTex.empty()) material->roughness = loadTextureFromFile(roughTex, texture_load_flags_default | texture_load_flags_noncolor);
-		if (!metallicTex.empty()) material->metallic = loadTextureFromFile(metallicTex, texture_load_flags_default | texture_load_flags_noncolor);
+		if (!normalTex.empty()) material->normal = loadTextureFromFile(normalTex, image_load_flags_default | image_load_flags_noncolor);
+		if (!roughTex.empty()) material->roughness = loadTextureFromFile(roughTex, image_load_flags_default | image_load_flags_noncolor);
+		if (!metallicTex.empty()) material->metallic = loadTextureFromFile(metallicTex, image_load_flags_default | image_load_flags_noncolor);
 		material->emission = emission;
 		material->albedoTint = albedoTint;
 		material->roughnessOverride = roughOverride;
@@ -124,9 +124,9 @@ ref<pbr_material> getDefaultPBRMaterial()
 	return material;
 }
 
-ref<pbr_environment> createEnvironment(const std::string& filename, uint32 skyResolution, uint32 environmentResolution, uint32 irradianceResolution, bool asyncCompute)
+ref<pbr_environment> createEnvironment(const fs::path& filename, uint32 skyResolution, uint32 environmentResolution, uint32 irradianceResolution, bool asyncCompute)
 {
-	static std::unordered_map<std::string, weakref<pbr_environment>> cache;
+	static std::unordered_map<fs::path, weakref<pbr_environment>> cache;
 	static std::mutex mutex;
 
 	mutex.lock();
@@ -135,7 +135,7 @@ ref<pbr_environment> createEnvironment(const std::string& filename, uint32 skyRe
 	if (!sp)
 	{
 		ref<dx_texture> equiSky = loadTextureFromFile(filename,
-			texture_load_flags_noncolor | texture_load_flags_cache_to_dds | texture_load_flags_gen_mips_on_cpu);
+			image_load_flags_noncolor | image_load_flags_cache_to_dds | image_load_flags_gen_mips_on_cpu);
 
 		if (equiSky)
 		{
@@ -175,6 +175,8 @@ ref<pbr_environment> createEnvironment(const std::string& filename, uint32 skyRe
 
 static void setupPBRCommon(dx_command_list* cl, const common_material_info& info)
 {
+	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	dx_cpu_descriptor_handle nullTexture = render_resources::nullTextureSRV;
 	dx_cpu_descriptor_handle nullBuffer = render_resources::nullBufferSRV;
 

@@ -47,8 +47,9 @@ struct debug_unlit_line_pipeline
 
 	PIPELINE_SETUP_DECL;
 	PIPELINE_RENDER_DECL;
-
-
-	static void renderCameraFrustum(const render_camera& frustum, vec4 color, ldr_render_pass* renderPass, float alternativeFarPlane = -1.f);
 };
 
+void renderWireSphere(vec3 position, float radius, vec4 color, ldr_render_pass* renderPass);
+void renderWireCone(vec3 position, vec3 direction, float distance, float angle, vec4 color, ldr_render_pass* renderPass);
+void renderWireBox(vec3 position, vec3 radius, quat rotation, vec4 color, ldr_render_pass* renderPass);
+void renderCameraFrustum(const render_camera& frustum, vec4 color, ldr_render_pass* renderPass, float alternativeFarPlane = -1.f);

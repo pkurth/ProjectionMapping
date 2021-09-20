@@ -29,17 +29,32 @@ struct directional_light
 	void updateMatrices(const render_camera& camera);
 };
 
-// Simple wrappers around CBs. Don't add additional data here!
-struct point_light_component : point_light_cb
+struct point_light_component
 {
-	point_light_component(vec3 position, vec3 radiance, float radius, int shadowInfoIndex = -1)
-		: point_light_cb(position, radiance, radius, shadowInfoIndex) {}
+	vec3 color;
+	float intensity; // Final radiance is color * intensity.
+	float radius;
+	bool castsShadow;
+	uint32 shadowMapResolution;
+
+	point_light_component() {}
+	point_light_component(vec3 color, float intensity, float radius, bool castsShadow = false, uint32 shadowMapResolution = 512)
+		: color(color), intensity(intensity), radius(radius), castsShadow(castsShadow), shadowMapResolution(shadowMapResolution) {}
 };
 
-struct spot_light_component : spot_light_cb
+struct spot_light_component
 {
-	spot_light_component(vec3 position, vec3 direction, vec3 radiance, float innerAngle, float outerAngle, float maxDistance, int shadowInfoIndex = -1)
-		: spot_light_cb(position, direction, radiance, innerAngle, outerAngle, maxDistance, shadowInfoIndex) {}
+	vec3 color;
+	float intensity; // Final radiance is color * intensity.
+	float distance;
+	float innerAngle;
+	float outerAngle;
+	bool castsShadow;
+	uint32 shadowMapResolution;
+
+	spot_light_component() {}
+	spot_light_component(vec3 color, float intensity, float distance, float innerAngle, float outerAngle, bool castsShadow = false, uint32 shadowMapResolution = 512)
+		: color(color), intensity(intensity), distance(distance), innerAngle(innerAngle), outerAngle(outerAngle), castsShadow(castsShadow), shadowMapResolution(shadowMapResolution) {}
 };
 
 mat4 getSpotLightViewProjectionMatrix(const spot_light_cb& sl);

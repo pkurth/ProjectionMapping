@@ -121,14 +121,14 @@ void projector_manager::renderProjectorFrusta(ldr_render_pass* renderPass)
 	{
 		if (p.active())
 		{
-			debug_unlit_line_pipeline::renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
+			renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
 		}
 	}
 	for (auto& p : dummyProjectors)
 	{
 		if (p.active())
 		{
-			debug_unlit_line_pipeline::renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
+			renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
 		}
 	}
 }

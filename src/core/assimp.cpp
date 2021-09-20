@@ -21,7 +21,7 @@ struct assimp_logger : public Assimp::LogStream
 	}
 };
 
-const aiScene* loadAssimpSceneFile(const std::string& filepathRaw, Assimp::Importer& importer)
+const aiScene* loadAssimpSceneFile(const fs::path& filepath, Assimp::Importer& importer)
 {
 #if 0
 	if (Assimp::DefaultLogger::isNullLogger())
@@ -33,7 +33,6 @@ const aiScene* loadAssimpSceneFile(const std::string& filepathRaw, Assimp::Impor
 
 	int removeFlags = importer.GetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS);
 
-	fs::path filepath = filepathRaw;
 	fs::path extension = filepath.extension();
 
 	fs::path cachedFilename = filepath;
@@ -65,13 +64,13 @@ const aiScene* loadAssimpSceneFile(const std::string& filepathRaw, Assimp::Impor
 
 	if (!scene)
 	{
-		if (!fs::exists(filepathRaw))
+		if (!fs::exists(filepath))
 		{
-			std::cerr << "Could not find file '" << filepathRaw << "'.\n";
+			std::cerr << "Could not find file '" << filepath << "'.\n";
 			return 0;
 		}
 
-		std::cout << "Preprocessing asset '" << filepathRaw << "' for faster loading next time.";
+		std::cout << "Preprocessing asset '" << filepath << "' for faster loading next time.";
 #ifdef _DEBUG
 		std::cout << " Consider running in a release build the first time.";
 #endif
@@ -139,7 +138,7 @@ bool isMeshExtension(const std::string& extension)
 }
 
 #ifndef PHYSICS_ONLY
-static ref<dx_texture> loadAssimpTexture(const aiScene* scene, const std::string& sceneFilepath, const std::string& name, uint32 flags = texture_load_flags_default)
+static ref<dx_texture> loadAssimpTexture(const aiScene* scene, const fs::path& sceneFilepath, const std::string& name, uint32 flags = image_load_flags_default)
 {
 	ref<dx_texture> texture = 0;
 
@@ -176,7 +175,7 @@ static ref<dx_texture> loadAssimpTexture(const aiScene* scene, const std::string
 					return 0;
 				}
 
-				std::string cacheFilepath = sceneFilepath + "_texture" + std::to_string(index);
+				fs::path cacheFilepath = sceneFilepath.string() + "_texture" + std::to_string(index);
 
 				texture = loadTextureFromMemory(assimpTexture->pcData, assimpTexture->mWidth * ((assimpTexture->mHeight == 0) ? 1 : assimpTexture->mHeight), imageFormat, cacheFilepath, flags);
 			}
@@ -197,7 +196,7 @@ static ref<dx_texture> loadAssimpTexture(const aiScene* scene, const std::string
 	return texture;
 }
 
-ref<pbr_material> loadAssimpMaterial(const aiScene* scene, const std::string& sceneFilepath, const aiMaterial* material)
+ref<pbr_material> loadAssimpMaterial(const aiScene* scene, const fs::path& sceneFilepath, const aiMaterial* material)
 {
 	const char* albedoName = "";
 	const char* normalName = "";
@@ -266,9 +265,9 @@ ref<pbr_material> loadAssimpMaterial(const aiScene* scene, const std::string& sc
 	// TODO: This circumvents the material caching. Do we need the caching?
 
 	ref<dx_texture> albedo = loadAssimpTexture(scene, sceneFilepath, albedoName);
-	ref<dx_texture> normal = loadAssimpTexture(scene, sceneFilepath, normalName, texture_load_flags_default | texture_load_flags_noncolor);
-	ref<dx_texture> roughness = loadAssimpTexture(scene, sceneFilepath, roughnessName, texture_load_flags_default | texture_load_flags_noncolor);
-	ref<dx_texture> metallic = loadAssimpTexture(scene, sceneFilepath, metallicName, texture_load_flags_default | texture_load_flags_noncolor);
+	ref<dx_texture> normal = loadAssimpTexture(scene, sceneFilepath, normalName, image_load_flags_default | image_load_flags_noncolor);
+	ref<dx_texture> roughness = loadAssimpTexture(scene, sceneFilepath, roughnessName, image_load_flags_default | image_load_flags_noncolor);
+	ref<dx_texture> metallic = loadAssimpTexture(scene, sceneFilepath, metallicName, image_load_flags_default | image_load_flags_noncolor);
 
 	ref<pbr_material> result = make_ref<pbr_material>();
 

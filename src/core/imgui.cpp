@@ -117,7 +117,7 @@ ImGuiContext* initializeImGui(struct dx_window& window)
 		startGPUDescriptor);
 
 	{
-		iconsTexture = loadTextureFromFile("assets/icons/icons_ui.svg", texture_load_flags_gen_mips_on_cpu | texture_load_flags_cache_to_dds);
+		iconsTexture = loadTextureFromFile("assets/icons/icons_ui.svg", image_load_flags_gen_mips_on_cpu | image_load_flags_cache_to_dds);
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandle(startCPUDescriptor, 1, descriptorHandleIncrementSize);
 		CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle(startGPUDescriptor, 1, descriptorHandleIncrementSize);
@@ -185,6 +185,15 @@ namespace ImGui
 		windowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_AutoHideTabBar;
 		ImGui::SetNextWindowClass(&windowClass);
 		return ImGui::Begin(name, open, flags);
+	}
+
+	bool BeginControlsWindow(const char* name)
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.f);
+		ImGui::SetNextWindowSize(ImVec2(0.f, 0.f)); // Auto-resize to content.
+		bool result = ImGui::Begin(name, 0, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoMove);
+		ImGui::PopStyleVar();	
+		return result;
 	}
 
 	void Image(::dx_cpu_descriptor_handle& handle, ImVec2 size)
@@ -265,9 +274,9 @@ namespace ImGui
 		if (!enabled)
 		{
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.2f);
 		}
-		bool result = ImGui::ImageButton(iconsTextureID, ImVec2((float)size, (float)size), ImVec2(left, top), ImVec2(right, bottom));
+		bool result = ImGui::ImageButton(iconsTextureID, ImVec2((float)size, (float)size), ImVec2(left, top), ImVec2(right, bottom), 0);
 		if (ImGui::IsItemHovered())
 		{
 			ImGui::SetTooltip(imguiIconNames[icon]);
@@ -297,10 +306,10 @@ namespace ImGui
 		if (!enabled)
 		{
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.2f);
 		}
 		bool clicked = ImGui::ImageButton(iconsTextureID, ImVec2((float)size, (float)size), ImVec2(left, top), ImVec2(right, bottom),
-			-1, active ? ImVec4(1, 1, 1, 0.4f) : ImVec4(0, 0, 0, 0));
+			0, active ? ImVec4(1, 1, 1, 0.4f) : ImVec4(0, 0, 0, 0));
 		if (ImGui::IsItemHovered())
 		{
 			ImGui::SetTooltip(imguiIconNames[icon]);
@@ -373,7 +382,7 @@ namespace ImGui
 		if (!enabled)
 		{
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.2f);
 		}
 		bool result = ImGui::Button(label);
 		if (!enabled)
@@ -384,14 +393,14 @@ namespace ImGui
 		return result;
 	}
 
-	bool DisableableCheckbox(const char* label, bool* v, bool enabled)
+	bool DisableableCheckbox(const char* label, bool& v, bool enabled)
 	{
 		if (!enabled)
 		{
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.2f);
 		}
-		bool result = ImGui::Checkbox(label, v);
+		bool result = ImGui::Checkbox(label, &v);
 		if (!enabled)
 		{
 			ImGui::PopItemFlag();
@@ -408,6 +417,209 @@ namespace ImGui
 		ImVec2 textSize = ImGui::CalcTextSize(label, 0, false, textWidth);
 		bool result = ImGui::Selectable("##label", selected, flags, textSize + padding * 2);
 		ImGui::RenderTextWrapped(ImGui::GetItemRectMin() + padding, label, 0, textWidth);
+		return result;
+	}
+
+	bool BeginTree(const char* label, bool defaultOpen)
+	{
+		return ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding | (defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None));
+	}
+
+	void EndTree()
+	{
+		ImGui::TreePop();
+	}
+
+
+
+
+
+
+	static void pre(const char* label)
+	{
+		ImGui::TableNextColumn();
+		ImGui::Text(label);
+		ImGui::TableNextColumn();
+		ImGui::PushItemWidth(-1);
+		ImGui::PushID(label);
+	}
+
+	static void post()
+	{
+		ImGui::PopID();
+		ImGui::PopItemWidth();
+	}
+
+
+	bool BeginProperties()
+	{
+		return ImGui::BeginTable("", 2, ImGuiTableFlags_Resizable);
+	}
+
+	void EndProperties()
+	{
+		ImGui::EndTable();
+	}
+
+	void PropertyValue(const char* label, const char* format, ...)
+	{
+		pre(label);
+		va_list args;
+		va_start(args, format);
+		ImGui::TextV(format, args);
+		va_end(args);
+		post();
+	}
+
+	bool PropertyCheckbox(const char* label, bool& v)
+	{
+		pre(label);
+		bool result = ImGui::Checkbox("", &v);
+		post();
+		return result;
+	}
+
+	static bool SliderInternal(ImGuiDataType_ type, int32 count, const char* label, void* f, void* minValue, void* maxValue, const char* format)
+	{
+		pre(label);
+		bool result;
+		if (count == 1)
+		{
+			result = ImGui::SliderScalar("", type, f, minValue, maxValue, format);
+		}
+		else
+		{
+			result = ImGui::SliderScalarN("", type, f, count, minValue, maxValue, format);
+		}
+		post();
+		return result;
+	}
+
+	bool PropertySlider(const char* label, float& f, float minValue, float maxValue, const char* format)
+	{
+		return SliderInternal(ImGuiDataType_Float, 1, label, &f, &minValue, &maxValue, format);
+	}
+
+	bool PropertySlider(const char* label, vec2& f, float minValue, float maxValue, const char* format)
+	{
+		return SliderInternal(ImGuiDataType_Float, 2, label, f.data, &minValue, &maxValue, format);
+	}
+
+	bool PropertySlider(const char* label, vec3& f, float minValue, float maxValue, const char* format)
+	{
+		return SliderInternal(ImGuiDataType_Float, 3, label, f.data, &minValue, &maxValue, format);
+	}
+
+	bool PropertySlider(const char* label, vec4& f, float minValue, float maxValue, const char* format)
+	{
+		return SliderInternal(ImGuiDataType_Float, 4, label, f.data, &minValue, &maxValue, format);
+	}
+
+	bool PropertySlider(const char* label, int32& v, int minValue, int maxValue, const char* format)
+	{
+		return SliderInternal(ImGuiDataType_S32, 1, label, &v, &minValue, &maxValue, format);
+	}
+
+	bool PropertySlider(const char* label, uint32& v, uint32 minValue, uint32 maxValue, const char* format)
+	{
+		return SliderInternal(ImGuiDataType_U32, 1, label, &v, &minValue, &maxValue, format);
+	}
+
+	static bool InputInternal(ImGuiDataType_ type, int32 count, const char* label, void* f, const char* format)
+	{
+		pre(label);
+		bool result;
+		if (count == 1)
+		{
+			result = ImGui::InputScalar("", type, f, 0, 0, format);
+		}
+		else
+		{
+			result = ImGui::InputScalarN("", type, f, count, 0, 0, format);
+		}
+		post();
+		return result;
+	}
+
+	bool PropertyInput(const char* label, float& f, const char* format)
+	{
+		return ImGui::InputInternal(ImGuiDataType_Float, 1, label, &f, format);
+	}
+
+	bool PropertyInput(const char* label, vec2& f, const char* format)
+	{
+		return ImGui::InputInternal(ImGuiDataType_Float, 2, label, f.data, format);
+	}
+
+	bool PropertyInput(const char* label, vec3& f, const char* format)
+	{
+		return ImGui::InputInternal(ImGuiDataType_Float, 3, label, f.data, format);
+	}
+
+	bool PropertyInput(const char* label, vec4& f, const char* format)
+	{
+		return ImGui::InputInternal(ImGuiDataType_Float, 4, label, f.data, format);
+	}
+
+	bool PropertyDropdown(const char* label, const char** names, uint32 count, uint32& current)
+	{
+		pre(label);
+		bool result = ImGui::Dropdown("", names, count, current);
+		post();
+		return result;
+	}
+
+	bool PropertyDropdown(const char* label, const char* (*name_func)(uint32, void*), uint32& current, void* data)
+	{
+		pre(label);
+		bool result = ImGui::Dropdown("", name_func, current, data);
+		post();
+		return result;
+	}
+
+	bool PropertyDropdownPowerOfTwo(const char* label, uint32 from, uint32 to, uint32& current)
+	{
+		assert(isPowerOfTwo(current));
+		assert(isPowerOfTwo(from));
+		assert(isPowerOfTwo(to));
+		uint32 logCurrent = log2(current);
+		uint32 logFrom = log2(from);
+		uint32 logTo = log2(to);
+		uint32 count = logTo - logFrom + 1;
+
+		logCurrent -= logFrom;
+
+		static const char* names[] =
+		{
+			"1", "2", "4", "8", "16", "32", "64", "128", "256", "512", "1,024", "2,048", "4,096", "8,192", "16,384", "32,768", "65,536",
+			"131,072", "262,144", "524,288", "1,048,576", "2,097,152", "4,194,304", "8,388,608", "16,777,216", "33,554,432", 
+			"67,108,864", "134,217,728", "268,435,456", "536,870,912", "1,073,741,824", "2,147,483,648"
+		};
+
+		pre(label);
+		bool result = ImGui::Dropdown("", names + logFrom, count, logCurrent);
+		logCurrent += logFrom;
+		current = 1 << logCurrent;
+		post();
+		return result;
+	}
+
+	static constexpr int32 colorEditFlags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | 
+		ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoDragDrop | ImGuiColorEditFlags_PickerHueWheel;
+
+	bool PropertyColor(const char* label, vec3& f)
+	{
+		pre(label);
+		bool result = ImGui::ColorPicker3("", f.data, colorEditFlags | ImGuiColorEditFlags_Float);
+		post();
+		return result;
+	}
+
+	bool PropertyColor(const char* label, vec4& f)
+	{
+		pre(label);
+		bool result = ImGui::ColorPicker4("", f.data, colorEditFlags | ImGuiColorEditFlags_Float);
+		post();
 		return result;
 	}
 }

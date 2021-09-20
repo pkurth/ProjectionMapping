@@ -27,12 +27,6 @@ struct force_field_global_state
 // This is a bit dirty. PHYSICS_ONLY is defined when building the learning DLL, where we don't need bounding hulls.
 
 #include "core/assimp.h"
-uint32 allocateBoundingHullGeometry(const cpu_mesh& mesh)
-{
-	uint32 index = (uint32)boundingHullGeometries.size();
-	boundingHullGeometries.push_back(boundingHullFromMesh((vec3*)mesh.vertexPositions, mesh.numVertices, mesh.triangles, mesh.numTriangles));
-	return index;
-}
 
 uint32 allocateBoundingHullGeometry(const std::string& meshFilepath)
 {
@@ -51,7 +45,10 @@ uint32 allocateBoundingHullGeometry(const std::string& meshFilepath)
 	assert(scene->mNumMeshes == 1);
 	cpuMesh.pushAssimpMesh(scene->mMeshes[0], 1.f);
 
-	return allocateBoundingHullGeometry(cpuMesh);
+
+	uint32 index = (uint32)boundingHullGeometries.size();
+	boundingHullGeometries.push_back(bounding_hull_geometry::fromMesh(cpuMesh.vertexPositions, cpuMesh.numVertices, cpuMesh.triangles, cpuMesh.numTriangles));
+	return index;
 }
 #endif
 
@@ -107,8 +104,8 @@ distance_constraint_handle addDistanceConstraintFromLocalPoints(scene_entity& a,
 
 distance_constraint_handle addDistanceConstraintFromGlobalPoints(scene_entity& a, scene_entity& b, vec3 globalAnchorA, vec3 globalAnchorB)
 {
-	vec3 localAnchorA = inverseTransformPosition(a.getComponent<trs>(), globalAnchorA);
-	vec3 localAnchorB = inverseTransformPosition(b.getComponent<trs>(), globalAnchorB);
+	vec3 localAnchorA = inverseTransformPosition(a.getComponent<transform_component>(), globalAnchorA);
+	vec3 localAnchorB = inverseTransformPosition(b.getComponent<transform_component>(), globalAnchorB);
 	float distance = length(globalAnchorA - globalAnchorB);
 
 	return addDistanceConstraintFromLocalPoints(a, b, localAnchorA, localAnchorB, distance);
@@ -129,8 +126,8 @@ ball_joint_constraint_handle addBallJointConstraintFromLocalPoints(scene_entity&
 
 ball_joint_constraint_handle addBallJointConstraintFromGlobalPoints(scene_entity& a, scene_entity& b, vec3 globalAnchor)
 {
-	vec3 localAnchorA = inverseTransformPosition(a.getComponent<trs>(), globalAnchor);
-	vec3 localAnchorB = inverseTransformPosition(b.getComponent<trs>(), globalAnchor);
+	vec3 localAnchorA = inverseTransformPosition(a.getComponent<transform_component>(), globalAnchor);
+	vec3 localAnchorB = inverseTransformPosition(b.getComponent<transform_component>(), globalAnchor);
 
 	return addBallJointConstraintFromLocalPoints(a, b, localAnchorA, localAnchorB);
 }
@@ -141,8 +138,8 @@ hinge_joint_constraint_handle addHingeJointConstraintFromGlobalPoints(scene_enti
 	uint16 constraintIndex = (uint16)hingeJointConstraints.size();
 	hinge_joint_constraint& constraint = hingeJointConstraints.emplace_back();
 
-	const trs& transformA = a.getComponent<trs>();
-	const trs& transformB = b.getComponent<trs>();
+	const transform_component& transformA = a.getComponent<transform_component>();
+	const transform_component& transformB = b.getComponent<transform_component>();
 
 	constraint.localAnchorA = inverseTransformPosition(transformA, globalAnchor);
 	constraint.localAnchorB = inverseTransformPosition(transformB, globalAnchor);
@@ -173,8 +170,8 @@ cone_twist_constraint_handle addConeTwistConstraintFromGlobalPoints(scene_entity
 	uint16 constraintIndex = (uint16)coneTwistConstraints.size();
 	cone_twist_constraint& constraint = coneTwistConstraints.emplace_back();
 
-	const trs& transformA = a.getComponent<trs>();
-	const trs& transformB = b.getComponent<trs>();
+	const transform_component& transformA = a.getComponent<transform_component>();
+	const transform_component& transformB = b.getComponent<transform_component>();
 
 	constraint.localAnchorA = inverseTransformPosition(transformA, globalAnchor);
 	constraint.localAnchorB = inverseTransformPosition(transformB, globalAnchor);
@@ -247,10 +244,9 @@ void testPhysicsInteraction(scene& appScene, ray r, float forceAmount)
 	for (auto [entityHandle, collider] : appScene.view<collider_component>().each())
 	{
 		scene_entity rbEntity = { collider.parentEntity, appScene };
-		if (rbEntity.hasComponent<rigid_body_component>())
+		if (rigid_body_component* rb = rbEntity.getComponentIfExists<rigid_body_component>())
 		{
-			rigid_body_component& rb = rbEntity.getComponent<rigid_body_component>();
-			trs& transform = rbEntity.getComponent<trs>();
+			transform_component& transform = rbEntity.getComponent<transform_component>();
 
 			ray localR = { inverseTransformPosition(transform, r.origin), inverseTransformDirection(transform, r.direction) };
 			float t;
@@ -287,12 +283,12 @@ void testPhysicsInteraction(scene& appScene, ray r, float forceAmount)
 			if (hit && t < minT)
 			{
 				minT = t;
-				minRB = &rb;
+				minRB = rb;
 
 				vec3 localHit = localR.origin + t * localR.direction;
 				vec3 globalHit = transformPosition(transform, localHit);
 
-				vec3 cogPosition = rb.getGlobalCOGPosition(transform);
+				vec3 cogPosition = rb->getGlobalCOGPosition(transform);
 
 				force = r.direction * forceAmount;
 				torque = cross(globalHit - cogPosition, force);
@@ -321,22 +317,20 @@ static void getWorldSpaceColliders(scene& appScene, bounding_box* outWorldspaceA
 		++pushIndex;
 
 		scene_entity entity = { collider.parentEntity, appScene };
-		assert(entity.hasComponent<trs>());
-		trs& transform = entity.getComponent<trs>();
+		assert(entity.hasComponent<transform_component>());
+		transform_component& transform = entity.getComponent<transform_component>();
 
 		col.type = collider.type;
 		col.properties = collider.properties;
 
-		if (entity.hasComponent<rigid_body_component>())
+		if (rigid_body_component* rb = entity.getComponentIfExists<rigid_body_component>())
 		{
-			rigid_body_component& rb = entity.getComponent<rigid_body_component>();
-			col.objectIndex = (uint16)(&rb - rbBase);
+			col.objectIndex = (uint16)(rb - rbBase);
 			col.objectType = physics_object_type_rigid_body;
 		}
-		else if (entity.hasComponent<force_field_component>())
+		else if (force_field_component* ff = entity.getComponentIfExists<force_field_component>())
 		{
-			force_field_component& ff = entity.getComponent<force_field_component>();
-			col.objectIndex = (uint16)(&ff - ffBase);
+			col.objectIndex = (uint16)(ff - ffBase);
 			col.objectType = physics_object_type_force_field;
 		}
 		else
@@ -419,9 +413,9 @@ static std::pair<vec3, uint32> getForceFieldStates(scene& appScene, force_field_
 		scene_entity entity = { entityHandle, appScene };
 
 		vec3 force = forceField.force; 
-		if (entity.hasComponent<trs>())
+		if (transform_component* transform = entity.getComponentIfExists<transform_component>())
 		{
-			force = entity.getComponent<trs>().rotation * force;
+			force = transform->rotation * force;
 		}
 
 		if (entity.hasComponent<collider_component>())
@@ -487,7 +481,7 @@ void physicsStep(scene& appScene, float dt, physics_settings settings)
 
 
 	//  Apply global forces (including gravity) and air drag and integrate forces.
-	for (auto [entityHandle, rb, transform] : appScene.group<rigid_body_component, trs>().each())
+	for (auto [entityHandle, rb, transform] : appScene.group<rigid_body_component, transform_component>().each())
 	{
 		uint16 globalStateIndex = (uint16)(&rb - rbBase);
 		rigid_body_global_state& global = rbGlobal[globalStateIndex];
@@ -516,7 +510,7 @@ void physicsStep(scene& appScene, float dt, physics_settings settings)
 
 
 	// Integrate velocities.
-	for (auto [entityHandle, rb, transform] : appScene.group<rigid_body_component, trs>().each())
+	for (auto [entityHandle, rb, transform] : appScene.group<rigid_body_component, transform_component>().each())
 	{
 		rigid_body_global_state& global = rbGlobal[rb.globalStateIndex];
 		rb.integrateVelocity(global, transform, dt);
@@ -526,7 +520,7 @@ void physicsStep(scene& appScene, float dt, physics_settings settings)
 	// Cloth. This needs to get integrated with the rest of the system.
 
 	// For all cloth strips, which have a transform, apply it.
-	for (auto [entityHandle, cloth, transform] : appScene.group(entt::get<cloth_component, trs>).each())
+	for (auto [entityHandle, cloth, transform] : appScene.group(entt::get<cloth_component, transform_component>).each())
 	{
 		cloth.setWorldPositionOfFixedVertices(transform);
 	}

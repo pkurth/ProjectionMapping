@@ -92,13 +92,14 @@ int main(int argc, char** argv)
 	initializeJobSystem();
 
 	dx_window window;
-	window.initialize(TEXT("Main Window"), 1280, 800);
+	window.initialize(TEXT("D3D12 Projection Mapping"), 1920, 1080);
 	setMainWindow(&window);
+	window.setIcon("assets/icons/project_icon_pm.png");
 
 	application app = {};
 	app.loadCustomShaders();
 
-	window.setFileDropCallback([&app](const std::string& s) { app.handleFileDrop(s); });
+	window.setFileDropCallback([&app](const fs::path& s) { app.handleFileDrop(s); });
 
 	projector_renderer::initializeCommon();
 	projector_manager projectorManager;
@@ -110,7 +111,7 @@ int main(int argc, char** argv)
 
 	renderer_spec spec = { true, true, true, true };
 	main_renderer renderer;
-	renderer.initialize(window.colorDepth, 1280, 800, spec);
+	renderer.initialize(window.colorDepth, window.clientWidth, window.clientHeight, spec);
 
 	app.initialize(&renderer, &projectorManager);
 

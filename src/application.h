@@ -25,14 +25,14 @@ struct application
 	void initialize(main_renderer* renderer, projector_manager* projectorManager);
 	void update(const user_input& input, float dt);
 
-	void setEnvironment(const std::string& filename);
+	void setEnvironment(const fs::path& filename);
 
-	void handleFileDrop(const std::string& filename);
+	void handleFileDrop(const fs::path& filename);
 	void serializeToFile();
 	bool deserializeFromFile();
 
 private:
-	void setSelectedEntityEulerRotation();
+	void updateSelectedEntityUIRotation();
 	void setSelectedEntity(scene_entity entity);
 	void setSelectedEntityNoUndo(scene_entity entity);
 	void drawMainMenuBar();
@@ -63,9 +63,6 @@ private:
 	ref<dx_buffer> pointLightShadowInfoBuffer[NUM_BUFFERED_FRAMES];
 
 	std::vector<pbr_decal_cb> decals;
-
-	std::vector<spot_shadow_info> spotLightShadowInfos;
-	std::vector<point_shadow_info> pointLightShadowInfos;
 
 	ref<dx_texture> decalTexture;
 
@@ -103,7 +100,5 @@ private:
 
 	bool visualizeProjIntensities = false;
 
-
-	friend void undoSelection(void* d);
-	friend void redoSelection(void* d);
+	friend struct selection_undo;
 };
