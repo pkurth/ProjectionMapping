@@ -8,7 +8,7 @@
 #include "core/imgui.h"
 #endif
 
-void humanoid_ragdoll::initialize(scene& appScene, vec3 initialHipPosition, float initialRotation)
+void humanoid_ragdoll::initialize(game_scene& scene, vec3 initialHipPosition, float initialRotation)
 {
 	float scale = 0.42f; // This file is completely hardcoded. I initially screwed up the scaling a bit, so this factor brings everything to the correct scale (and therefore weight).
 
@@ -32,7 +32,7 @@ void humanoid_ragdoll::initialize(scene& appScene, vec3 initialHipPosition, floa
 	trs rightFootTransform(initialHipPosition + scale * vec3(0.498f, -2.585f, -0.18f), quat::identity);
 	trs rightToesTransform(initialHipPosition + scale * vec3(0.498f, -2.585f, -0.637f), quat::identity);
 
-	torso = appScene.createEntity("Torso")
+	torso = scene.createEntity("Torso")
 		.addComponent<transform_component>(torsoTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(-0.2f, 0.f, 0.f),    scale *  vec3(0.2f, 0.f, 0.f),    scale * 0.25f }, 0.2f, 0.5f, ragdollDensity))
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(-0.16f, 0.32f, 0.f), scale *  vec3(0.16f, 0.32f, 0.f), scale * 0.2f }, 0.2f, 0.5f, ragdollDensity))
@@ -40,67 +40,67 @@ void humanoid_ragdoll::initialize(scene& appScene, vec3 initialHipPosition, floa
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(-0.14f, 0.92f, 0.f), scale *  vec3(0.14f, 0.92f, 0.f), scale * 0.2f }, 0.2f, 0.5f, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	head = appScene.createEntity("Head")
+	head = scene.createEntity("Head")
 		.addComponent<transform_component>(headTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.075f, 0.f), scale * vec3(0.f, 0.075f, 0.f), scale * 0.25f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	leftUpperArm = appScene.createEntity("Left upper arm")
+	leftUpperArm = scene.createEntity("Left upper arm")
 		.addComponent<transform_component>(leftUpperArmTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.2f, 0.f), scale * vec3(0.f, 0.2f, 0.f), scale * 0.15f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	leftLowerArm = appScene.createEntity("Left lower arm")
+	leftLowerArm = scene.createEntity("Left lower arm")
 		.addComponent<transform_component>(leftLowerArmTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.2f, 0.f), scale * vec3(0.f, 0.2f, 0.f), scale * 0.15f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	rightUpperArm = appScene.createEntity("Right upper arm")
+	rightUpperArm = scene.createEntity("Right upper arm")
 		.addComponent<transform_component>(rightUpperArmTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.2f, 0.f), scale * vec3(0.f, 0.2f, 0.f), scale * 0.15f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	rightLowerArm = appScene.createEntity("Right lower arm")
+	rightLowerArm = scene.createEntity("Right lower arm")
 		.addComponent<transform_component>(rightLowerArmTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.2f, 0.f), scale * vec3(0.f, 0.2f, 0.f), scale * 0.15f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	leftUpperLeg = appScene.createEntity("Left upper leg")
+	leftUpperLeg = scene.createEntity("Left upper leg")
 		.addComponent<transform_component>(leftUpperLegTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.3f, 0.f), scale * vec3(0.f, 0.3f, 0.f), scale * 0.25f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	leftLowerLeg = appScene.createEntity("Left lower leg")
+	leftLowerLeg = scene.createEntity("Left lower leg")
 		.addComponent<transform_component>(leftLowerLegTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.3f, 0.f), scale * vec3(0.f, 0.3f, 0.f), scale * 0.18f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	leftFoot = appScene.createEntity("Left foot")
+	leftFoot = scene.createEntity("Left foot")
 		.addComponent<transform_component>(leftFootTransform)
 		.addComponent<collider_component>(collider_component::asAABB(bounding_box::fromCenterRadius(scale * vec3(0.f), scale * vec3(0.1587f, 0.1f, 0.3424f)), 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	leftToes = appScene.createEntity("Left toes")
+	leftToes = scene.createEntity("Left toes")
 		.addComponent<transform_component>(leftToesTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(-0.0587f, 0.f, 0.f), scale * vec3(0.0587f, 0.f, 0.f), scale * 0.1f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	rightUpperLeg = appScene.createEntity("Right upper leg")
+	rightUpperLeg = scene.createEntity("Right upper leg")
 		.addComponent<transform_component>(rightUpperLegTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.3f, 0.f), scale * vec3(0.f, 0.3f, 0.f), scale * 0.25f }, scale * 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	rightLowerLeg = appScene.createEntity("Right lower leg")
+	rightLowerLeg = scene.createEntity("Right lower leg")
 		.addComponent<transform_component>(rightLowerLegTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(0.f, -0.3f, 0.f), scale * vec3(0.f, 0.3f, 0.f), scale * 0.18f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	rightFoot = appScene.createEntity("Right foot")
+	rightFoot = scene.createEntity("Right foot")
 		.addComponent<transform_component>(rightFootTransform)
 		.addComponent<collider_component>(collider_component::asAABB(bounding_box::fromCenterRadius(scale * vec3(0.f), scale * vec3(0.1587f, 0.1f, 0.3424f)), 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
 
-	rightToes = appScene.createEntity("Right toes")
+	rightToes = scene.createEntity("Right toes")
 		.addComponent<transform_component>(rightToesTransform)
 		.addComponent<collider_component>(collider_component::asCapsule({ scale * vec3(-0.0587f, 0.f, 0.f), scale * vec3(0.0587f, 0.f, 0.f), scale * 0.1f }, 0.2f, ragdollFriction, ragdollDensity))
 		.addComponent<rigid_body_component>(ragdollKinematic, ragdollGravityFactor);
@@ -182,28 +182,28 @@ void humanoid_ragdoll::initialize(scene& appScene, vec3 initialHipPosition, floa
 	//auto ragdollMaterial = lollipopMaterial;
 
 	auto ragdollTorsoMesh = make_ref<composite_mesh>();
-	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.4f,  scale * 0.25f, scale * vec3(0.f), vec3(1.f, 0.f, 0.f)), {}, trs::identity, ragdollMaterial });
-	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.32f, scale * 0.2f, scale * vec3(0.f, 0.32f, 0.f), vec3(1.f, 0.f, 0.f)), {}, trs::identity, ragdollMaterial });
-	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.28f, scale * 0.22f, scale * vec3(0.f, 0.62f, 0.f), vec3(1.f, 0.f, 0.f)), {}, trs::identity, ragdollMaterial });
-	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.28f, scale * 0.2f, scale * vec3(0.f, 0.92f, 0.f), vec3(1.f, 0.f, 0.f)), {}, trs::identity, ragdollMaterial });
+	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(-0.2f, 0.f, 0.f),    scale * vec3(0.2f, 0.f, 0.f),    scale * 0.25f), {}, trs::identity, ragdollMaterial });
+	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(-0.16f, 0.32f, 0.f), scale * vec3(0.16f, 0.32f, 0.f), scale * 0.2f), {}, trs::identity, ragdollMaterial });
+	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(-0.14f, 0.62f, 0.f), scale * vec3(0.14f, 0.62f, 0.f), scale * 0.22f), {}, trs::identity, ragdollMaterial });
+	ragdollTorsoMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(-0.14f, 0.92f, 0.f), scale * vec3(0.14f, 0.92f, 0.f), scale * 0.2f), {}, trs::identity, ragdollMaterial });
 
 	auto ragdollHeadMesh = make_ref<composite_mesh>();
-	ragdollHeadMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.15f, scale * 0.25f, scale * vec3(0.f)), {}, trs::identity, ragdollMaterial });
+	ragdollHeadMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(0.f, -0.075f, 0.f), scale * vec3(0.f, 0.075f, 0.f), scale * 0.25f), {}, trs::identity, ragdollMaterial });
 
 	auto ragdollArmMesh = make_ref<composite_mesh>();
-	ragdollArmMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.4f, scale * 0.15f, scale * vec3(0.f)), {}, trs::identity, ragdollMaterial });
+	ragdollArmMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(0.f, -0.2f, 0.f), scale * vec3(0.f, 0.2f, 0.f), scale * 0.15f), {}, trs::identity, ragdollMaterial });
 
 	auto ragdollUpperLegMesh = make_ref<composite_mesh>();
-	ragdollUpperLegMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.6f, scale * 0.25f, scale * vec3(0.f)), {}, trs::identity, ragdollMaterial });
+	ragdollUpperLegMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(0.f, -0.3f, 0.f), scale * vec3(0.f, 0.3f, 0.f), scale * 0.25f), {}, trs::identity, ragdollMaterial });
 
 	auto ragdollLowerLegMesh = make_ref<composite_mesh>();
-	ragdollLowerLegMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.6f, scale * 0.18f, scale * vec3(0.f)), {}, trs::identity, ragdollMaterial });
+	ragdollLowerLegMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(0.f, -0.3f, 0.f), scale * vec3(0.f, 0.3f, 0.f), scale * 0.18f), {}, trs::identity, ragdollMaterial });
 
 	auto ragdollFootMesh = make_ref<composite_mesh>();
 	ragdollFootMesh->submeshes.push_back({ primitiveMesh.pushCube(scale * vec3(0.1587f, 0.1f, 0.3424f)), {}, trs::identity, ragdollMaterial });
 
 	auto ragdollToesMesh = make_ref<composite_mesh>();
-	ragdollToesMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * 0.1174f,  scale * 0.1f, scale * vec3(0.f), vec3(1.f, 0.f, 0.f)), {}, trs::identity, ragdollMaterial });
+	ragdollToesMesh->submeshes.push_back({ primitiveMesh.pushCapsule(15, 15, scale * vec3(-0.0587f, 0.f, 0.f), scale * vec3(0.0587f, 0.f, 0.f), scale * 0.1f), {}, trs::identity, ragdollMaterial });
 
 	torso.addComponent<raster_component>(ragdollTorsoMesh);
 	head.addComponent<raster_component>(ragdollHeadMesh);
@@ -232,182 +232,9 @@ void humanoid_ragdoll::initialize(scene& appScene, vec3 initialHipPosition, floa
 #endif
 }
 
-#ifndef PHYSICS_ONLY
-static bool editHingeConstraint(const char* label, hinge_joint_constraint_handle handle)
+humanoid_ragdoll humanoid_ragdoll::create(game_scene& scene, vec3 initialHipPosition, float initialRotation)
 {
-	bool result = false;
-
-	if (ImGui::TreeNode(label))
-	{
-		hinge_joint_constraint& con = getConstraint(handle);
-
-		bool minLimitActive = con.minRotationLimit <= 0.f;
-		if (ImGui::Checkbox("Lower limit active", &minLimitActive))
-		{
-			result = true;
-			con.minRotationLimit = -con.minRotationLimit;
-		}
-		if (minLimitActive)
-		{
-			float minLimit = -con.minRotationLimit;
-			result |= ImGui::SliderAngle("Lower limit", &minLimit, 0.f, 180.f, "-%.0f deg");
-			con.minRotationLimit = -minLimit;
-		}
-
-		bool maxLimitActive = con.maxRotationLimit >= 0.f;
-		if (ImGui::Checkbox("Upper limit active", &maxLimitActive))
-		{
-			result = true;
-			con.maxRotationLimit = -con.maxRotationLimit;
-		}
-		if (maxLimitActive)
-		{
-			result |= ImGui::SliderAngle("Upper limit", &con.maxRotationLimit, 0.f, 180.f);
-		}
-
-		bool motorActive = con.maxMotorTorque > 0.f;
-		if (ImGui::Checkbox("Motor active", &motorActive))
-		{
-			result = true;
-			con.maxMotorTorque = -con.maxMotorTorque;
-		}
-		if (motorActive)
-		{
-			result |= ImGui::Dropdown("Motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)con.motorType);
-
-			if (con.motorType == constraint_velocity_motor)
-			{
-				result |= ImGui::SliderAngle("Motor velocity", &con.motorVelocity, -360.f, 360.f);
-			}
-			else
-			{
-				float lo = minLimitActive ? con.minRotationLimit : -M_PI;
-				float hi = maxLimitActive ? con.maxRotationLimit : M_PI;
-				result |= ImGui::SliderAngle("Motor target angle", &con.motorTargetAngle, rad2deg(lo), rad2deg(hi));
-			}
-
-			result |= ImGui::SliderFloat("Max motor torque", &con.maxMotorTorque, 0.001f, 1000.f);
-		}
-
-		ImGui::TreePop();
-	}
-
-	return result;
+	humanoid_ragdoll ragdoll;
+	ragdoll.initialize(scene, initialHipPosition, initialRotation);
+	return ragdoll;
 }
-
-static bool editConeTwistConstraint(const char* label, cone_twist_constraint_handle handle)
-{
-	bool result = false;
-
-	if (ImGui::TreeNode(label))
-	{
-		cone_twist_constraint& con = getConstraint(handle);
-
-		bool swingLimitActive = con.swingLimit >= 0.f;
-		if (ImGui::Checkbox("Swing limit active", &swingLimitActive))
-		{
-			result = true;
-			con.swingLimit = -con.swingLimit;
-		}
-		if (swingLimitActive)
-		{
-			result |= ImGui::SliderAngle("Swing limit", &con.swingLimit, 0.f, 180.f);
-		}
-
-		bool twistLimitActive = con.twistLimit >= 0.f;
-		if (ImGui::Checkbox("Twist limit active", &twistLimitActive))
-		{
-			result = true;
-			con.twistLimit = -con.twistLimit;
-		}
-		if (twistLimitActive)
-		{
-			result |= ImGui::SliderAngle("Twist limit", &con.twistLimit, 0.f, 180.f);
-		}
-
-		bool twistMotorActive = con.maxTwistMotorTorque > 0.f;
-		if (ImGui::Checkbox("Twist motor active", &twistMotorActive))
-		{
-			result = true;
-			con.maxTwistMotorTorque = -con.maxTwistMotorTorque;
-		}
-		if (twistMotorActive)
-		{
-			result |= ImGui::Dropdown("Twist motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)con.twistMotorType);
-
-			if (con.twistMotorType == constraint_velocity_motor)
-			{
-				result |= ImGui::SliderAngle("Twist motor velocity", &con.twistMotorVelocity, -360.f, 360.f);
-			}
-			else
-			{
-				float li = twistLimitActive ? con.twistLimit : -M_PI;
-				result |= ImGui::SliderAngle("Twist motor target angle", &con.twistMotorTargetAngle, rad2deg(-li), rad2deg(li));
-			}
-
-			result |= ImGui::SliderFloat("Max twist motor torque", &con.maxTwistMotorTorque, 0.001f, 1000.f);
-		}
-
-		bool swingMotorActive = con.maxSwingMotorTorque > 0.f;
-		if (ImGui::Checkbox("Swing motor active", &swingMotorActive))
-		{
-			result = true;
-			con.maxSwingMotorTorque = -con.maxSwingMotorTorque;
-		}
-		if (swingMotorActive)
-		{
-			result |= ImGui::Dropdown("Swing motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)con.swingMotorType);
-
-			if (con.swingMotorType == constraint_velocity_motor)
-			{
-				result |= ImGui::SliderAngle("Swing motor velocity", &con.swingMotorVelocity, -360.f, 360.f);
-			}
-			else
-			{
-				float li = swingLimitActive ? con.swingLimit : -M_PI;
-				result |= ImGui::SliderAngle("Swing motor target angle", &con.swingMotorTargetAngle, rad2deg(-li), rad2deg(li));
-			}
-
-			result |= ImGui::SliderAngle("Swing motor axis angle", &con.swingMotorAxis, -180.f, 180.f);
-			result |= ImGui::SliderFloat("Max swing motor torque", &con.maxSwingMotorTorque, 0.001f, 1000.f);
-		}
-		
-		ImGui::TreePop();
-	}
-
-	return result;
-}
-
-
-bool humanoid_ragdoll::edit()
-{
-	bool result = false;
-	if (ImGui::TreeNode("Ragdoll"))
-	{
-		result |= editConeTwistConstraint("Neck", neckConstraint);
-		result |= editConeTwistConstraint("Left shoulder", leftShoulderConstraint);
-		result |= editHingeConstraint("Left Elbow", leftElbowConstraint);
-		result |= editConeTwistConstraint("Right shoulder", rightShoulderConstraint);
-		result |= editHingeConstraint("Right Elbow", rightElbowConstraint);
-
-		result |= editConeTwistConstraint("Left hip", leftHipConstraint);
-		result |= editHingeConstraint("Left knee", leftKneeConstraint);
-		result |= editConeTwistConstraint("Left ankle", leftAnkleConstraint);
-		result |= editHingeConstraint("Left toes", leftToesConstraint);
-
-		result |= editConeTwistConstraint("Right hip", rightHipConstraint);
-		result |= editHingeConstraint("Right knee", rightKneeConstraint);
-		result |= editConeTwistConstraint("Right ankle", rightAnkleConstraint);
-		result |= editHingeConstraint("Right toes", rightToesConstraint);
-
-		ImGui::TreePop();
-	}
-	return result;
-}
-
-#else
-bool humanoid_ragdoll::edit()
-{
-	return false;
-}
-#endif

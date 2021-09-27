@@ -15,24 +15,29 @@ struct sap_endpoint
 	sap_endpoint(const sap_endpoint&) = default;
 };
 
-static std::vector<sap_endpoint> endpoints;
+struct sap_context
+{
+	std::vector<sap_endpoint> endpoints;
+};
 
 
 void onColliderAdded(entt::registry& registry, entt::entity entityHandle)
 {
+	sap_context& context = registry.ctx_or_set<sap_context>();
+
 	sap_endpoint_indirection_component& endpointIndirection = registry.emplace<sap_endpoint_indirection_component>(entityHandle);
 
-	endpointIndirection.startEndpoint = (uint16)endpoints.size();
-	endpoints.emplace_back(entityHandle, true);
+	endpointIndirection.startEndpoint = (uint16)context.endpoints.size();
+	context.endpoints.emplace_back(entityHandle, true);
 
-	endpointIndirection.endEndpoint = (uint16)endpoints.size();
-	endpoints.emplace_back(entityHandle, false);
+	endpointIndirection.endEndpoint = (uint16)context.endpoints.size();
+	context.endpoints.emplace_back(entityHandle, false);
 }
 
-static void removeEndpoint(uint16 endpointIndex, entt::registry& registry)
+static void removeEndpoint(uint16 endpointIndex, entt::registry& registry, sap_context& context)
 {
-	sap_endpoint last = endpoints.back();
-	endpoints[endpointIndex] = last;
+	sap_endpoint last = context.endpoints.back();
+	context.endpoints[endpointIndex] = last;
 
 	// Point moved entity to correct slot.
 	sap_endpoint_indirection_component& in = registry.get<sap_endpoint_indirection_component>(last.entity);
@@ -46,26 +51,35 @@ static void removeEndpoint(uint16 endpointIndex, entt::registry& registry)
 		in.endEndpoint = endpointIndex; 
 	}
 
-	endpoints.pop_back();
+	context.endpoints.pop_back();
 }
 
 void onColliderRemoved(entt::registry& registry, entt::entity entityHandle)
 {
 	sap_endpoint_indirection_component& endpointIndirection = registry.get<sap_endpoint_indirection_component>(entityHandle);
 
-	removeEndpoint(endpointIndirection.startEndpoint, registry);
-	removeEndpoint(endpointIndirection.endEndpoint, registry);
+	sap_context& context = registry.ctx<sap_context>();
+
+	removeEndpoint(endpointIndirection.startEndpoint, registry, context);
+	removeEndpoint(endpointIndirection.endEndpoint, registry, context);
 
 	registry.remove_if_exists<sap_endpoint_indirection_component>(entityHandle);
 }
 
-uint32 broadphase(scene& appScene, uint32 sortingAxis, bounding_box* worldSpaceAABBs, broadphase_collision* outCollisions)
+uint32 broadphase(game_scene& scene, uint32 sortingAxis, bounding_box* worldSpaceAABBs, broadphase_collision* outCollisions)
 {
+	uint32 numColliders = scene.numberOfComponentsOfType<collider_component>();
+	if (numColliders == 0)
+	{
+		return 0;
+	}
+
 	// TODO:
 	static uint16* activeList = new uint16[10000];
 
+	sap_context& context = scene.getContextVariable<sap_context>();
+	auto& endpoints = context.endpoints;
 
-	uint32 numColliders = appScene.numberOfComponentsOfType<collider_component>();
 	uint32 numEndpoints = numColliders * 2;
 
 	assert(numEndpoints == endpoints.size());
@@ -76,10 +90,10 @@ uint32 broadphase(scene& appScene, uint32 sortingAxis, bounding_box* worldSpaceA
 	// Disable broadphase.
 
 	uint16 collider0Index = 0;
-	for (auto [entityHandle0, collider0] : appScene.view<collider_component>().each())
+	for (auto [entityHandle0, collider0] : scene.view<collider_component>().each())
 	{
 		uint16 collider1Index = 0;
-		for (auto [entityHandle1, collider1] : appScene.view<collider_component>().each())
+		for (auto [entityHandle1, collider1] : scene.view<collider_component>().each())
 		{
 			if (entityHandle0 == entityHandle1)
 			{
@@ -105,7 +119,7 @@ uint32 broadphase(scene& appScene, uint32 sortingAxis, bounding_box* worldSpaceA
 	uint16 index = 0;
 
 	// Update endpoint positions.
-	for (auto [entityHandle, indirection] : appScene.view<sap_endpoint_indirection_component>().each())
+	for (auto [entityHandle, indirection] : scene.view<sap_endpoint_indirection_component>().each())
 	{
 		bounding_box& aabb = worldSpaceAABBs[index];
 
@@ -187,7 +201,7 @@ uint32 broadphase(scene& appScene, uint32 sortingAxis, bounding_box* worldSpaceA
 	for (uint32 i = 0; i < numEndpoints; ++i)
 	{
 		sap_endpoint ep = endpoints[i];
-		scene_entity entity = { ep.entity, appScene };
+		scene_entity entity = { ep.entity, scene };
 		sap_endpoint_indirection_component& in = entity.getComponent<sap_endpoint_indirection_component>();
 
 		if (ep.start)

@@ -95,6 +95,7 @@ int main(int argc, char** argv)
 	window.initialize(TEXT("D3D12 Projection Mapping"), 1920, 1080);
 	setMainWindow(&window);
 	window.setIcon("assets/icons/project_icon_pm.png");
+	window.setCustomWindowStyle();
 
 	application app = {};
 	app.loadCustomShaders();

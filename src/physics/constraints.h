@@ -3,19 +3,23 @@
 #include "core/math.h"
 #include "scene/scene.h"
 
-enum constraint_type : uint16
+enum constraint_type
 {
+	constraint_type_none = -1,
+
 	constraint_type_distance,
 	constraint_type_ball_joint,
 	constraint_type_hinge_joint,
 	constraint_type_cone_twist,
+
+	constraint_type_count,
 };
 
 #define INVALID_CONSTRAINT_EDGE UINT16_MAX
 
 struct constraint_edge
 {
-	uint16 constraint;
+	entt::entity constraintEntity;
 	constraint_type type;
 	uint16 prevConstraintEdge;
 	uint16 nextConstraintEdge;
@@ -230,14 +234,14 @@ struct cone_twist_constraint_update
 
 struct rigid_body_global_state;
 
-void initializeDistanceVelocityConstraints(scene& appScene, rigid_body_global_state* rbs, const distance_constraint* input, distance_constraint_update* output, uint32 count, float dt);
+void initializeDistanceVelocityConstraints(game_scene& scene, rigid_body_global_state* rbs, const distance_constraint* input, distance_constraint_update* output, uint32 count, float dt);
 void solveDistanceVelocityConstraints(distance_constraint_update* constraints, uint32 count, rigid_body_global_state* rbs);
 
-void initializeBallJointVelocityConstraints(scene& appScene, rigid_body_global_state* rbs, const ball_joint_constraint* input, ball_joint_constraint_update* output, uint32 count, float dt);
+void initializeBallJointVelocityConstraints(game_scene& scene, rigid_body_global_state* rbs, const ball_joint_constraint* input, ball_joint_constraint_update* output, uint32 count, float dt);
 void solveBallJointVelocityConstraints(ball_joint_constraint_update* constraints, uint32 count, rigid_body_global_state* rbs);
 
-void initializeHingeJointVelocityConstraints(scene& appScene, rigid_body_global_state* rbs, const hinge_joint_constraint* input, hinge_joint_constraint_update* output, uint32 count, float dt);
+void initializeHingeJointVelocityConstraints(game_scene& scene, rigid_body_global_state* rbs, const hinge_joint_constraint* input, hinge_joint_constraint_update* output, uint32 count, float dt);
 void solveHingeJointVelocityConstraints(hinge_joint_constraint_update* constraints, uint32 count, rigid_body_global_state* rbs);
 
-void initializeConeTwistVelocityConstraints(scene& appScene, rigid_body_global_state* rbs, const cone_twist_constraint* input, cone_twist_constraint_update* output, uint32 count, float dt);
+void initializeConeTwistVelocityConstraints(game_scene& scene, rigid_body_global_state* rbs, const cone_twist_constraint* input, cone_twist_constraint_update* output, uint32 count, float dt);
 void solveConeTwistVelocityConstraints(cone_twist_constraint_update* constraints, uint32 count, rigid_body_global_state* rbs);

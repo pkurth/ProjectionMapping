@@ -4,13 +4,19 @@
 //#include <entt/entt.hpp>
 #include <entt/entity/registry.hpp>
 #include "components.h"
+#include "rendering/light_source.h"
+#include "rendering/pbr.h"
+#include "core/camera.h"
+
+struct game_scene;
 
 struct scene_entity
 {
 	scene_entity() = default;
-	inline scene_entity(entt::entity handle, struct scene& scene);
-	inline scene_entity(uint32 id, struct scene& scene);
+	inline scene_entity(entt::entity handle, game_scene& scene);
+	inline scene_entity(uint32 id, game_scene& scene);
 	scene_entity(entt::entity handle, entt::registry* registry) : handle(handle), registry(registry) {}
+	scene_entity(uint32 id, entt::registry* reg) : handle((entt::entity)id), registry(reg) {}
 	scene_entity(const scene_entity&) = default;
 
 	template <typename component_t, typename... args>
@@ -55,6 +61,24 @@ struct scene_entity
 					addComponent<dynamic_transform_component>();
 				}
 			}
+
+
+			// If component is cloth, transform to correct position.
+			if constexpr (std::is_same_v<component_t, struct cloth_component>)
+			{
+				if (transform_component* transform = getComponentIfExists<transform_component>())
+				{
+					component.setWorldPositionOfFixedVertices(*transform, true);
+				}
+			}
+
+			if constexpr (std::is_same_v<component_t, struct transform_component>)
+			{
+				if (cloth_component* cloth = getComponentIfExists<cloth_component>())
+				{
+					cloth->setWorldPositionOfFixedVertices(component, true);
+				}
+			}
 		}
 
 		return *this;
@@ -96,44 +120,38 @@ struct scene_entity
 		registry->remove<component_t>(handle);
 	}
 
-	inline operator uint32()
+	inline operator uint32() const
 	{
 		return (uint32)handle;
 	}
 
-	inline operator bool()
+	inline operator bool() const
 	{
 		return handle != entt::null;
 	}
 
-	inline bool operator==(const scene_entity& o)
+	inline bool operator==(const scene_entity& o) const
 	{
 		return handle == o.handle && registry == o.registry;
 	}
 
-	inline bool operator!=(const scene_entity& o)
+	inline bool operator!=(const scene_entity& o) const
 	{
 		return !(*this == o);
 	}
 
-	inline bool operator==(entt::entity o)
+	inline bool operator==(entt::entity o) const
 	{
 		return handle == o;
 	}
 
 	entt::entity handle = entt::null;
 	entt::registry* registry;
-
-
-	scene_entity(uint32 id, entt::registry* reg) : handle((entt::entity)id), registry(reg) {}
-
-	friend struct scene;
-	friend void onColliderAdded(entt::registry& registry, entt::entity entityHandle);
 };
 
-struct scene
+struct game_scene
 {
-	scene();
+	game_scene();
 
 	scene_entity createEntity(const char* name)
 	{
@@ -143,6 +161,12 @@ struct scene
 
 	void deleteEntity(scene_entity e);
 	void clearAll();
+
+	template <typename component_t>
+	void deleteAllComponents()
+	{
+		registry.clear<component_t>();
+	}
 
 	bool isEntityValid(scene_entity e)
 	{
@@ -198,8 +222,37 @@ struct scene
 		return (uint32)registry.size<component_t>();
 	}
 
+	template <typename context_t, typename... args>
+	context_t& createOrGetContextVariable(args&&... a)
+	{
+		return registry.ctx_or_set<context_t>(std::forward<args>(a)...);
+	}
+
+	template <typename context_t>
+	context_t& getContextVariable()
+	{
+		return registry.ctx<context_t>();
+	}
+
+	template <typename context_t>
+	bool doesContextVariableExist()
+	{
+		return registry.try_ctx<context_t>() != 0;
+	}
+
+	template <typename context_t>
+	void deleteContextVariable()
+	{
+		registry.unset<context_T>();
+	}
+
 	entt::registry registry;
+
+
+	render_camera camera;
+	directional_light sun;
+	ref<pbr_environment> environment;
 };
 
-inline scene_entity::scene_entity(entt::entity handle, struct scene& scene) : handle(handle), registry(&scene.registry) {}
-inline scene_entity::scene_entity(uint32 id, struct scene& scene) : handle((entt::entity)id), registry(&scene.registry) {}
+inline scene_entity::scene_entity(entt::entity handle, game_scene& scene) : handle(handle), registry(&scene.registry) {}
+inline scene_entity::scene_entity(uint32 id, game_scene& scene) : handle((entt::entity)id), registry(&scene.registry) {}

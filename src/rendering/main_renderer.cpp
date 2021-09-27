@@ -25,7 +25,7 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 	this->windowHeight = windowHeight;
 	const_cast<renderer_spec&>(this->spec) = spec;
 
-	enableSharpen = spec.allowTAA;
+	settings.enableSharpen = spec.allowTAA;
 
 	recalculateViewport(false);
 
@@ -122,6 +122,11 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 
 		objectIDsTexture = createTexture(0, renderWidth, renderHeight, objectIDsFormat, false, true, false, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		SET_NAME(objectIDsTexture->resource, "Object IDs");
+	}
+
+	if (dxContext.featureSupport.raytracing())
+	{
+		pathTracer.initialize();
 	}
 }
 
@@ -233,7 +238,7 @@ void main_renderer::recalculateViewport(bool resizeTextures)
 
 void main_renderer::setCamera(const render_camera& camera)
 {
-	buildCameraConstantBuffer(camera, taaSettings.cameraJitterStrength * enableTAA * !disableAllPostProcessing, this->jitteredCamera);
+	buildCameraConstantBuffer(camera, settings.taaSettings.cameraJitterStrength * settings.enableTAA * !disableAllPostProcessing, this->jitteredCamera);
 	buildCameraConstantBuffer(camera, 0.f, this->unjitteredCamera);
 }
 
@@ -304,8 +309,8 @@ void main_renderer::endFrame(const user_input& input)
 		materialInfo.environment = render_resources::blackCubeTexture;
 		materialInfo.irradiance = render_resources::blackCubeTexture;
 	}
-	materialInfo.environmentIntensity = environmentIntensity;
-	materialInfo.skyIntensity = skyIntensity;
+	materialInfo.environmentIntensity = settings.environmentIntensity;
+	materialInfo.skyIntensity = settings.skyIntensity;
 	materialInfo.brdf = render_resources::brdfTex;
 	materialInfo.tiledCullingGrid = culling.tiledCullingGrid;
 	materialInfo.tiledObjectsIndexList = culling.tiledObjectsIndexList;
@@ -322,9 +327,9 @@ void main_renderer::endFrame(const user_input& input)
 
 
 
-	enableSSR &= spec.allowSSR;
-	enableBloom &= spec.allowBloom;
-	enableTAA &= spec.allowTAA;
+	settings.enableSSR &= spec.allowSSR;
+	settings.enableBloom &= spec.allowBloom;
+	settings.enableTAA &= spec.allowTAA;
 
 
 	if (mode == renderer_mode_rasterized)
@@ -400,12 +405,12 @@ void main_renderer::endFrame(const user_input& input)
 			dx_render_target skyRenderTarget({ hdrColorTexture, screenVelocitiesTexture, objectIDsTexture }, depthStencilBuffer);
 			if (environment)
 			{
-				texturedSky(cl, skyRenderTarget, jitteredCamera.proj, jitteredCamera.view, environment->sky, skyIntensity);
+				texturedSky(cl, skyRenderTarget, jitteredCamera.proj, jitteredCamera.view, environment->sky, settings.skyIntensity);
 			}
 			else
 			{
 				//proceduralSky(cl, skyRenderTarget, textureSkyPipeline, jitteredCamera.proj, jitteredCamera.view, skyIntensity);
-				preethamSky(cl, skyRenderTarget, jitteredCamera.proj, jitteredCamera.view, sun.direction, skyIntensity);
+				preethamSky(cl, skyRenderTarget, jitteredCamera.proj, jitteredCamera.view, sun.direction, settings.skyIntensity);
 			}
 
 
@@ -473,11 +478,11 @@ void main_renderer::endFrame(const user_input& input)
 			// SCREEN SPACE REFLECTIONS
 			// ----------------------------------------
 
-			if (enableSSR)
+			if (settings.enableSSR)
 			{
 				screenSpaceReflections(cl, hdrColorTexture, prevFrameHDRColorTexture, depthStencilBuffer, linearDepthBuffer, worldNormalsTexture,
 					reflectanceTexture, screenVelocitiesTexture, ssrRaycastTexture, ssrResolveTexture, ssrTemporalTextures[ssrHistoryIndex],
-					ssrTemporalTextures[1 - ssrHistoryIndex], ssrSettings, materialInfo.cameraCBV);
+					ssrTemporalTextures[1 - ssrHistoryIndex], settings.ssrSettings, materialInfo.cameraCBV);
 
 				ssrHistoryIndex = 1 - ssrHistoryIndex;
 			}
@@ -487,7 +492,7 @@ void main_renderer::endFrame(const user_input& input)
 			// SPECULAR AMBIENT
 			// ----------------------------------------
 
-			specularAmbient(cl, hdrColorTexture, enableSSR ? ssrResolveTexture : 0, worldNormalsTexture, reflectanceTexture,
+			specularAmbient(cl, hdrColorTexture, settings.enableSSR ? ssrResolveTexture : 0, worldNormalsTexture, reflectanceTexture,
 				environment ? environment->environment : 0, hdrPostProcessingTexture, materialInfo.cameraCBV);
 
 			barrier_batcher(cl)
@@ -495,7 +500,7 @@ void main_renderer::endFrame(const user_input& input)
 				.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) // Will be read by rest of post processing stack. 
 				.transitionEnd(opaqueDepthBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-			if (enableSSR)
+			if (settings.enableSSR)
 			{
 				barrier_batcher(cl)
 					.transition(ssrResolveTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); // For next frame.
@@ -546,9 +551,8 @@ void main_renderer::endFrame(const user_input& input)
 
 			if (!disableAllPostProcessing)
 			{
-
 				// TAA.
-				if (enableTAA)
+				if (settings.enableTAA)
 				{
 					uint32 taaOutputIndex = 1 - taaHistoryIndex;
 					temporalAntiAliasing(cl, hdrResult, screenVelocitiesTexture, opaqueDepthBuffer, taaTextures[taaHistoryIndex], taaTextures[taaOutputIndex], jitteredCamera.projectionParams);
@@ -565,23 +569,20 @@ void main_renderer::endFrame(const user_input& input)
 					downsample(cl, hdrResult, prevFrameHDRColorTexture, prevFrameHDRColorTempTexture);
 				}
 
-
-
 				// Bloom.
-				if (enableBloom)
+				if (settings.enableBloom)
 				{
 					barrier_batcher(cl)
 						.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-					bloom(cl, hdrResult, hdrColorTexture, bloomTexture, bloomTempTexture, bloomSettings);
+					bloom(cl, hdrResult, hdrColorTexture, bloomTexture, bloomTempTexture, settings.bloomSettings);
 					hdrResult = hdrColorTexture;
 				}
 
 				// At this point hdrResult is either the TAA result, the hdrColorTexture, or the hdrPostProcessingTexture. Either one is in read state.
 
 
-
-				tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
+				tonemap(cl, hdrResult, ldrPostProcessingTexture, settings.tonemapSettings);
 			}
 			else
 			{
@@ -619,7 +620,7 @@ void main_renderer::endFrame(const user_input& input)
 
 			// TODO: If we really care we should sharpen before rendering overlays and outlines.
 
-			present(cl, ldrPostProcessingTexture, frameResult, (enableSharpen && !disableAllPostProcessing) ? sharpenSettings : sharpen_settings{ 0.f });
+			present(cl, ldrPostProcessingTexture, frameResult, (settings.enableSharpen && !disableAllPostProcessing) ? settings.sharpenSettings : sharpen_settings{ 0.f });
 
 
 
@@ -642,8 +643,10 @@ void main_renderer::endFrame(const user_input& input)
 
 		dxContext.executeCommandLists(cls, arraysize(cls));
 	}
-	else if (dxContext.featureSupport.raytracing() && raytracer)
+	else if (dxContext.featureSupport.raytracing())
 	{
+		pathTracer.rebuildBindingTable();
+
 		dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
 
@@ -665,7 +668,7 @@ void main_renderer::endFrame(const user_input& input)
 
 			dxContext.renderQueue.waitForOtherQueue(dxContext.computeQueue); // Wait for AS-rebuilds. TODO: This is not the way to go here. We should wait for the specific value returned by executeCommandList.
 
-			raytracer->render(cl, *tlas, hdrColorTexture, materialInfo);
+			pathTracer.render(cl, *tlas, hdrColorTexture, materialInfo);
 		}
 
 		cl->resetToDynamicDescriptorHeap();
@@ -674,7 +677,7 @@ void main_renderer::endFrame(const user_input& input)
 			//.uav(hdrColorTexture)
 			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-		tonemap(cl, hdrColorTexture, ldrPostProcessingTexture, tonemapSettings);
+		tonemap(cl, hdrColorTexture, ldrPostProcessingTexture, settings.tonemapSettings);
 
 		barrier_batcher(cl)
 			.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

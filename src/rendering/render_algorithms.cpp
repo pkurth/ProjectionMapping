@@ -170,7 +170,7 @@ void loadCommonShaders()
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
 			.renderTargets(0, 0, render_resources::shadowDepthFormat)
-			.depthSettings(true, true, D3D12_COMPARISON_FUNC_ALWAYS)
+			.depthSettings(false, true)
 			.cullingOff();
 
 		shadowMapCopyPipeline = createReloadablePipeline(desc, { "fullscreen_triangle_vs", "shadow_map_copy_ps" });
@@ -664,6 +664,11 @@ void shadowPasses(dx_command_list* cl,
 			}
 		}
 
+		if (!enableStaticShadowMapCaching)
+		{
+			numCopiesToStaticCache = 0;
+		}
+
 		if (numCopiesFromStaticCache)
 		{
 			DX_PROFILE_BLOCK(cl, "Copy from static shadow map cache");
@@ -1009,11 +1014,11 @@ void linearDepthPyramid(dx_command_list* cl,
 
 	cl->setCompute32BitConstants(HIERARCHICAL_LINEAR_DEPTH_RS_CB, hierarchical_linear_depth_cb{ projectionParams, vec2(1.f / width, 1.f / height) });
 	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 0, linearDepthBuffer->uavAt(0));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 1, linearDepthBuffer->uavAt(0));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 2, linearDepthBuffer->uavAt(1));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 3, linearDepthBuffer->uavAt(2));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 4, linearDepthBuffer->uavAt(3));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 5, linearDepthBuffer->uavAt(4));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 1, linearDepthBuffer->uavAt(1));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 2, linearDepthBuffer->uavAt(2));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 3, linearDepthBuffer->uavAt(3));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 4, linearDepthBuffer->uavAt(4));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 5, linearDepthBuffer->uavAt(5));
 	cl->setDescriptorHeapSRV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 6, depthStencilBuffer);
 
 	cl->dispatch(bucketize((uint32)width, POST_PROCESSING_BLOCK_SIZE), bucketize((uint32)height, POST_PROCESSING_BLOCK_SIZE));

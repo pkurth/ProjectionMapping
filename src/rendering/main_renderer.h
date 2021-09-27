@@ -10,13 +10,33 @@
 #include "render_algorithms.h"
 #include "render_resources.h"
 #include "render_utils.h"
+#include "path_tracing.h"
 
 #include "light_source.hlsli"
 #include "camera.hlsli"
+#include "path_tracing.h"
 
 
 
 
+struct renderer_settings
+{
+	tonemap_settings tonemapSettings;
+	float environmentIntensity = 1.f;
+	float skyIntensity = 1.f;
+
+	bool enableSSR = true;
+	ssr_settings ssrSettings;
+
+	bool enableTAA = true;
+	taa_settings taaSettings;
+
+	bool enableBloom = true;
+	bloom_settings bloomSettings;
+
+	bool enableSharpen = true;
+	sharpen_settings sharpenSettings;
+};
 
 
 enum aspect_ratio_mode
@@ -79,7 +99,7 @@ struct main_renderer
 	void submitRenderPass(opaque_render_pass* renderPass) {	assert(!opaqueRenderPass); opaqueRenderPass = renderPass; }
 	void submitRenderPass(transparent_render_pass* renderPass) { assert(!transparentRenderPass); transparentRenderPass = renderPass; }
 	void submitRenderPass(ldr_render_pass* renderPass) { assert(!ldrRenderPass); ldrRenderPass = renderPass; }
-	void setRaytracer(dx_raytracer* raytracer, raytracing_tlas* tlas) {	this->raytracer = raytracer; this->tlas = tlas;	}
+	void setRaytracingScene(raytracing_tlas* tlas) { this->tlas = tlas;	}
 
 
 
@@ -87,24 +107,9 @@ struct main_renderer
 	renderer_mode mode = renderer_mode_rasterized;
 	aspect_ratio_mode aspectRatioMode = aspect_ratio_free;
 
-	tonemap_settings tonemapSettings;
-	float environmentIntensity = 1.f;
-	float skyIntensity = 1.f;
 
-	bool enableSSR = true;
-	ssr_settings ssrSettings;
-
-	bool enableTAA = true;
-	taa_settings taaSettings;
-
-	bool enableBloom = true;
-	bloom_settings bloomSettings;
-
-	bool enableSharpen = true;
-	sharpen_settings sharpenSettings;
-
+	renderer_settings settings;
 	bool disableAllPostProcessing = false;
-
 
 
 
@@ -116,10 +121,10 @@ struct main_renderer
 
 	const renderer_spec spec;
 
+	path_tracer pathTracer;
+
 private:
 
-
-	dx_raytracer* raytracer;
 	raytracing_tlas* tlas;
 
 	const opaque_render_pass* opaqueRenderPass;
