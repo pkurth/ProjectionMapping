@@ -181,7 +181,7 @@ void application::update(const user_input& input, float dt)
 	renderer->setSun(scene.sun);
 	renderer->setEnvironment(scene.environment);
 
-	projectorManager->setViewerCamera(camera);
+	projectorManager->setViewerCamera(scene.camera);
 	projectorManager->setSun(scene.sun);
 	projectorManager->setEnvironment(scene.environment);
 

@@ -30,8 +30,6 @@ private:
 	raytracing_tlas raytracingTLAS;
 
 
-	render_camera camera;
-
 
 	ref<dx_buffer> pointLightBuffer[NUM_BUFFERED_FRAMES];
 	ref<dx_buffer> spotLightBuffer[NUM_BUFFERED_FRAMES];

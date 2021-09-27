@@ -1289,6 +1289,12 @@ void scene_editor::drawSettings(float dt)
 
 		if (ImGui::BeginTree("Post processing"))
 		{
+			if (ImGui::BeginProperties())
+			{
+				ImGui::PropertyCheckbox("Disable all post processing", renderer->disableAllPostProcessing);
+				ImGui::EndProperties();
+			}
+
 			if (renderer->spec.allowSSR) { editSSR(renderer->settings.enableSSR, renderer->settings.ssrSettings); ImGui::Separator(); }
 			if (renderer->spec.allowTAA) { editTAA(renderer->settings.enableTAA, renderer->settings.taaSettings); ImGui::Separator(); }
 			if (renderer->spec.allowBloom) { editBloom(renderer->settings.enableBloom, renderer->settings.bloomSettings); ImGui::Separator(); }
