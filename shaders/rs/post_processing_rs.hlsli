@@ -106,25 +106,27 @@ struct gaussian_blur_cb
 
 
 // ----------------------------------------
-// DILATION
+// MORPHOLOGY
 // ----------------------------------------
 
-struct dilation_cb
+struct morphology_cb
 {
     uint32 radius;
+    uint32 direction; // 0 = x, 1 = y.
+    uint32 dimInDirection;
 };
 
-#define DILATION_MAX_RADIUS 16
-#define DILATION_BLOCK_SIZE 128
+#define MORPHOLOGY_MAX_RADIUS 16
+#define MORPHOLOGY_BLOCK_SIZE 128
 
-#define DILATION_RS \
+#define MORPHOLOGY_RS \
     "RootFlags(0), " \
-    "RootConstants(b0, num32BitConstants = 1), " \
+    "RootConstants(b0, num32BitConstants = 3), " \
     "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
 
 
-#define DILATION_RS_CB              0
-#define DILATION_RS_TEXTURES        1
+#define MORPHOLOGY_RS_CB              0
+#define MORPHOLOGY_RS_TEXTURES        1
 
 
 

@@ -200,11 +200,11 @@ void projector_renderer::endFrame()
 		//.uav(depthDiscontinuitiesTexture)
 		.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	if (depthDiscontinuityDilateRadius > 0)
+	dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuityDilateRadius);
+	if (blurDepthDiscontinuities)
 	{
-		dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuityDilateRadius);
+		gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
 	}
-	gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
 
 	ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
 
@@ -241,7 +241,7 @@ void projector_renderer::present(dx_command_list* cl,
 	cl->dispatch(bucketize(output->width, PROJECTOR_BLOCK_SIZE), bucketize(output->height, PROJECTOR_BLOCK_SIZE));
 }
 
-void projector_renderer::finalizeImage(dx_command_list* cl, bool applySolverIntensity)
+void projector_renderer::finalizeImage(dx_command_list* cl)
 {
 	if (!active)
 	{

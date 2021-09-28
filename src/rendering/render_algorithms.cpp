@@ -52,8 +52,8 @@ static dx_pipeline gaussianBlur5x5Pipeline;
 static dx_pipeline gaussianBlur9x9Pipeline;
 static dx_pipeline gaussianBlur13x13Pipeline;
 
-static dx_pipeline dilationHorizontalPipeline;
-static dx_pipeline dilationVerticalPipeline;
+static dx_pipeline dilationPipeline;
+static dx_pipeline erosionPipeline;
 
 static dx_pipeline taaPipeline;
 
@@ -197,8 +197,8 @@ void loadCommonShaders()
 	gaussianBlur9x9Pipeline = createReloadablePipeline("gaussian_blur_9x9_cs");
 	gaussianBlur13x13Pipeline = createReloadablePipeline("gaussian_blur_13x13_cs");
 
-	dilationHorizontalPipeline = createReloadablePipeline("dilation_horizontal_cs");
-	dilationVerticalPipeline = createReloadablePipeline("dilation_vertical_cs");
+	dilationPipeline = createReloadablePipeline("dilation_cs");
+	erosionPipeline = createReloadablePipeline("erosion_cs");
 
 	taaPipeline = createReloadablePipeline("taa_cs");
 
@@ -1110,14 +1110,20 @@ void gaussianBlur(dx_command_list* cl,
 	}
 }
 
-void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
+static void morphologyCommon(dx_command_list* cl, dx_pipeline& pipeline, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
 {
-	DX_PROFILE_BLOCK(cl, "Dilate");
+	if (radius == 0 || numIterations == 0)
+	{
+		return;
+	}
 
 	assert(inputOutput->width == temp->width);
 	assert(inputOutput->height == temp->height);
 
-	radius = min(radius, DILATION_MAX_RADIUS);
+	radius = min(radius, MORPHOLOGY_MAX_RADIUS);
+
+	cl->setPipelineState(*pipeline.pipeline);
+	cl->setComputeRootSignature(*pipeline.rootSignature);
 
 	for (uint32 i = 0; i < numIterations; ++i)
 	{
@@ -1126,14 +1132,11 @@ void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> te
 		{
 			DX_PROFILE_BLOCK(cl, "Vertical");
 
-			cl->setPipelineState(*dilationVerticalPipeline.pipeline);
-			cl->setComputeRootSignature(*dilationVerticalPipeline.rootSignature);
+			cl->setCompute32BitConstants(MORPHOLOGY_RS_CB, morphology_cb{ radius, 1, inputOutput->height });
+			cl->setDescriptorHeapUAV(MORPHOLOGY_RS_TEXTURES, 0, temp);
+			cl->setDescriptorHeapSRV(MORPHOLOGY_RS_TEXTURES, 1, inputOutput);
 
-			cl->setCompute32BitConstants(DILATION_RS_CB, radius);
-			cl->setDescriptorHeapUAV(DILATION_RS_TEXTURES, 0, temp);
-			cl->setDescriptorHeapSRV(DILATION_RS_TEXTURES, 1, inputOutput);
-
-			cl->dispatch(inputOutput->width, bucketize(inputOutput->height, DILATION_BLOCK_SIZE));
+			cl->dispatch(bucketize(inputOutput->height, MORPHOLOGY_BLOCK_SIZE), inputOutput->width);
 
 			barrier_batcher(cl)
 				//.uav(temp)
@@ -1143,15 +1146,12 @@ void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> te
 
 		{
 			DX_PROFILE_BLOCK(cl, "Horizontal");
-			
-			cl->setPipelineState(*dilationHorizontalPipeline.pipeline);
-			cl->setComputeRootSignature(*dilationHorizontalPipeline.rootSignature);
 
-			cl->setCompute32BitConstants(DILATION_RS_CB, radius);
-			cl->setDescriptorHeapUAV(DILATION_RS_TEXTURES, 0, inputOutput);
-			cl->setDescriptorHeapSRV(DILATION_RS_TEXTURES, 1, temp);
-			
-			cl->dispatch(bucketize(inputOutput->width, DILATION_BLOCK_SIZE), inputOutput->height);
+			cl->setCompute32BitConstants(MORPHOLOGY_RS_CB, morphology_cb{ radius, 0, inputOutput->width });
+			cl->setDescriptorHeapUAV(MORPHOLOGY_RS_TEXTURES, 0, inputOutput);
+			cl->setDescriptorHeapSRV(MORPHOLOGY_RS_TEXTURES, 1, temp);
+
+			cl->dispatch(bucketize(inputOutput->width, MORPHOLOGY_BLOCK_SIZE), inputOutput->height);
 
 			barrier_batcher(cl)
 				//.uav(inputOutput)
@@ -1159,6 +1159,18 @@ void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> te
 				.transition(inputOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		}
 	}
+}
+
+void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
+{
+	DX_PROFILE_BLOCK(cl, "Dilate");
+	morphologyCommon(cl, dilationPipeline, inputOutput, temp, radius, numIterations);
+}
+
+void erode(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
+{
+	DX_PROFILE_BLOCK(cl, "Erode");
+	morphologyCommon(cl, erosionPipeline, inputOutput, temp, radius, numIterations);
 }
 
 void depthSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, vec4 projectionParams, float threshold)

@@ -27,9 +27,10 @@ void projector_manager::updateAndRender()
 	{
 		if (ImGui::BeginProperties())
 		{
-			ImGui::PropertyCheckbox("Apply solver intensity", applySolverIntensity);
+			ImGui::PropertyCheckbox("Apply solver intensity", projector_renderer::applySolverIntensity);
 			ImGui::PropertySlider("Depth discontinuity threshold", projector_renderer::depthDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertySlider("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius, 0, DILATION_MAX_RADIUS);
+			ImGui::PropertySlider("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius, 0, MORPHOLOGY_MAX_RADIUS);
+			ImGui::PropertyCheckbox("Blur depth discontinuities", projector_renderer::blurDepthDiscontinuities);
 
 			ImGui::EndProperties();
 		}
@@ -79,7 +80,7 @@ void projector_manager::updateAndRender()
 			{
 				dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
-				projector.renderer.finalizeImage(cl, applySolverIntensity);
+				projector.renderer.finalizeImage(cl);
 
 				dx_resource backbuffer = projector.window.backBuffers[projector.window.currentBackbufferIndex];
 				cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);

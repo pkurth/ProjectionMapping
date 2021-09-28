@@ -13,5 +13,4 @@ struct projector_manager
 
 private:
 	game_scene* scene;
-	bool applySolverIntensity = false;
 };

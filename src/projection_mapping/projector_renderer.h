@@ -14,7 +14,7 @@ struct projector_renderer
 
 	void beginFrame(uint32 windowWidth, uint32 windowHeight);
 	void endFrame();
-	void finalizeImage(dx_command_list* cl, bool applySolverIntensity);
+	void finalizeImage(dx_command_list* cl);
 
 
 	// Set these with your application.
@@ -34,6 +34,9 @@ struct projector_renderer
 
 	static inline float depthDiscontinuityThreshold = 0.2f;
 	static inline uint32 depthDiscontinuityDilateRadius = 4;
+	static inline bool blurDepthDiscontinuities = true;
+
+	static inline bool applySolverIntensity = false;
 
 private:
 
