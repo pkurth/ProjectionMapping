@@ -6,46 +6,60 @@
 #include "projector_solver.h"
 
 
-struct projector_base
+struct projector_component
 {
-	virtual void edit() = 0;
-	bool active() { return window.open && renderer.active; }
+	projector_component()
+	{
+		uint32 width = 640;
+		uint32 height = 480;
+		window.initialize(TEXT("Projector"), width, height);
 
-	void render(const opaque_render_pass* opaqueRenderPass, const directional_light& sun, const ref<pbr_environment>& environment, const render_camera& viewerCamera);
-	void presentToBackBuffer(bool applySolverIntensity);
-	void swapBuffers();
+		camera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{ 400.f, 400.f, width * 0.5f, height * 0.5f }, 0.01f);
 
-	projector_solver_input getSolverInput() const;
+		static const vec4 colorTable[] =
+		{
+			vec4(1.f, 0.f, 0.f, 1.f),
+			vec4(0.f, 1.f, 0.f, 1.f),
+			vec4(0.f, 0.f, 1.f, 1.f),
+			vec4(1.f, 1.f, 0.f, 1.f),
+			vec4(0.f, 1.f, 1.f, 1.f),
+			vec4(1.f, 0.f, 1.f, 1.f),
+		};
+		static uint32 index = 0;
 
-protected:
-	void editCommon(uint32 width, uint32 height);
+		frustumColor = colorTable[index];
+		index = (index + 1) % arraysize(colorTable);
 
-	void activate();
-	void deactivate();
+		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
+	}
 
-	render_camera camera;
-	dx_window window;
+	projector_component(projector_component&&) = default;
+	projector_component& operator=(const projector_component&) = delete;
+	projector_component& operator=(projector_component&& ) = default;
+	
+	~projector_component()
+	{
+		window.shutdown();
+		renderer.shutdown();
+	}
 
-	std::string name;
+	void updateMonitor(monitor_info* monitor)
+	{
+		this->monitor = monitor;
+		if (monitor)
+		{
+			window.moveToMonitor(*monitor);
+			if (!window.fullscreen)
+			{
+				window.toggleFullscreen();
+			}
+		}
+	}
 
+	monitor_info* monitor = 0; // If null, this is a dummy projector.
 	projector_renderer renderer;
-
-	friend struct projector_manager;
-};
-
-struct physical_projector : projector_base
-{
-	physical_projector(const monitor_info& monitor);
-
-	void edit() override;
-
-	monitor_info monitor;
-};
-
-struct dummy_projector : projector_base
-{
-	dummy_projector(std::string name, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intr);
-
-	void edit() override;
+	dx_window window;
+	render_camera camera;
+	vec4 frustumColor;
 };
 

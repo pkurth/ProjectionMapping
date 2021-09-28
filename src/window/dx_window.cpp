@@ -208,8 +208,6 @@ void dx_window::updateRenderTargetViews()
 
 dx_window::~dx_window()
 {
-	dxContext.flushApplication();
-
 	shutdown();
 }
 
@@ -249,19 +247,22 @@ bool dx_window::initialize(const TCHAR* name, uint32 requestedClientWidth, uint3
 
 void dx_window::shutdown()
 {
-	// Flush the GPU queue to make sure the swap chain's back buffers
-	// are not being referenced by an in-flight command list.
-	dxContext.flushApplication();
-
-	for (uint32 i = 0; i < NUM_BUFFERED_FRAMES; ++i)
+	if (swapchain)
 	{
-		backBuffers[i].Reset();
-	}
-	rtvDescriptorHeap.Reset();
-	swapchain.Reset();
+		// Flush the GPU queue to make sure the swap chain's back buffers
+		// are not being referenced by an in-flight command list.
+		dxContext.flushApplication();
 
-	initialized = false;
-	win32_window::shutdown();
+		for (uint32 i = 0; i < NUM_BUFFERED_FRAMES; ++i)
+		{
+			backBuffers[i].Reset();
+		}
+		rtvDescriptorHeap.Reset();
+		swapchain.Reset();
+
+		initialized = false;
+		win32_window::shutdown();
+	}
 }
 
 void dx_window::onResize()

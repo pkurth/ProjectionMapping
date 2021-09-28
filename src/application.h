@@ -21,6 +21,8 @@ struct application
 
 	void handleFileDrop(const fs::path& filename);
 
+	game_scene& getScene() { return scene; }
+
 private:
 
 	void resetRenderPasses();
@@ -37,14 +39,6 @@ private:
 
 	ref<dx_buffer> spotLightShadowInfoBuffer[NUM_BUFFERED_FRAMES];
 	ref<dx_buffer> pointLightShadowInfoBuffer[NUM_BUFFERED_FRAMES];
-
-	std::vector<pbr_decal_cb> decals;
-
-	ref<dx_texture> decalTexture;
-
-	fire_particle_system fireParticleSystem;
-	smoke_particle_system smokeParticleSystem;
-	boid_particle_system boidParticleSystem;
 
 	main_renderer* renderer;
 	projector_manager* projectorManager;

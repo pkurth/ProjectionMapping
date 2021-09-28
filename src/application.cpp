@@ -105,11 +105,17 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		SET_NAME(pointLightShadowInfoBuffer[i]->resource, "Point light shadow infos");
 	}
 
-#if 1
-	fireParticleSystem.initialize(10000, 50.f, "assets/particles/fire_explosion.tif", 6, 6);
-	smokeParticleSystem.initialize(10000, 500.f, "assets/particles/smoke1.tif", 5, 5);
-	boidParticleSystem.initialize(10000, 2000.f);
-#endif
+
+	// Dummy projectors.
+
+	scene.createEntity("Dummy proj 0")
+		.addComponent<position_rotation_component>(vec3(0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
+		.addComponent<projector_component>();
+
+	scene.createEntity("Dummy proj 1")
+		.addComponent<position_rotation_component>(vec3(-0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
+		.addComponent<projector_component>();
+
 }
 
 void application::resetRenderPasses()
@@ -157,8 +163,6 @@ void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 num
 	{
 		shadow_map_renderer::submitRenderPass(&pointShadowRenderPasses[i]);
 	}
-
-	projectorManager->submitRenderPass(&projectorOpaqueRenderPass);
 }
 
 void application::update(const user_input& input, float dt)
@@ -181,11 +185,17 @@ void application::update(const user_input& input, float dt)
 	renderer->setSun(scene.sun);
 	renderer->setEnvironment(scene.environment);
 
-	projectorManager->setViewerCamera(scene.camera);
-	projectorManager->setSun(scene.sun);
-	projectorManager->setEnvironment(scene.environment);
 
-	projectorManager->renderProjectorFrusta(&ldrRenderPass);
+
+	// Update projector frusta and set render parameters.
+	for (auto [entityHandle, projector] : scene.view<projector_component>().each())
+	{
+		renderCameraFrustum(projector.camera, projector.frustumColor, &ldrRenderPass, 4.f);
+		projector.renderer.submitRenderPass(&projectorOpaqueRenderPass);
+	}
+
+
+
 
 
 #if 1
@@ -350,12 +360,6 @@ void application::update(const user_input& input, float dt)
 					}
 				}
 			}
-		}
-
-		if (decals.size())
-		{
-			updateUploadBufferData(decalBuffer[dxContext.bufferedFrameID], decals.data(), (uint32)(sizeof(pbr_decal_cb) * decals.size()));
-			renderer->setDecals(decalBuffer[dxContext.bufferedFrameID], (uint32)decals.size(), decalTexture);
 		}
 
 		if (selectedEntity)

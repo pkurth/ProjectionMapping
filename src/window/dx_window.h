@@ -8,8 +8,11 @@
 struct dx_window : win32_window
 {
 	dx_window() = default;
-	dx_window(dx_window&) = delete;
+	dx_window(const dx_window&) = delete;
 	dx_window(dx_window&&) = default;
+
+	dx_window& operator=(const dx_window&) = delete;
+	dx_window& operator=(dx_window&&) = default;
 
 	virtual ~dx_window();
 

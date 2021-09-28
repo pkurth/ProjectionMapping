@@ -24,6 +24,8 @@ static const TCHAR* windowClassName = TEXT("APP WINDOW");
 static bool atLeastOneWindowWasOpened;
 static uint32 numOpenWindows;
 
+std::vector<monitor_info> win32_window::allConnectedMonitors = getAllDisplayDevices();
+
 static LRESULT CALLBACK windowCallBack(
 	_In_ HWND   hwnd,
 	_In_ UINT   msg,
@@ -280,6 +282,37 @@ static HICON createIcon(const uint8* image, uint32 width, uint32 height)
 	return handle;
 }
 
+win32_window& win32_window::operator=(win32_window&& o)
+{
+	std::swap(open, o.open);
+	std::swap(visible, o.visible);
+	std::swap(customWindowStyle, o.customWindowStyle);
+	std::swap(style, o.style);
+	std::swap(customIcon, o.customIcon);
+	std::swap(minimumWidth, o.minimumWidth);
+	std::swap(minimumHeight, o.minimumHeight);
+	std::swap(fileDropCallback, o.fileDropCallback);
+	std::swap(hoveredButton, o.hoveredButton);
+	std::swap(trackingMouse, o.trackingMouse);
+	std::swap(windowHandle, o.windowHandle);
+	std::swap(clientWidth, o.clientWidth);
+	std::swap(clientHeight, o.clientHeight);
+	std::swap(windowPosition, o.windowPosition);
+	std::swap(fullscreen, o.fullscreen);
+
+	if (windowHandle && open)
+	{
+		SetWindowLongPtr(windowHandle, GWLP_USERDATA, (LONG_PTR)this);
+	}
+
+	if (mainWindow == &o)
+	{
+		mainWindow = this;
+	}
+
+	return *this;
+}
+
 bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clientHeight, bool visible, bool disableResizing)
 {
 	if (!windowClassInitialized)
@@ -384,24 +417,7 @@ void win32_window::setFileDropCallback(std::function<void(const fs::path&)> cb)
 
 win32_window::win32_window(win32_window&& o)
 {
-	open = o.open;
-	windowHandle = o.windowHandle;
-	clientWidth = o.clientWidth;
-	clientHeight = o.clientHeight;
-	windowPosition = o.windowPosition;
-	fullscreen = o.fullscreen;
-
-	o.windowHandle = 0;
-
-	if (windowHandle && open)
-	{
-		SetWindowLongPtr(windowHandle, GWLP_USERDATA, (LONG_PTR)this);
-	}
-
-	if (mainWindow == &o)
-	{
-		mainWindow = this;
-	}
+	*this = std::move(o);
 }
 
 win32_window::~win32_window()
@@ -609,6 +625,7 @@ bool monitor_iterator::step(monitor_info& info)
 				info.screenID = screenID;
 				info.uniqueID = convertUniqueIDToFolderFriendlyName(dispDevice.DeviceID);
 				info.name = dispDevice.DeviceString;
+				info.description = info.name + " (" + std::to_string(info.width) + "x" + std::to_string(info.height) + ")";
 				result = true;
 			}
 		}

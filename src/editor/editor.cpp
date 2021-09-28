@@ -8,6 +8,8 @@
 #include "physics/physics.h"
 #include "physics/ragdoll.h"
 #include "scene/serialization.h"
+#include "projection_mapping/projector.h"
+#include "rendering/debug_visualization.h"
 
 #include <fontawesome/list.h>
 
@@ -83,6 +85,17 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 	objectDragged |= drawSceneHierarchy();
 	drawMainMenuBar();
 	drawSettings(dt);
+
+	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
+	{
+		if (!projector.window.open)
+		{
+			scene_entity entity = { entityHandle, *scene };
+			scene->deleteEntity(entity);
+			setSelectedEntity({});
+			break;
+		}
+	}
 
 	return objectDragged;
 }
@@ -807,6 +820,29 @@ bool scene_editor::drawSceneHierarchy()
 						}
 					});
 
+					drawComponent<projector_component>(selectedEntity, "PROJECTOR", [](projector_component& p)
+					{
+						if (ImGui::BeginProperties())
+						{
+							uint32 monitorIndex = p.monitor ? (uint32)(p.monitor - win32_window::allConnectedMonitors.data()) : -1;
+
+							bool monitorChanged = ImGui::PropertyDropdown("Monitor", [](uint32 index, void* data) -> const char*
+							{
+								if (index == -1) { return "---"; }
+								if (index >= (uint32)win32_window::allConnectedMonitors.size()) { return 0; }
+								return win32_window::allConnectedMonitors[index].description.c_str();
+
+							}, monitorIndex, 0);
+
+							if (monitorChanged)
+							{
+								p.updateMonitor(&win32_window::allConnectedMonitors[monitorIndex]);
+							}
+
+							ImGui::EndProperties();
+						}
+					});
+
 					if (objectMovedByWidget)
 					{
 						if (cloth_component* cloth = selectedEntity.getComponentIfExists<cloth_component>())
@@ -1074,6 +1110,18 @@ void scene_editor::drawEntityCreationPopup()
 		{
 			auto ragdoll = humanoid_ragdoll::create(*scene, scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f));
 			setSelectedEntity(ragdoll.torso);
+			clicked = true;
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("Projector", "B") || ImGui::IsKeyPressed('B'))
+		{
+			auto projector = scene->createEntity("Projector")
+				.addComponent<position_rotation_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f), quat::identity)
+				.addComponent<projector_component>();
+
+			setSelectedEntity(projector);
 			clicked = true;
 		}
 

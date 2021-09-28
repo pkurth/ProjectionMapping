@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 	window.setFileDropCallback([&app](const fs::path& s) { app.handleFileDrop(s); });
 
 	projector_renderer::initializeCommon();
-	projector_manager projectorManager;
+	projector_manager projectorManager(app.getScene());
 
 	initializeTransformationGizmos();
 	initializeRenderUtils();

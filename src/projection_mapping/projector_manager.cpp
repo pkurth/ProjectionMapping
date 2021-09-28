@@ -5,25 +5,18 @@
 #include "rendering/debug_visualization.h"
 
 
-projector_manager::projector_manager()
+projector_manager::projector_manager(game_scene& scene)
 {
-	monitors = getAllDisplayDevices();
-
-	for (auto& monitor : monitors)
-	{
-		physicalProjectors.emplace_back(monitor);
-	}
-
-	addDummyProjector();
-	addDummyProjector();
-
+	this->scene = &scene;
 	initializeProjectorSolver();
 }
 
 void projector_manager::beginFrame()
 {
-	opaqueRenderPass = 0;
-	environment = 0;
+	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
+	{
+		projector.renderer.beginFrame(projector.window.clientWidth, projector.window.clientHeight);
+	}
 }
 
 void projector_manager::updateAndRender()
@@ -32,125 +25,65 @@ void projector_manager::updateAndRender()
 	{
 		ImGui::Checkbox("Apply solver intensity", &applySolverIntensity);
 
-		if (ImGui::TreeNode("Physical projectors"))
-		{
-			for (auto& p : physicalProjectors)
-			{
-				p.edit();
-			}
 
-			ImGui::TreePop();
+		std::vector<projector_solver_input> solverInput;
+
+		for (auto [entityHandle, projector, transform] : scene->group(entt::get<projector_component, position_rotation_component>).each())
+		{
+			if (projector.renderer.active)
+			{
+				projector.camera.position = transform.position;
+				projector.camera.rotation = transform.rotation;
+				projector.camera.setViewport(projector.window.clientWidth, projector.window.clientHeight);
+				projector.camera.updateMatrices();
+
+				projector.renderer.setProjectorCamera(projector.camera);
+				projector.renderer.setViewerCamera(scene->camera);
+				projector.renderer.setSun(scene->sun);
+				projector.renderer.setEnvironment(scene->environment);
+
+				projector.renderer.endFrame();
+
+				projector_solver_input si =
+				{
+					projector.renderer.frameResult,
+					projector.renderer.worldNormalsTexture,
+					projector.renderer.depthStencilBuffer,
+					projector.renderer.solverIntensity,
+					projector.camera.viewProj,
+					projector.camera.position
+				};
+
+				solverInput.push_back(si);
+
+				ImGui::Image(projector.renderer.solverIntensity, 400, (uint32)(400 / projector.camera.aspect));
+			}
 		}
 
-		if (ImGui::TreeNode("Dummy projectors"))
+		solveProjectorIntensities(solverInput, 1);
+
+
+
+		for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 		{
-			for (auto& p : dummyProjectors)
+			if (projector.renderer.active)
 			{
-				p.edit();
-			}
+				dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
-			if (ImGui::Button("Add"))
-			{
-				addDummyProjector();
-			}
+				projector.renderer.finalizeImage(cl, applySolverIntensity);
 
-			ImGui::TreePop();
+				dx_resource backbuffer = projector.window.backBuffers[projector.window.currentBackbufferIndex];
+				cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+				cl->copyResource(projector.renderer.frameResult->resource, backbuffer);
+				cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+
+				dxContext.executeCommandList(cl);
+
+				projector.window.swapBuffers();
+			}
 		}
+
 	}
-
-	for (auto& p : physicalProjectors)	{ if (p.active()) { ImGui::Image(p.renderer.solverIntensity, 400, 300); } }
-	for (auto& p : dummyProjectors)		{ if (p.active()) { ImGui::Image(p.renderer.solverIntensity, 400, 300); } }
-
 	ImGui::End();
-
-
-
-
-
-
-	std::vector<projector_solver_input> solverInput;
-
-	for (auto& p : physicalProjectors)
-	{
-		p.render(opaqueRenderPass, sun, environment, viewerCamera);
-		if (p.active())
-		{
-			solverInput.push_back(p.getSolverInput());
-		}
-	}
-	for (auto& p : dummyProjectors)
-	{
-		p.render(opaqueRenderPass, sun, environment, viewerCamera);
-		if (p.active())
-		{
-			solverInput.push_back(p.getSolverInput());
-		}
-	}
-
-
-	solveProjectorIntensities(solverInput, 1);
-
-
-	// Present and swap buffers.
-	for (auto& p : physicalProjectors)
-	{
-		p.presentToBackBuffer(applySolverIntensity);
-		p.swapBuffers();
-	}
-	for (auto& p : dummyProjectors)
-	{
-		p.presentToBackBuffer(applySolverIntensity);
-		p.swapBuffers();
-	}
-}
-
-void projector_manager::renderProjectorFrusta(ldr_render_pass* renderPass)
-{
-	static const vec4 colorTable[] =
-	{
-		vec4(1.f, 0.f, 0.f, 1.f),
-		vec4(0.f, 1.f, 0.f, 1.f),
-		vec4(0.f, 0.f, 1.f, 1.f),
-		vec4(1.f, 1.f, 0.f, 1.f),
-		vec4(0.f, 1.f, 1.f, 1.f),
-		vec4(1.f, 0.f, 1.f, 1.f),
-	};
-
-	uint32 colorIndex = 0;
-	for (auto& p : physicalProjectors)
-	{
-		if (p.active())
-		{
-			renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
-		}
-	}
-	for (auto& p : dummyProjectors)
-	{
-		if (p.active())
-		{
-			renderCameraFrustum(p.camera, colorTable[colorIndex++ % arraysize(colorTable)], renderPass, 4.f);
-		}
-	}
-}
-
-void projector_manager::addDummyProjector()
-{
-	static const vec3 possiblePositions[] =
-	{
-		vec3(0.5f, 1.f, 2.1f),
-		vec3(-0.5f, 1.f, 2.1f),
-	};
-
-	static const quat possibleRotations[] =
-	{
-		quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)),
-		quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)),
-	};
-
-	uint32 index = (uint32)dummyProjectors.size();
-	if (index < arraysize(possiblePositions))
-	{
-		dummyProjectors.emplace_back("Dummy " + std::to_string(dummyProjectors.size()), possiblePositions[index], possibleRotations[index], 640, 480, camera_intrinsics{ 400.f, 400.f, 320.f, 240.f });
-	}
 }
 

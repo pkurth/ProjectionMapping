@@ -42,7 +42,7 @@ private:
 		ref<dx_texture> output,
 		sharpen_settings sharpenSettings);
 
-	const opaque_render_pass* opaqueRenderPass;
+	const opaque_render_pass* opaqueRenderPass = 0;
 
 
 	ref<dx_texture> hdrColorTexture;
@@ -60,6 +60,5 @@ private:
 	camera_cb viewerCamera;
 	directional_light_cb sun;
 
-	friend struct projector_base;
 	friend struct projector_manager;
 };

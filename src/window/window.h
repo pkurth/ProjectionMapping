@@ -27,8 +27,11 @@ struct custom_window_style
 struct win32_window
 {
 	win32_window() = default;
-	win32_window(win32_window&) = delete;
+	win32_window(const win32_window&) = delete;
 	win32_window(win32_window&& o);
+
+	win32_window& operator=(const win32_window&) = delete;
+	win32_window& operator=(win32_window&& o);
 
 	bool initialize(const TCHAR* name, uint32 clientWidth, uint32 clientHeight, bool visible = true, bool disableResizing = false);
 	virtual void shutdown();
@@ -58,6 +61,10 @@ struct win32_window
 	uint32 clientWidth, clientHeight;
 	HWND windowHandle = 0;
 	bool open = false;
+	bool fullscreen = false;
+	bool visible = false;
+
+	static std::vector<struct monitor_info> allConnectedMonitors;
 
 protected:
 	// Internal callbacks.
@@ -66,9 +73,6 @@ protected:
 	virtual void onWindowDisplayChange() {}
 
 	WINDOWPLACEMENT windowPosition;
-
-	bool fullscreen = false;
-	bool visible = false;
 
 	bool customWindowStyle = false;
 	custom_window_style style;
@@ -96,6 +100,7 @@ struct monitor_info
 	// This is specific for the actual physical monitor / projector.
 	std::string name;
 	std::string uniqueID;
+	std::string description;
 
 	// This can change from run to run!
 	int screenID;
