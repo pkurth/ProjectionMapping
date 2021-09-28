@@ -1110,12 +1110,14 @@ void gaussianBlur(dx_command_list* cl,
 	}
 }
 
-void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 numIterations)
+void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
 {
 	DX_PROFILE_BLOCK(cl, "Dilate");
 
 	assert(inputOutput->width == temp->width);
 	assert(inputOutput->height == temp->height);
+
+	radius = min(radius, DILATION_MAX_RADIUS);
 
 	for (uint32 i = 0; i < numIterations; ++i)
 	{
@@ -1127,6 +1129,7 @@ void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> te
 			cl->setPipelineState(*dilationVerticalPipeline.pipeline);
 			cl->setComputeRootSignature(*dilationVerticalPipeline.rootSignature);
 
+			cl->setCompute32BitConstants(DILATION_RS_CB, radius);
 			cl->setDescriptorHeapUAV(DILATION_RS_TEXTURES, 0, temp);
 			cl->setDescriptorHeapSRV(DILATION_RS_TEXTURES, 1, inputOutput);
 
@@ -1143,7 +1146,8 @@ void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> te
 			
 			cl->setPipelineState(*dilationHorizontalPipeline.pipeline);
 			cl->setComputeRootSignature(*dilationHorizontalPipeline.rootSignature);
-			
+
+			cl->setCompute32BitConstants(DILATION_RS_CB, radius);
 			cl->setDescriptorHeapUAV(DILATION_RS_TEXTURES, 0, inputOutput);
 			cl->setDescriptorHeapSRV(DILATION_RS_TEXTURES, 1, temp);
 			

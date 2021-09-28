@@ -33,6 +33,7 @@ struct projector_renderer
 
 
 	static inline float depthDiscontinuityThreshold = 0.2f;
+	static inline uint32 depthDiscontinuityDilateRadius = 4;
 
 private:
 

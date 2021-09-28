@@ -180,7 +180,7 @@ void gaussianBlur(dx_command_list* cl,
 void dilate(dx_command_list* cl,
 	ref<dx_texture> inputOutput,				// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> temp,						// UNORDERED_ACCESS
-	uint32 numIterations = 1);
+	uint32 radius, uint32 numIterations = 1);
 
 void depthSobel(dx_command_list* cl,
 	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE

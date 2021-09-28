@@ -109,15 +109,22 @@ struct gaussian_blur_cb
 // DILATION
 // ----------------------------------------
 
-#define DILATION_RADIUS 4
+struct dilation_cb
+{
+    uint32 radius;
+};
+
+#define DILATION_MAX_RADIUS 16
 #define DILATION_BLOCK_SIZE 128
 
 #define DILATION_RS \
     "RootFlags(0), " \
+    "RootConstants(b0, num32BitConstants = 1), " \
     "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
 
 
-#define DILATION_RS_TEXTURES     0
+#define DILATION_RS_CB              0
+#define DILATION_RS_TEXTURES        1
 
 
 

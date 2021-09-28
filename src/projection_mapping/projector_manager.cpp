@@ -4,6 +4,8 @@
 #include "core/imgui.h"
 #include "rendering/debug_visualization.h"
 
+#include "post_processing_rs.hlsli"
+
 
 projector_manager::projector_manager(game_scene& scene)
 {
@@ -23,8 +25,14 @@ void projector_manager::updateAndRender()
 {
 	if (ImGui::Begin("Projectors"))
 	{
-		ImGui::Checkbox("Apply solver intensity", &applySolverIntensity);
-		ImGui::SliderFloat("Depth discontinuity threshold", &projector_renderer::depthDiscontinuityThreshold, 0.f, 1.f);
+		if (ImGui::BeginProperties())
+		{
+			ImGui::PropertyCheckbox("Apply solver intensity", applySolverIntensity);
+			ImGui::PropertySlider("Depth discontinuity threshold", projector_renderer::depthDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertySlider("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius, 0, DILATION_MAX_RADIUS);
+
+			ImGui::EndProperties();
+		}
 
 		std::vector<projector_solver_input> solverInput;
 
