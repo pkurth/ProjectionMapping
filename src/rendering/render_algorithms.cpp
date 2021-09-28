@@ -52,6 +52,9 @@ static dx_pipeline gaussianBlur5x5Pipeline;
 static dx_pipeline gaussianBlur9x9Pipeline;
 static dx_pipeline gaussianBlur13x13Pipeline;
 
+static dx_pipeline dilationHorizontalPipeline;
+static dx_pipeline dilationVerticalPipeline;
+
 static dx_pipeline taaPipeline;
 
 static dx_pipeline blitPipeline;
@@ -61,6 +64,8 @@ static dx_pipeline bloomCombinePipeline;
 
 static dx_pipeline tonemapPipeline;
 static dx_pipeline presentPipeline;
+
+static dx_pipeline depthSobelPipeline;
 
 static dx_command_signature rigidDepthPrePassCommandSignature;
 static dx_command_signature animatedDepthPrePassCommandSignature;
@@ -192,6 +197,9 @@ void loadCommonShaders()
 	gaussianBlur9x9Pipeline = createReloadablePipeline("gaussian_blur_9x9_cs");
 	gaussianBlur13x13Pipeline = createReloadablePipeline("gaussian_blur_13x13_cs");
 
+	dilationHorizontalPipeline = createReloadablePipeline("dilation_horizontal_cs");
+	dilationVerticalPipeline = createReloadablePipeline("dilation_vertical_cs");
+
 	taaPipeline = createReloadablePipeline("taa_cs");
 
 	blitPipeline = createReloadablePipeline("blit_cs");
@@ -201,6 +209,8 @@ void loadCommonShaders()
 
 	tonemapPipeline = createReloadablePipeline("tonemap_cs");
 	presentPipeline = createReloadablePipeline("present_cs");
+
+	depthSobelPipeline = createReloadablePipeline("depth_sobel_cs");
 }
 
 void loadRemainingRenderResources()
@@ -1098,6 +1108,67 @@ void gaussianBlur(dx_command_list* cl,
 				.transition(inputOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		}
 	}
+}
+
+void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 numIterations)
+{
+	DX_PROFILE_BLOCK(cl, "Dilate");
+
+	assert(inputOutput->width == temp->width);
+	assert(inputOutput->height == temp->height);
+
+	for (uint32 i = 0; i < numIterations; ++i)
+	{
+		DX_PROFILE_BLOCK(cl, "Iteration");
+
+		{
+			DX_PROFILE_BLOCK(cl, "Vertical");
+
+			cl->setPipelineState(*dilationVerticalPipeline.pipeline);
+			cl->setComputeRootSignature(*dilationVerticalPipeline.rootSignature);
+
+			cl->setDescriptorHeapUAV(DILATION_RS_TEXTURES, 0, temp);
+			cl->setDescriptorHeapSRV(DILATION_RS_TEXTURES, 1, inputOutput);
+
+			cl->dispatch(inputOutput->width, bucketize(inputOutput->height, DILATION_BLOCK_SIZE));
+
+			barrier_batcher(cl)
+				//.uav(temp)
+				.transition(temp, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+				.transition(inputOutput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		}
+
+		{
+			DX_PROFILE_BLOCK(cl, "Horizontal");
+			
+			cl->setPipelineState(*dilationHorizontalPipeline.pipeline);
+			cl->setComputeRootSignature(*dilationHorizontalPipeline.rootSignature);
+			
+			cl->setDescriptorHeapUAV(DILATION_RS_TEXTURES, 0, inputOutput);
+			cl->setDescriptorHeapSRV(DILATION_RS_TEXTURES, 1, temp);
+			
+			cl->dispatch(bucketize(inputOutput->width, DILATION_BLOCK_SIZE), inputOutput->height);
+
+			barrier_batcher(cl)
+				//.uav(inputOutput)
+				.transition(temp, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+				.transition(inputOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		}
+	}
+}
+
+void depthSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, vec4 projectionParams, float threshold)
+{
+	DX_PROFILE_BLOCK(cl, "Depth sobel");
+
+	cl->setPipelineState(*depthSobelPipeline.pipeline);
+	cl->setComputeRootSignature(*depthSobelPipeline.rootSignature);
+
+	cl->setCompute32BitConstants(DEPTH_SOBEL_RS_CB, depth_sobel_cb{ projectionParams, threshold });
+	cl->setDescriptorHeapUAV(DEPTH_SOBEL_RS_TEXTURES, 0, output);
+	cl->setDescriptorHeapSRV(DEPTH_SOBEL_RS_TEXTURES, 1, input);
+
+	cl->dispatch(bucketize(input->width, POST_PROCESSING_BLOCK_SIZE), bucketize(input->height, POST_PROCESSING_BLOCK_SIZE));
 }
 
 void screenSpaceReflections(dx_command_list* cl,

@@ -29,8 +29,10 @@ struct projector_renderer
 	uint32 renderHeight;
 	ref<dx_texture> frameResult;
 
-	static tonemap_settings tonemapSettings;
+	static inline tonemap_settings tonemapSettings;
 
+
+	static inline float depthDiscontinuityThreshold = 0.2f;
 
 private:
 
@@ -50,6 +52,9 @@ private:
 	ref<dx_texture> reflectanceTexture;
 	ref<dx_texture> depthStencilBuffer;
 	ref<dx_texture> solverIntensity;
+
+	ref<dx_texture> depthDiscontinuitiesTexture;
+	ref<dx_texture> depthDilateTempTexture;
 	
 	ref<dx_texture> hdrPostProcessingTexture;
 	ref<dx_texture> ldrPostProcessingTexture;

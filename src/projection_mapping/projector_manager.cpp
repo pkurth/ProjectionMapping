@@ -24,7 +24,7 @@ void projector_manager::updateAndRender()
 	if (ImGui::Begin("Projectors"))
 	{
 		ImGui::Checkbox("Apply solver intensity", &applySolverIntensity);
-
+		ImGui::SliderFloat("Depth discontinuity threshold", &projector_renderer::depthDiscontinuityThreshold, 0.f, 1.f);
 
 		std::vector<projector_solver_input> solverInput;
 
@@ -56,7 +56,8 @@ void projector_manager::updateAndRender()
 
 				solverInput.push_back(si);
 
-				ImGui::Image(projector.renderer.solverIntensity, 400, (uint32)(400 / projector.camera.aspect));
+				//ImGui::Image(projector.renderer.solverIntensity, 400, (uint32)(400 / projector.camera.aspect));
+				ImGui::Image(projector.renderer.depthDiscontinuitiesTexture, 400, (uint32)(400 / projector.camera.aspect));
 			}
 		}
 

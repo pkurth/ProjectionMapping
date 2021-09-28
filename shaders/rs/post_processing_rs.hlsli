@@ -106,6 +106,22 @@ struct gaussian_blur_cb
 
 
 // ----------------------------------------
+// DILATION
+// ----------------------------------------
+
+#define DILATION_RADIUS 4
+#define DILATION_BLOCK_SIZE 128
+
+#define DILATION_RS \
+    "RootFlags(0), " \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
+
+
+#define DILATION_RS_TEXTURES     0
+
+
+
+// ----------------------------------------
 // HIERARCHICAL LINEAR DEPTH
 // ----------------------------------------
 
@@ -246,5 +262,28 @@ struct present_cb
 
 #define PRESENT_RS_CB               0
 #define PRESENT_RS_TEXTURES         1
+
+
+
+
+// ----------------------------------------
+// DEPTH SOBEL
+// ----------------------------------------
+
+struct depth_sobel_cb
+{
+    vec4 projectionParams;
+    float threshold;
+};
+
+#define DEPTH_SOBEL_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=8, b0),"  \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
+
+#define DEPTH_SOBEL_RS_CB           0
+#define DEPTH_SOBEL_RS_TEXTURES     1
+
+
 
 #endif

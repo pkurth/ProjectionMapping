@@ -177,6 +177,16 @@ void gaussianBlur(dx_command_list* cl,
 	ref<dx_texture> temp,						// UNORDERED_ACCESS
 	uint32 inputMip, uint32 outputMip, gaussian_blur_kernel_size kernel, uint32 numIterations = 1);
 
+void dilate(dx_command_list* cl,
+	ref<dx_texture> inputOutput,				// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> temp,						// UNORDERED_ACCESS
+	uint32 numIterations = 1);
+
+void depthSobel(dx_command_list* cl,
+	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> output,						// UNORDERED_ACCESS
+	vec4 projectionParams, float threshold);
+
 void screenSpaceReflections(dx_command_list* cl,
 	ref<dx_texture> hdrInput,					// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> prevFrameHDR,				// NON_PIXEL_SHADER_RESOURCE

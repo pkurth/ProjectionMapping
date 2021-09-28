@@ -7,8 +7,6 @@
 #include "projector_rs.hlsli"
 
 
-tonemap_settings projector_renderer::tonemapSettings;
-
 static dx_pipeline projectorPresentPipeline;
 
 void projector_renderer::initializeCommon()
@@ -44,6 +42,12 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 
 	solverIntensity = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
 	SET_NAME(solverIntensity->resource, "Solver intensity");
+
+	depthDiscontinuitiesTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(depthDiscontinuitiesTexture->resource, "Depth discontinuities");
+
+	depthDilateTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(depthDilateTempTexture->resource, "Depth dilate temp");
 }
 
 void projector_renderer::shutdown()
@@ -59,6 +63,7 @@ void projector_renderer::shutdown()
 	ldrPostProcessingTexture = 0;
 
 	solverIntensity = 0;
+	depthDiscontinuitiesTexture = 0;
 
 	environment = 0;
 }
@@ -90,6 +95,7 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(frameResult, renderWidth, renderHeight);
 
 		resizeTexture(solverIntensity, renderWidth, renderHeight);
+		resizeTexture(depthDiscontinuitiesTexture, renderWidth, renderHeight);
 	}
 }
 
@@ -184,15 +190,26 @@ void projector_renderer::endFrame()
 
 	barrier_batcher(cl)
 		//.uav(hdrPostProcessingTexture)
-		.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE); // Will be read by rest of post processing stack. 
+		.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) // Will be read by rest of post processing stack. 
+		.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 
+	depthSobel(cl, depthStencilBuffer, depthDiscontinuitiesTexture, projectorCamera.projectionParams, depthDiscontinuityThreshold);
+
+	barrier_batcher(cl)
+		//.uav(depthDiscontinuitiesTexture)
+		.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+	dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture);
+	gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_5x5);
 
 	ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
 
 	tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
 
 	barrier_batcher(cl)
+		.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE)
+		.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 		.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
 		.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 		.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)

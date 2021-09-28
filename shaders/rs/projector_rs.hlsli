@@ -52,7 +52,6 @@ struct projector_solver_cb
 
 
 
-
 #define present_sdr 0
 #define present_hdr 1
 
