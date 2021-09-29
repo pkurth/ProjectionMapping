@@ -342,9 +342,9 @@ void application::update(const user_input& input, float dt)
 						}
 						else
 						{
-							if (visualizeProjIntensities)
+							if (true)
 							{
-								visualizeProjectorIntensities(&opaqueRenderPass, m, mesh.vertexBuffer, mesh.indexBuffer, submesh);
+								projectorManager->solver.simulateProjectors(&opaqueRenderPass, m, mesh.vertexBuffer, mesh.indexBuffer, submesh, (uint32)entityHandle);
 							}
 							else
 							{

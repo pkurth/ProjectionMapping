@@ -12,12 +12,18 @@ struct projector_cb
     vec4 position;
     vec2 screenDims;
     vec2 invScreenDims;
-    vec4 padding[2];
+    vec4 projectionParams;
+    vec4 forward;
 };
 
 struct projector_solver_cb
 {
     uint32 currentIndex;
+    uint32 numProjectors;
+};
+
+struct projector_visualization_cb
+{
     uint32 numProjectors;
 };
 
@@ -50,6 +56,40 @@ struct projector_solver_cb
 
 
 
+#define PROJECTOR_SIMULATION_RS \
+    "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
+    "DENY_HULL_SHADER_ROOT_ACCESS |" \
+    "DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
+    "DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
+    "RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_VERTEX), " \
+    "RootConstants(num32BitConstants=1, b0, space=1, visibility=SHADER_VISIBILITY_PIXEL),"  \
+    "SRV(t0, space=0), " \
+    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "StaticSampler(s0," \
+            "addressU = TEXTURE_ADDRESS_BORDER," \
+            "addressV = TEXTURE_ADDRESS_BORDER," \
+            "addressW = TEXTURE_ADDRESS_BORDER," \
+            "filter = FILTER_MIN_MAG_MIP_LINEAR," \
+            "borderColor = STATIC_BORDER_COLOR_OPAQUE_BLACK)"
+
+
+#define PROJECTOR_SIMULATION_RS_TRANSFORM           0
+#define PROJECTOR_SIMULATION_RS_CB                  1
+#define PROJECTOR_SIMULATION_RS_VIEWPROJS           2
+#define PROJECTOR_SIMULATION_RS_RENDER_RESULTS      3
+#define PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES      4
+#define PROJECTOR_SIMULATION_RS_INTENSITIES         5
+
+
+
+
+
+
+
+
+
 
 
 #define present_sdr 0
@@ -73,12 +113,6 @@ struct present_cb
 #define PROJECTOR_PRESENT_RS_TEXTURES         1
 
 
-
-
-struct projector_visualization_cb
-{
-    uint32 numProjectors;
-};
 
 
 #define PROJECTOR_INTENSITY_VISUALIZATION_RS \

@@ -3,18 +3,17 @@
 #include "core/camera.h"
 #include "window/dx_window.h"
 #include "projector_renderer.h"
-#include "projector_solver.h"
 
 
 struct projector_component
 {
 	projector_component()
 	{
-		uint32 width = 640;
-		uint32 height = 480;
+		uint32 width = 1280;
+		uint32 height = 800;
 		window.initialize(TEXT("Projector"), width, height);
 
-		camera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{ 400.f, 400.f, width * 0.5f, height * 0.5f }, 0.01f);
+		camera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{700.f, 700.f, width * 0.5f, height * 0.5f }, 0.01f);
 
 		static const vec4 colorTable[] =
 		{

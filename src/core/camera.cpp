@@ -227,6 +227,11 @@ camera_frustum_corners render_camera::getViewSpaceFrustumCorners(float alternati
 	return result;
 }
 
+vec4 render_camera::getShaderProjectionParams() const
+{
+	return vec4(nearPlane, farPlane, farPlane / nearPlane, 1.f - farPlane / nearPlane);
+}
+
 render_camera render_camera::getJitteredVersion(vec2 offset) const
 {
 #if 0

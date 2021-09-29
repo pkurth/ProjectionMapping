@@ -30,8 +30,6 @@ void main(cs_input IN)
 		return;
 	}
 
-	float2 uv = (float2(texCoord) + float2(0.5f, 0.5f)) * invDimensions;
-
 	uint numProjectors = cb.numProjectors;
 	float depth = depthTextures[index][texCoord];
 	if (depth == 1.f)
@@ -39,6 +37,8 @@ void main(cs_input IN)
 		outIntensities[index][texCoord] = 0.f;
 		return;
 	}
+
+	float2 uv = (float2(texCoord) + float2(0.5f, 0.5f)) * invDimensions;
 
 	float3 worldPosition = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));
@@ -62,11 +62,11 @@ void main(cs_input IN)
 			{
 				float3 otherV = normalize(projectors[projIndex].position.xyz - worldPosition);
 				
-				float otherNdotV = saturate(dot(N, otherV)); // Physical intensity.
-				float otherIntensity = intensities[projIndex].SampleLevel(borderSampler, otherUV, 0); // Software intensity.
+				float otherPhysicalIntensity = saturate(dot(N, otherV));
+				float otherSoftwareIntensity = intensities[projIndex].SampleLevel(borderSampler, otherUV, 0);
 
-				intensityByOtherProjectors += otherNdotV * otherIntensity;
-				maxPhysicalIntensityByOtherProjectors = max(maxPhysicalIntensityByOtherProjectors, otherNdotV);
+				intensityByOtherProjectors += otherPhysicalIntensity * otherSoftwareIntensity;
+				maxPhysicalIntensityByOtherProjectors = max(maxPhysicalIntensityByOtherProjectors, otherPhysicalIntensity);
 			}
 		}
 	}

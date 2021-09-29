@@ -130,6 +130,7 @@ struct render_camera
 	float getMinProjectionExtent() const;
 
 
+	vec4 getShaderProjectionParams() const;
 
 	render_camera getJitteredVersion(vec2 offset) const;
 };

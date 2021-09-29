@@ -8,7 +8,7 @@ struct ps_input
 	float3 worldPosition	: POSITION;
 
 	float4 screenPosition	: SV_POSITION;
-	bool isFrontFace : SV_IsFrontFace;
+	bool isFrontFace		: SV_IsFrontFace;
 };
 
 struct ps_output

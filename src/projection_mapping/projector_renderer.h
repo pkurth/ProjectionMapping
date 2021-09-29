@@ -70,4 +70,5 @@ private:
 	directional_light_cb sun;
 
 	friend struct projector_manager;
+	friend struct projector_solver;
 };
