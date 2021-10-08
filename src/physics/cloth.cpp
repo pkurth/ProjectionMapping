@@ -1,20 +1,17 @@
 #include "pch.h"
 #include "cloth.h"
 #include "physics.h"
-#include "core/random.h"
+#include "core/cpu_profiling.h"
 #include "animation/skinning.h"
 #include "dx/dx_context.h"
 
 cloth_component::cloth_component(float width, float height, uint32 gridSizeX, uint32 gridSizeY, float totalMass, float stiffness, float damping, float gravityFactor)
+	: gridSizeX(gridSizeX), gridSizeY(gridSizeY), width(width), height(height)
 {
 	this->gravityFactor = gravityFactor;
 	this->damping = damping;
 	this->totalMass = totalMass;
 	this->stiffness = stiffness;
-	this->gridSizeX = gridSizeX;
-	this->gridSizeY = gridSizeY;
-	this->width = width;
-	this->height = height;
 
 	uint32 numParticles = gridSizeX * gridSizeY;
 
@@ -203,6 +200,8 @@ uint32 cloth_component::getRenderableTriangleCount() const
 
 std::tuple<dx_vertex_buffer_group_view, dx_vertex_buffer_group_view, dx_index_buffer_view, submesh_info> cloth_component::getRenderData()
 {
+	CPU_PROFILE_BLOCK("Get cloth render data");
+
 	uint32 numVertices = getRenderableVertexCount();
 	auto [positionVertexBuffer, positionPtr] = dxContext.createDynamicVertexBuffer(sizeof(vec3), numVertices);
 	memcpy(positionPtr, positions.data(), numVertices * sizeof(vec3));
@@ -228,6 +227,8 @@ struct cloth_constraint_temp
 
 void cloth_component::simulate(uint32 velocityIterations, uint32 positionIterations, uint32 driftIterations, float dt)
 {
+	CPU_PROFILE_BLOCK("Simulate cloth");
+
 	float gravityVelocity = GRAVITY * dt * gravityFactor;
 	uint32 numParticles = gridSizeX * gridSizeY;
 

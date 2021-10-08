@@ -4,51 +4,21 @@
 #include "physics.h"
 
 struct collider_union;
-struct rigid_body_global_state;
 struct broadphase_collision;
 
 struct contact_info
 {
-	vec3 point; // In world space.
+	vec3 point;
 	float penetrationDepth;
 };
 
-struct contact_manifold
+struct collision_contact
 {
-	contact_info contacts[4];
-
-	vec3 collisionNormal; // From a to b.
-	vec3 collisionTangent;
-	vec3 collisionBitangent;
-	uint32 numContacts;
-
-	uint16 colliderA;
-	uint16 colliderB;
-};
-
-struct collision_point
-{
-	vec3 relGlobalAnchorA;
-	vec3 relGlobalAnchorB;
-	vec3 tangent;
-
-	float impulseInNormalDir;
-	float impulseInTangentDir;
-	float effectiveMassInNormalDir;
-	float effectiveMassInTangentDir;
-	float bias;
-};
-
-struct collision_constraint
-{
-	contact_manifold contact;
-
-	collision_point points[4];
-
-	uint16 rbA;
-	uint16 rbB;
-
-	float friction;
+	// Don't change the order here.
+	vec3 point;
+	float penetrationDepth;
+	vec3 normal;
+	uint32 friction_restitution; // Packed as 16 bit int each. The packing makes it more convenient for the SIMD code to load the contact data.
 };
 
 struct non_collision_interaction
@@ -60,14 +30,11 @@ struct non_collision_interaction
 
 struct narrowphase_result
 {
-	uint32 numCollisions;
+	uint32 numContacts;
 	uint32 numNonCollisionInteractions;
 };
 
 narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_collision* possibleCollisions, uint32 numPossibleCollisions,
-	collision_constraint* outCollisionConstraints, non_collision_interaction* outNonCollisionInteractions);
+	collision_contact* outContacts, constraint_body_pair* outBodyPairs, non_collision_interaction* outNonCollisionInteractions);
 
-void finalizeCollisionVelocityConstraintInitialization(collider_union* worldSpaceColliders, rigid_body_global_state* rbs,
-	collision_constraint* collisionConstraints, uint32 numCollisionConstraints, float dt);
 
-void solveCollisionVelocityConstraints(collision_constraint* constraints, uint32 count, rigid_body_global_state* rbs);

@@ -5,6 +5,7 @@
 #include "collision_gjk.h"
 #include "collision_epa.h"
 #include "collision_sat.h"
+#include "core/cpu_profiling.h"
 
 
 #ifndef PHYSICS_ONLY
@@ -30,6 +31,17 @@ static void debugSphere(vec3 position, float radius, vec4 color)
 #endif
 
 
+struct contact_manifold
+{
+	contact_info contacts[4];
+
+	vec3 collisionNormal; // From a to b.
+	uint32 numContacts;
+
+	uint16 colliderA;
+	uint16 colliderB;
+};
+
 static bool intersection(const bounding_oriented_box& a, const bounding_oriented_box& b, contact_manifold& outContact);
 
 struct vertex_penetration_pair
@@ -38,14 +50,14 @@ struct vertex_penetration_pair
 	float penetrationDepth;
 };
 
-static void findStableContactManifold(vertex_penetration_pair* vertices, uint32 numVertices, vec3 normal, vec3 tangent, contact_manifold& outContact)
+static void findStableContactManifold(vertex_penetration_pair* vertices, uint32 numVertices, vec3 normal, contact_manifold& outContact)
 {
 	// http://media.steampowered.com/apps/valve/2015/DirkGregorius_Contacts.pdf slide 103ff.
 
 	if (numVertices > 4)
 	{
 		// Find first vertex along some fixed distance.
-		vec3 searchDir = tangent;
+		vec3 searchDir = getTangent(normal);
 		float bestDistance = dot(searchDir, vertices[0].vertex);
 		uint32 resultIndex = 0;
 		for (uint32 i = 1; i < numVertices; ++i)
@@ -345,7 +357,7 @@ static bool clipPointsAndBuildContact(clipping_polygon& polygon, const vec4* cli
 
 		if (clippedPolygon.numPoints > 0)
 		{
-			findStableContactManifold(clippedPolygon.points, clippedPolygon.numPoints, outContact.collisionNormal, outContact.collisionTangent, outContact);
+			findStableContactManifold(clippedPolygon.points, clippedPolygon.numPoints, outContact.collisionNormal, outContact);
 			return true;
 		}
 	}
@@ -373,7 +385,6 @@ static bool intersection(const bounding_sphere& s1, const bounding_sphere& s2, c
 			outContact.collisionNormal = n / distance;
 		}
 
-		getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 		outContact.numContacts = 1;
 		outContact.contacts[0].penetrationDepth = radiusSum - distance; // Flipped to change sign.
 		assert(outContact.contacts[0].penetrationDepth >= 0.f);
@@ -412,7 +423,6 @@ static bool intersection(const bounding_sphere& s, const bounding_box& a, contac
 		outContact.collisionNormal = n;
 		outContact.contacts[0].penetrationDepth = s.radius - dist; // Flipped to change sign.
 		outContact.contacts[0].point = 0.5f * (p + s.center + n * s.radius);
-		getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 
 		return true;
 	}
@@ -429,8 +439,6 @@ static bool intersection(const bounding_sphere& s, const bounding_oriented_box& 
 	if (intersection(s_, aabb, outContact))
 	{
 		outContact.collisionNormal = o.rotation * outContact.collisionNormal;
-		outContact.collisionTangent = o.rotation * outContact.collisionTangent;
-		outContact.collisionBitangent = o.rotation * outContact.collisionBitangent;
 		outContact.contacts[0].point = o.rotation * (outContact.contacts[0].point - o.center) + o.center;
 		return true;
 	}
@@ -456,7 +464,6 @@ static bool intersection(const bounding_sphere& s, const bounding_hull& h, conta
 	}
 
 	outContact.collisionNormal = epa.normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 1;
 	outContact.contacts[0].penetrationDepth = epa.penetrationDepth;
 	outContact.contacts[0].point = epa.point;
@@ -540,7 +547,6 @@ static bool intersection(const bounding_capsule& a, const bounding_capsule& b, c
 		}
 
 		outContact.collisionNormal = normal;
-		getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 		outContact.numContacts = 2;
 		outContact.contacts[0].penetrationDepth = penetration;
 		outContact.contacts[0].point = (contactA0 + contactB0) * 0.5f;
@@ -579,7 +585,6 @@ static bool intersection(const bounding_capsule& c, const bounding_box& a, conta
 	vec3 point = epa.point;
 
 	outContact.collisionNormal = normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 1;
 	outContact.contacts[0].penetrationDepth = epa.penetrationDepth;
 	outContact.contacts[0].point = point;
@@ -635,8 +640,6 @@ static bool intersection(const bounding_capsule& c, const bounding_oriented_box&
 	if (intersection(c_, aabb, outContact))
 	{
 		outContact.collisionNormal = o.rotation * outContact.collisionNormal;
-		outContact.collisionTangent = o.rotation * outContact.collisionTangent;
-		outContact.collisionBitangent = o.rotation * outContact.collisionBitangent;
 
 		for (uint32 i = 0; i < outContact.numContacts; ++i)
 		{
@@ -668,7 +671,6 @@ static bool intersection(const bounding_capsule& c, const bounding_hull& h, cont
 	}
 
 	outContact.collisionNormal = epa.normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 1;
 	outContact.contacts[0].penetrationDepth = epa.penetrationDepth;
 	outContact.contacts[0].point = epa.point;
@@ -701,7 +703,6 @@ static bool intersection(const bounding_box& a, const bounding_box& b, contact_m
 	normal.data[minElement] = s;
 
 	outContact.collisionNormal = normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 4;
 
 	uint32 axis0 = (minElement + 1) % 3;
@@ -775,7 +776,6 @@ static bool intersection(const bounding_box& a, const bounding_hull& h, contact_
 	}
 
 	outContact.collisionNormal = epa.normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 1;
 	outContact.contacts[0].penetrationDepth = epa.penetrationDepth;
 	outContact.contacts[0].point = epa.point;
@@ -1042,7 +1042,6 @@ static bool intersection(const bounding_oriented_box& a, const bounding_oriented
 	// Normal is now in world space and points from a to b.
 
 	outContact.collisionNormal = normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 
 	if (faceCollision)
 	{
@@ -1156,7 +1155,6 @@ static bool intersection(const bounding_oriented_box& o, const bounding_hull& h,
 	}
 
 	outContact.collisionNormal = epa.normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 1;
 	outContact.contacts[0].penetrationDepth = epa.penetrationDepth;
 	outContact.contacts[0].point = epa.point;
@@ -1186,7 +1184,6 @@ static bool intersection(const bounding_hull& a, const bounding_hull& b, contact
 	}
 
 	outContact.collisionNormal = epa.normal;
-	getTangents(outContact.collisionNormal, outContact.collisionTangent, outContact.collisionBitangent);
 	outContact.numContacts = 1;
 	outContact.contacts[0].penetrationDepth = epa.penetrationDepth;
 	outContact.contacts[0].point = epa.point;
@@ -1365,9 +1362,11 @@ static bool overlapCheck(collider_union* worldSpaceColliders, broadphase_collisi
 }
 
 narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_collision* possibleCollisions, uint32 numPossibleCollisions,
-	collision_constraint* outCollisionConstraints, non_collision_interaction* outNonCollisionInteractions)
+	collision_contact* outContacts, constraint_body_pair* outBodyPairs, non_collision_interaction* outNonCollisionInteractions)
 {
-	uint32 numCollisions = 0;
+	CPU_PROFILE_BLOCK("Narrow phase");
+
+	uint32 numContacts = 0;
 	uint32 numNonCollisionInteractions = 0;
 
 	for (uint32 i = 0; i < numPossibleCollisions; ++i)
@@ -1398,172 +1397,43 @@ narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_c
 		}
 		else
 		{
-			contact_manifold& contact = outCollisionConstraints[numCollisions].contact;
-			numCollisions += collisionCheck(worldSpaceColliders, overlap, contact);
-		}
-	}
-
-	return narrowphase_result{ numCollisions, numNonCollisionInteractions };
-}
-
-static rigid_body_global_state dummyRigidBody =
-{
-	quat::identity,
-	vec3(0.f),
-	vec3(0.f),
-	vec3(0.f),
-	mat3::zero,
-	0.f,
-};
-
-void finalizeCollisionVelocityConstraintInitialization(collider_union* worldSpaceColliders, rigid_body_global_state* rbs, 
-	collision_constraint* collisionConstraints, uint32 numCollisionConstraints, float dt)
-{
-	for (uint32 collisionID = 0; collisionID < numCollisionConstraints; ++collisionID)
-	{
-		collision_constraint& c = collisionConstraints[collisionID];
-		contact_manifold& contact = c.contact;
-
-		collider_union* colliderA = worldSpaceColliders + contact.colliderA;
-		collider_union* colliderB = worldSpaceColliders + contact.colliderB;
-
-		collider_properties propsA = colliderA->properties;
-		collider_properties propsB = colliderB->properties;
-
-		c.friction = sqrt(propsA.friction * propsB.friction);
-		c.rbA = (colliderA->objectType == physics_object_type_rigid_body) ? colliderA->objectIndex : UINT16_MAX;
-		c.rbB = (colliderB->objectType == physics_object_type_rigid_body) ? colliderB->objectIndex : UINT16_MAX;
-
-		auto& rbA = c.rbA != UINT16_MAX ? rbs[c.rbA] : dummyRigidBody;
-		auto& rbB = c.rbB != UINT16_MAX ? rbs[c.rbB] : dummyRigidBody;
-
-		float restitution = max(propsA.restitution, propsB.restitution);
-
-		for (uint32 contactID = 0; contactID < contact.numContacts; ++contactID)
-		{
-			collision_point& point = c.points[contactID];
-			contact_info& contact = c.contact.contacts[contactID];
-
-			point.impulseInNormalDir = 0.f;
-			point.impulseInTangentDir = 0.f;
-
-			point.relGlobalAnchorA = contact.point - rbA.position;
-			point.relGlobalAnchorB = contact.point - rbB.position;
-
-			vec3 anchorVelocityA = rbA.linearVelocity + cross(rbA.angularVelocity, point.relGlobalAnchorA);
-			vec3 anchorVelocityB = rbB.linearVelocity + cross(rbB.angularVelocity, point.relGlobalAnchorB);
-
-			vec3 relVelocity = anchorVelocityB - anchorVelocityA;
-			point.tangent = relVelocity - dot(c.contact.collisionNormal, relVelocity) * c.contact.collisionNormal;
-			if (squaredLength(point.tangent) > 0.f)
+			contact_manifold contact;
+			if (collisionCheck(worldSpaceColliders, overlap, contact))
 			{
-				point.tangent = normalize(point.tangent);
-			}
-			else
-			{
-				point.tangent = vec3(-1.f, 0.f, 0.f);
-			}
+				collider_union* colliderA = worldSpaceColliders + contact.colliderA;
+				collider_union* colliderB = worldSpaceColliders + contact.colliderB;
 
-			{ // Tangent direction.
-				vec3 crAt = cross(point.relGlobalAnchorA, point.tangent);
-				vec3 crBt = cross(point.relGlobalAnchorB, point.tangent);
-				float invMassInTangentDir = rbA.invMass + dot(crAt, rbA.invInertia * crAt)
-					+ rbB.invMass + dot(crBt, rbB.invInertia * crBt);
-				point.effectiveMassInTangentDir = (invMassInTangentDir != 0.f) ? (1.f / invMassInTangentDir) : 0.f;
-			}
+				uint16 rbA = colliderA->objectIndex;
+				uint16 rbB = colliderB->objectIndex;
 
-			{ // Normal direction.
-				vec3 crAn = cross(point.relGlobalAnchorA, c.contact.collisionNormal);
-				vec3 crBn = cross(point.relGlobalAnchorB, c.contact.collisionNormal);
-				float invMassInNormalDir = rbA.invMass + dot(crAn, rbA.invInertia * crAn)
-					+ rbB.invMass + dot(crBn, rbB.invInertia * crBn);
-				point.effectiveMassInNormalDir = (invMassInNormalDir != 0.f) ? (1.f / invMassInNormalDir) : 0.f;
+				collider_properties propsA = colliderA->properties;
+				collider_properties propsB = colliderB->properties;
 
-				point.bias = 0.f;
+				float friction = clamp01(sqrt(propsA.friction * propsB.friction));
+				float restitution = clamp01(max(propsA.restitution, propsB.restitution));
 
-				if (dt > 1e-5f)
+				uint32 friction_restitution = ((uint32)(friction * 0xFFFF) << 16) | (uint32)(restitution * 0xFFFF);
+
+				for (uint32 contactIndex = 0; contactIndex < contact.numContacts; ++contactIndex)
 				{
-					float vRel = dot(c.contact.collisionNormal, anchorVelocityB - anchorVelocityA);
-					const float slop = -0.001f;
-					if (-contact.penetrationDepth < slop && vRel < 0.f)
-					{
-						point.bias = -restitution * vRel - 0.1f * (-contact.penetrationDepth - slop) / dt;
-					}
+					collision_contact& out = outContacts[numContacts];
+					constraint_body_pair& pair = outBodyPairs[numContacts];
+
+					out.normal = contact.collisionNormal;
+					out.penetrationDepth = contact.contacts[contactIndex].penetrationDepth;
+					out.point = contact.contacts[contactIndex].point;
+					out.friction_restitution = friction_restitution;
+
+					pair.rbA = rbA;
+					pair.rbB = rbB;
+
+					++numContacts;
 				}
 			}
 		}
 	}
-}
 
-void solveCollisionVelocityConstraints(collision_constraint* constraints, uint32 count, rigid_body_global_state* rbs)
-{
-	for (uint32 i = 0; i < count; ++i)
-	{
-		collision_constraint& c = constraints[i];
-
-		auto& rbA = c.rbA != UINT16_MAX ? rbs[c.rbA] : dummyRigidBody;
-		auto& rbB = c.rbB != UINT16_MAX ? rbs[c.rbB] : dummyRigidBody;
-
-		if (rbA.invMass == 0.f && rbB.invMass == 0.f)
-		{
-			continue;
-		}
-
-		vec3 vA = rbA.linearVelocity;
-		vec3 wA = rbA.angularVelocity;
-		vec3 vB = rbB.linearVelocity;
-		vec3 wB = rbB.angularVelocity;
-
-		for (uint32 contactID = 0; contactID < c.contact.numContacts; ++contactID)
-		{
-			collision_point& point = c.points[contactID];
-			contact_info& contact = c.contact.contacts[contactID];
-
-			{ // Tangent dir
-				vec3 anchorVelocityA = vA + cross(wA, point.relGlobalAnchorA);
-				vec3 anchorVelocityB = vB + cross(wB, point.relGlobalAnchorB);
-
-				vec3 relVelocity = anchorVelocityB - anchorVelocityA;
-				float vt = dot(relVelocity, point.tangent);
-				float lambda = -point.effectiveMassInTangentDir * vt;
-
-				float maxFriction = c.friction * point.impulseInNormalDir;
-				assert(maxFriction >= 0.f);
-				float newImpulse = clamp(point.impulseInTangentDir + lambda, -maxFriction, maxFriction);
-				lambda = newImpulse - point.impulseInTangentDir;
-				point.impulseInTangentDir = newImpulse;
-
-				vec3 P = lambda * point.tangent;
-				vA -= rbA.invMass * P;
-				wA -= rbA.invInertia * cross(point.relGlobalAnchorA, P);
-				vB += rbB.invMass * P;
-				wB += rbB.invInertia * cross(point.relGlobalAnchorB, P);
-			}
-
-			{ // Normal dir
-				vec3 anchorVelocityA = vA + cross(wA, point.relGlobalAnchorA);
-				vec3 anchorVelocityB = vB + cross(wB, point.relGlobalAnchorB);
-
-				vec3 relVelocity = anchorVelocityB - anchorVelocityA;
-				float vn = dot(relVelocity, c.contact.collisionNormal);
-				float lambda = -point.effectiveMassInNormalDir * (vn - point.bias);
-				float impulse = max(point.impulseInNormalDir + lambda, 0.f);
-				lambda = impulse - point.impulseInNormalDir;
-				point.impulseInNormalDir = impulse;
-
-				vec3 P = lambda * c.contact.collisionNormal;
-				vA -= rbA.invMass * P;
-				wA -= rbA.invInertia * cross(point.relGlobalAnchorA, P);
-				vB += rbB.invMass * P;
-				wB += rbB.invInertia * cross(point.relGlobalAnchorB, P);
-			}
-		}
-
-		rbA.linearVelocity = vA;
-		rbA.angularVelocity = wA;
-		rbB.linearVelocity = vB;
-		rbB.angularVelocity = wB;
-	}
+	return narrowphase_result{ numContacts, numNonCollisionInteractions };
 }
 
 #ifndef PHYSICS_ONLY

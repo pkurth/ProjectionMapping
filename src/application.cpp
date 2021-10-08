@@ -116,6 +116,9 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		.addComponent<position_rotation_component>(vec3(-0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
 		.addComponent<projector_component>();
 
+
+
+	stackArena.initialize();
 }
 
 void application::resetRenderPasses()
@@ -167,7 +170,7 @@ void application::submitRenderPasses(uint32 numSpotLightShadowPasses, uint32 num
 
 void application::update(const user_input& input, float dt)
 {
-	//stepLocomotionEval();
+	stackArena.reset();
 
 	resetRenderPasses();
 
@@ -175,7 +178,7 @@ void application::update(const user_input& input, float dt)
 
 	scene_entity selectedEntity = editor.selectedEntity;
 
-	physicsStep(scene, dt);
+	physicsStep(scene, stackArena, dt);
 
 
 	scene.sun.updateMatrices(scene.camera);

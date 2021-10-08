@@ -28,7 +28,7 @@ struct win32_window
 {
 	win32_window() = default;
 	win32_window(const win32_window&) = delete;
-	win32_window(win32_window&& o);
+	win32_window(win32_window&& o) noexcept;
 
 	win32_window& operator=(const win32_window&) = delete;
 	win32_window& operator=(win32_window&& o);

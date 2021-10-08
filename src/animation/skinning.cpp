@@ -143,17 +143,18 @@ uint64 performSkinning()
 {
 	bool result = 0;
 
+	// TODO: We currently make no attempt to ensure that all draw calls have actually been written completely, if executed on another thread. 
 	if (numCalls > 0 || numClothCalls > 0)
 	{
 		//dx_command_list* cl = dxContext.getFreeComputeCommandList(true);
 		dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
 		{
-			DX_PROFILE_BLOCK(cl, "Skinning");
+			PROFILE_ALL(cl, "Skinning");
 
 			if (numCalls)
 			{
-				DX_PROFILE_BLOCK(cl, "Skeletal");
+				PROFILE_ALL(cl, "Skeletal");
 
 				uint32 matrixOffset = dxContext.bufferedFrameID * MAX_NUM_SKINNING_MATRICES_PER_FRAME;
 
@@ -180,7 +181,7 @@ uint64 performSkinning()
 			}
 			if (numClothCalls)
 			{
-				DX_PROFILE_BLOCK(cl, "Cloth");
+				PROFILE_ALL(cl, "Cloth");
 
 				cl->setPipelineState(*clothSkinningPipeline.pipeline);
 				cl->setComputeRootSignature(*clothSkinningPipeline.rootSignature);

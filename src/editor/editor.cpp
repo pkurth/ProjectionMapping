@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "editor.h"
 #include "core/imgui.h"
+#include "core/cpu_profiling.h"
 #include "dx/dx_profiling.h"
 #include "scene/components.h"
 #include "animation/animation.h"
@@ -80,6 +81,8 @@ void scene_editor::initialize(game_scene* scene, main_renderer* renderer)
 
 bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPass, float dt)
 {
+	CPU_PROFILE_BLOCK("Update editor");
+
 	bool objectDragged = false;
 	objectDragged |= handleUserInput(input, ldrRenderPass, dt);
 	objectDragged |= drawSceneHierarchy();
@@ -156,9 +159,16 @@ void scene_editor::drawMainMenuBar()
 				showDemoWindow = !showDemoWindow;
 			}
 
-			if (ImGui::MenuItem(profilerWindowOpen ? (ICON_FA_CHART_BAR "  Hide GPU profiler") : (ICON_FA_CHART_BAR "  Show GPU profiler"), nullptr, nullptr, ENABLE_DX_PROFILING))
+			ImGui::Separator();
+
+			if (ImGui::MenuItem(dxProfilerWindowOpen ? (ICON_FA_CHART_BAR "  Hide GPU profiler") : (ICON_FA_CHART_BAR "  Show GPU profiler"), nullptr, nullptr, ENABLE_DX_PROFILING))
 			{
-				profilerWindowOpen = !profilerWindowOpen;
+				dxProfilerWindowOpen = !dxProfilerWindowOpen;
+			}
+
+			if (ImGui::MenuItem(cpuProfilerWindowOpen ? (ICON_FA_CHART_LINE "  Hide CPU profiler") : (ICON_FA_CHART_LINE "  Show CPU profiler"), nullptr, nullptr, ENABLE_CPU_PROFILING))
+			{
+				cpuProfilerWindowOpen = !cpuProfilerWindowOpen;
 			}
 
 			ImGui::EndMenu();
@@ -961,6 +971,14 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 				inputCaptured = true;
 				objectMovedByGizmo = true;
 			}
+			else if (input.keyboard[key_ctrl].down && input.keyboard['D'].pressEvent)
+			{
+				// Duplicate entity.
+				scene_entity newEntity = scene->copyEntity(selectedEntity);
+				setSelectedEntity(newEntity);
+				inputCaptured = true;
+				objectMovedByGizmo = true;
+			}
 		}
 	}
 	else
@@ -1324,6 +1342,7 @@ void scene_editor::drawSettings(float dt)
 			dx_memory_usage memoryUsage = dxContext.getMemoryUsage();
 
 			ImGui::PropertyValue("Video memory usage", "%u / %uMB", memoryUsage.currentlyUsed, memoryUsage.available);
+			//ImGui::PropertyValue("Running command lists", "%u", dxContext.renderQueue.numRunningCommandLists);
 
 			ImGui::PropertyDropdown("Aspect ratio", aspectRatioNames, aspect_ratio_mode_count, (uint32&)renderer->aspectRatioMode);
 
@@ -1426,6 +1445,8 @@ void scene_editor::drawSettings(float dt)
 					ImGui::PropertySlider("Cloth drift iterations", physicsSettings.numClothDriftIterations, 0, 10);
 
 					ImGui::PropertySlider("Test force", physicsSettings.testForce, 1.f, 10000.f);
+
+					ImGui::PropertyCheckbox("Use SIMD", physicsSettings.simd);
 
 					ImGui::EndProperties();
 				}

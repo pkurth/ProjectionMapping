@@ -5,12 +5,13 @@
 
 struct rigid_body_global_state
 {
+	// Don't change the order here. It's currently required by the SIMD code.
 	quat rotation;
 	vec3 position;
 	vec3 linearVelocity;
 	vec3 angularVelocity;
-	mat3 invInertia;
 	float invMass;
+	mat3 invInertia;
 };
 
 struct rigid_body_component

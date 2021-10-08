@@ -2,6 +2,7 @@
 #include "render_algorithms.h"
 #include "dx/dx_profiling.h"
 #include "dx/dx_barrier_batcher.h"
+#include "core/cpu_profiling.h"
 
 #include "render_resources.h"
 #include "render_utils.h"
@@ -175,7 +176,7 @@ void loadCommonShaders()
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
 			.renderTargets(0, 0, render_resources::shadowDepthFormat)
-			.depthSettings(false, true)
+			.depthSettings(true, true, D3D12_COMPARISON_FUNC_ALWAYS)
 			.cullingOff();
 
 		shadowMapCopyPipeline = createReloadablePipeline(desc, { "fullscreen_triangle_vs", "shadow_map_copy_ps" });
@@ -248,7 +249,7 @@ static void batchRenderRigidDepthPrepass(dx_command_list* cl,
 	const sort_key_vector<float, static_depth_only_render_command>& commands,
 	const mat4& viewProj, const mat4& prevFrameViewProj)
 {
-	DX_PROFILE_BLOCK(cl, "Batch depth pre-pass");
+	PROFILE_ALL(cl, "Batch depth pre-pass");
 
 	dx_allocation allocation = dxContext.allocateDynamicBuffer(
 		(uint32)(commands.size() * sizeof(indirect_rigid_depth_prepass_command)));
@@ -293,7 +294,7 @@ static void depthPrePassInternal(dx_command_list* cl,
 	// Static.
 	if (staticCommands.size() > 0)
 	{
-		DX_PROFILE_BLOCK(cl, "Static");
+		PROFILE_ALL(cl, "Static");
 
 		for (const auto& dc : staticCommands)
 		{
@@ -309,7 +310,7 @@ static void depthPrePassInternal(dx_command_list* cl,
 	// Dynamic.
 	if (dynamicCommands.size() > 0)
 	{
-		DX_PROFILE_BLOCK(cl, "Dynamic");
+		PROFILE_ALL(cl, "Dynamic");
 
 		for (const auto& dc : dynamicCommands)
 		{
@@ -331,7 +332,7 @@ static void depthPrePassInternal(dx_command_list* cl,
 {
 	if (animatedCommands.size() > 0)
 	{
-		DX_PROFILE_BLOCK(cl, "Animated");
+		PROFILE_ALL(cl, "Animated");
 
 		cl->setPipelineState(*pipeline.pipeline);
 		cl->setGraphicsRootSignature(*pipeline.rootSignature);
@@ -357,19 +358,22 @@ void depthPrePass(dx_command_list* cl,
 	const mat4& viewProj, const mat4& prevFrameViewProj,
 	vec2 jitter, vec2 prevFrameJitter)
 {
-	DX_PROFILE_BLOCK(cl, "Depth pre-pass");
+	if (opaqueRenderPass)
+	{
+		PROFILE_ALL(cl, "Depth pre-pass");
 
-	cl->setRenderTarget(depthOnlyRenderTarget);
-	cl->setViewport(depthOnlyRenderTarget.viewport);
-	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		cl->setRenderTarget(depthOnlyRenderTarget);
+		cl->setViewport(depthOnlyRenderTarget.viewport);
+		cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	depth_only_camera_jitter_cb jitterCB = { jitter, prevFrameJitter };
+		depth_only_camera_jitter_cb jitterCB = { jitter, prevFrameJitter };
 
-	depthPrePassInternal(cl, depthPrePassPipeline, opaqueRenderPass->staticDepthPrepass, opaqueRenderPass->dynamicDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
-	depthPrePassInternal(cl, doubleSidedDepthPrePassPipeline, opaqueRenderPass->staticDoublesidedDepthPrepass, opaqueRenderPass->dynamicDoublesidedDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
+		depthPrePassInternal(cl, depthPrePassPipeline, opaqueRenderPass->staticDepthPrepass, opaqueRenderPass->dynamicDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
+		depthPrePassInternal(cl, doubleSidedDepthPrePassPipeline, opaqueRenderPass->staticDoublesidedDepthPrepass, opaqueRenderPass->dynamicDoublesidedDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
 
-	depthPrePassInternal(cl, animatedDepthPrePassPipeline, opaqueRenderPass->animatedDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
-	depthPrePassInternal(cl, doubleSidedAnimatedDepthPrePassPipeline, opaqueRenderPass->animatedDoublesidedDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
+		depthPrePassInternal(cl, animatedDepthPrePassPipeline, opaqueRenderPass->animatedDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
+		depthPrePassInternal(cl, doubleSidedAnimatedDepthPrePassPipeline, opaqueRenderPass->animatedDoublesidedDepthPrepass, viewProj, prevFrameViewProj, jitterCB);
+	}
 }
 
 void texturedSky(dx_command_list* cl,
@@ -378,7 +382,7 @@ void texturedSky(dx_command_list* cl,
 	ref<dx_texture> sky,
 	float skyIntensity)
 {
-	DX_PROFILE_BLOCK(cl, "Sky");
+	PROFILE_ALL(cl, "Sky");
 
 	cl->setRenderTarget(skyRenderTarget);
 	cl->setViewport(skyRenderTarget.viewport);
@@ -398,7 +402,7 @@ void proceduralSky(dx_command_list* cl,
 	const mat4& proj, const mat4& view,
 	float skyIntensity)
 {
-	DX_PROFILE_BLOCK(cl, "Sky");
+	PROFILE_ALL(cl, "Sky");
 
 	cl->setRenderTarget(skyRenderTarget);
 	cl->setViewport(skyRenderTarget.viewport);
@@ -418,7 +422,7 @@ void sphericalHarmonicsSky(dx_command_list* cl,
 	const ref<dx_buffer>& sh, uint32 shIndex,
 	float skyIntensity)
 {
-	DX_PROFILE_BLOCK(cl, "Sky");
+	PROFILE_ALL(cl, "Sky");
 
 	cl->setRenderTarget(skyRenderTarget);
 	cl->setViewport(skyRenderTarget.viewport);
@@ -438,7 +442,7 @@ void preethamSky(dx_command_list* cl,
 	const mat4& proj, const mat4& view,
 	vec3 sunDirection, float skyIntensity)
 {
-	DX_PROFILE_BLOCK(cl, "Sky");
+	PROFILE_ALL(cl, "Sky");
 
 	cl->setRenderTarget(skyRenderTarget);
 	cl->setViewport(skyRenderTarget.viewport);
@@ -513,7 +517,7 @@ static void sunShadowPassInternal(dx_command_list* cl,
 		return;
 	}
 
-	DX_PROFILE_BLOCK(cl, "Sun geometry");
+	PROFILE_ALL(cl, "Sun");
 
 	for (uint32 passIndex = 0; passIndex < numSunLightShadowRenderPasses; ++passIndex)
 	{
@@ -523,7 +527,7 @@ static void sunShadowPassInternal(dx_command_list* cl,
 		{
 			const sun_cascade_render_pass& cascade = pass->cascades[renderCascadeIndex];
 
-			DX_PROFILE_BLOCK(cl, (renderCascadeIndex == 0) ? "First cascade" : (renderCascadeIndex == 1) ? "Second cascade" : (renderCascadeIndex == 2) ? "Third cascade" : "Fourth cascade");
+			PROFILE_ALL(cl, (renderCascadeIndex == 0) ? "First cascade" : (renderCascadeIndex == 1) ? "Second cascade" : (renderCascadeIndex == 2) ? "Third cascade" : "Fourth cascade");
 
 			shadow_map_viewport vp = cascade.viewport;
 			cl->setViewport(vp.x, vp.y, vp.size, vp.size);
@@ -550,11 +554,11 @@ static void spotShadowPassInternal(dx_command_list* cl,
 		return;
 	}
 
-	DX_PROFILE_BLOCK(cl, "Spot lights geometry");
+	PROFILE_ALL(cl, "Spot lights");
 
 	for (uint32 i = 0; i < numSpotLightShadowRenderPasses; ++i)
 	{
-		DX_PROFILE_BLOCK(cl, "Single light");
+		PROFILE_ALL(cl, "Single light");
 
 		shadow_map_viewport vp = spotLightShadowRenderPasses[i]->viewport;
 		cl->setViewport(vp.x, vp.y, vp.size, vp.size);
@@ -577,15 +581,15 @@ static void pointShadowPassInternal(dx_command_list* cl,
 		return;
 	}
 
-	DX_PROFILE_BLOCK(cl, "Point lights geometry");
+	PROFILE_ALL(cl, "Point lights");
 
 	for (uint32 i = 0; i < numPointLightShadowRenderPasses; ++i)
 	{
-		DX_PROFILE_BLOCK(cl, "Single light");
+		PROFILE_ALL(cl, "Single light");
 
 		for (uint32 v = 0; v < 2; ++v)
 		{
-			DX_PROFILE_BLOCK(cl, (v == 0) ? "First hemisphere" : "Second hemisphere");
+			PROFILE_ALL(cl, (v == 0) ? "First hemisphere" : "Second hemisphere");
 
 			shadow_map_viewport vp = (v == 0) ? pointLightShadowRenderPasses[i]->viewport0 : pointLightShadowRenderPasses[i]->viewport1;
 			cl->setViewport(vp.x, vp.y, vp.size, vp.size);
@@ -607,7 +611,7 @@ void shadowPasses(dx_command_list* cl,
 {
 	if (numSunLightShadowRenderPasses || numSpotLightShadowRenderPasses || numPointLightShadowRenderPasses)
 	{
-		DX_PROFILE_BLOCK(cl, "Shadow map pass");
+		PROFILE_ALL(cl, "Shadow map pass");
 
 		clear_rect clearRects[128];
 		uint32 numClearRects = 0;
@@ -681,7 +685,7 @@ void shadowPasses(dx_command_list* cl,
 
 		if (numCopiesFromStaticCache)
 		{
-			DX_PROFILE_BLOCK(cl, "Copy from static shadow map cache");
+			PROFILE_ALL(cl, "Copy from static shadow map cache");
 			copyShadowMapParts(cl, render_resources::staticShadowMapCache, render_resources::shadowMap, copiesFromStaticCache, numCopiesFromStaticCache);
 		}
 
@@ -702,7 +706,7 @@ void shadowPasses(dx_command_list* cl,
 		cl->setRenderTarget(shadowRenderTarget);
 
 		{
-			DX_PROFILE_BLOCK(cl, "Static geometry");
+			PROFILE_ALL(cl, "Static geometry");
 
 			if (numSunLightShadowRenderPasses || numSpotLightShadowRenderPasses)
 			{
@@ -737,7 +741,7 @@ void shadowPasses(dx_command_list* cl,
 
 		if (numCopiesToStaticCache)
 		{
-			DX_PROFILE_BLOCK(cl, "Copy to static shadow map cache");
+			PROFILE_ALL(cl, "Copy to static shadow map cache");
 
 			barrier_batcher(cl)
 				.transition(render_resources::shadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
@@ -754,7 +758,7 @@ void shadowPasses(dx_command_list* cl,
 		cl->setRenderTarget(shadowRenderTarget);
 
 		{
-			DX_PROFILE_BLOCK(cl, "Dynamic geometry");
+			PROFILE_ALL(cl, "Dynamic geometry");
 
 			if (numSunLightShadowRenderPasses || numSpotLightShadowRenderPasses)
 			{
@@ -797,7 +801,7 @@ void opaqueLightPass(dx_command_list* cl,
 {
 	if (opaqueRenderPass && opaqueRenderPass->pass.size() > 0)
 	{
-		DX_PROFILE_BLOCK(cl, "Main opaque light pass");
+		PROFILE_ALL(cl, "Main opaque light pass");
 
 		cl->setRenderTarget(renderTarget);
 		cl->setViewport(renderTarget.viewport);
@@ -824,7 +828,7 @@ void transparentLightPass(dx_command_list* cl,
 {
 	if (transparentRenderPass && transparentRenderPass->pass.size() > 0)
 	{
-		DX_PROFILE_BLOCK(cl, "Transparent light pass");
+		PROFILE_ALL(cl, "Transparent light pass");
 
 		cl->setRenderTarget(renderTarget);
 		cl->setViewport(renderTarget.viewport);
@@ -850,81 +854,84 @@ void ldrPass(dx_command_list* cl,
 	const common_material_info& materialInfo,
 	const mat4& viewProj)
 {
-	DX_PROFILE_BLOCK(cl, "LDR pass");
-
-	cl->setRenderTarget(ldrRenderTarget);
-	cl->setViewport(ldrRenderTarget.viewport);
-
-
-	if (ldrRenderPass->ldrPass.size())
+	if (ldrRenderPass)
 	{
-		DX_PROFILE_BLOCK(cl, "LDR Objects");
+		PROFILE_ALL(cl, "LDR pass");
 
-		pipeline_setup_func lastSetupFunc = 0;
+		cl->setRenderTarget(ldrRenderTarget);
+		cl->setViewport(ldrRenderTarget.viewport);
 
-		for (const auto& dc : ldrRenderPass->ldrPass)
+
+		if (ldrRenderPass->ldrPass.size())
 		{
-			if (dc.setup != lastSetupFunc)
+			PROFILE_ALL(cl, "LDR Objects");
+
+			pipeline_setup_func lastSetupFunc = 0;
+
+			for (const auto& dc : ldrRenderPass->ldrPass)
 			{
-				dc.setup(cl, materialInfo);
-				lastSetupFunc = dc.setup;
+				if (dc.setup != lastSetupFunc)
+				{
+					dc.setup(cl, materialInfo);
+					lastSetupFunc = dc.setup;
+				}
+				dc.render(cl, viewProj, dc.data);
 			}
-			dc.render(cl, viewProj, dc.data);
 		}
-	}
 
-	if (ldrRenderPass->overlays.size())
-	{
-		DX_PROFILE_BLOCK(cl, "3D Overlays");
-
-		cl->clearDepth(ldrRenderTarget.dsv);
-
-		pipeline_setup_func lastSetupFunc = 0;
-
-		for (const auto& dc : ldrRenderPass->overlays)
+		if (ldrRenderPass->overlays.size())
 		{
-			if (dc.setup != lastSetupFunc)
+			PROFILE_ALL(cl, "3D Overlays");
+
+			cl->clearDepth(ldrRenderTarget.dsv);
+
+			pipeline_setup_func lastSetupFunc = 0;
+
+			for (const auto& dc : ldrRenderPass->overlays)
 			{
-				dc.setup(cl, materialInfo);
-				lastSetupFunc = dc.setup;
+				if (dc.setup != lastSetupFunc)
+				{
+					dc.setup(cl, materialInfo);
+					lastSetupFunc = dc.setup;
+				}
+				dc.render(cl, viewProj, dc.data);
 			}
-			dc.render(cl, viewProj, dc.data);
 		}
-	}
 
-	if (ldrRenderPass->outlines.size())
-	{
-		DX_PROFILE_BLOCK(cl, "Outlines");
-
-		cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		cl->setStencilReference(stencil_flag_selected_object);
-
-		cl->setPipelineState(*outlineMarkerPipeline.pipeline);
-		cl->setGraphicsRootSignature(*outlineMarkerPipeline.rootSignature);
-
-
-		// Mark objects in stencil.
-		for (const auto& dc : ldrRenderPass->outlines)
+		if (ldrRenderPass->outlines.size())
 		{
-			cl->setGraphics32BitConstants(OUTLINE_RS_MVP, outline_marker_cb{ viewProj * dc.transform });
+			PROFILE_ALL(cl, "Outlines");
 
-			cl->setVertexBuffer(0, dc.vertexBuffer);
-			cl->setIndexBuffer(dc.indexBuffer);
-			cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, dc.submesh.baseVertex, 0);
+			cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			cl->setStencilReference(stencil_flag_selected_object);
+
+			cl->setPipelineState(*outlineMarkerPipeline.pipeline);
+			cl->setGraphicsRootSignature(*outlineMarkerPipeline.rootSignature);
+
+
+			// Mark objects in stencil.
+			for (const auto& dc : ldrRenderPass->outlines)
+			{
+				cl->setGraphics32BitConstants(OUTLINE_RS_MVP, outline_marker_cb{ viewProj * dc.transform });
+
+				cl->setVertexBuffer(0, dc.vertexBuffer);
+				cl->setIndexBuffer(dc.indexBuffer);
+				cl->drawIndexed(dc.submesh.numIndices, 1, dc.submesh.firstIndex, dc.submesh.baseVertex, 0);
+			}
+
+			// Draw outline.
+			cl->transitionBarrier(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_DEPTH_READ);
+
+			cl->setPipelineState(*outlineDrawerPipeline.pipeline);
+			cl->setGraphicsRootSignature(*outlineDrawerPipeline.rootSignature);
+
+			cl->setGraphics32BitConstants(OUTLINE_RS_CB, outline_drawer_cb{ (int)depthStencilBuffer->width, (int)depthStencilBuffer->height });
+			cl->setDescriptorHeapResource(OUTLINE_RS_STENCIL, 0, 1, depthStencilBuffer->stencilSRV);
+
+			cl->drawFullscreenTriangle();
+
+			cl->transitionBarrier(depthStencilBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 		}
-
-		// Draw outline.
-		cl->transitionBarrier(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_DEPTH_READ);
-
-		cl->setPipelineState(*outlineDrawerPipeline.pipeline);
-		cl->setGraphicsRootSignature(*outlineDrawerPipeline.rootSignature);
-
-		cl->setGraphics32BitConstants(OUTLINE_RS_CB, outline_drawer_cb{ (int)depthStencilBuffer->width, (int)depthStencilBuffer->height });
-		cl->setDescriptorHeapResource(OUTLINE_RS_STENCIL, 0, 1, depthStencilBuffer->stencilSRV);
-
-		cl->drawFullscreenTriangle();
-
-		cl->transitionBarrier(depthStencilBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	}
 }
 
@@ -965,11 +972,11 @@ void lightAndDecalCulling(dx_command_list* cl,
 {
 	if (numPointLights || numSpotLights || numDecals)
 	{
-		DX_PROFILE_BLOCK(cl, "Cull lights & decals");
+		PROFILE_ALL(cl, "Cull lights & decals");
 
 		// Tiled frusta.
 		{
-			DX_PROFILE_BLOCK(cl, "Create world space frusta");
+			PROFILE_ALL(cl, "Create world space frusta");
 
 			cl->setPipelineState(*worldSpaceFrustaPipeline.pipeline);
 			cl->setComputeRootSignature(*worldSpaceFrustaPipeline.rootSignature);
@@ -984,7 +991,7 @@ void lightAndDecalCulling(dx_command_list* cl,
 
 		// Culling.
 		{
-			DX_PROFILE_BLOCK(cl, "Sort objects into tiles");
+			PROFILE_ALL(cl, "Sort objects into tiles");
 
 			cl->clearUAV(culling.tiledCullingIndexCounter, 0.f);
 			//cl->uavBarrier(tiledCullingIndexCounter);
@@ -1014,7 +1021,7 @@ void linearDepthPyramid(dx_command_list* cl,
 	ref<dx_texture> linearDepthBuffer,
 	vec4 projectionParams)
 {
-	DX_PROFILE_BLOCK(cl, "Linear depth pyramid");
+	PROFILE_ALL(cl, "Linear depth pyramid");
 
 	cl->setPipelineState(*hierarchicalLinearDepthPipeline.pipeline);
 	cl->setComputeRootSignature(*hierarchicalLinearDepthPipeline.rootSignature);
@@ -1039,7 +1046,7 @@ void gaussianBlur(dx_command_list* cl,
 	ref<dx_texture> temp,
 	uint32 inputMip, uint32 outputMip, gaussian_blur_kernel_size kernel, uint32 numIterations)
 {
-	DX_PROFILE_BLOCK(cl, "Gaussian Blur");
+	PROFILE_ALL(cl, "Gaussian Blur");
 
 	auto& pipeline =
 		(kernel == gaussian_blur_5x5) ? gaussianBlur5x5Pipeline :
@@ -1065,10 +1072,10 @@ void gaussianBlur(dx_command_list* cl,
 
 	for (uint32 i = 0; i < numIterations; ++i)
 	{
-		DX_PROFILE_BLOCK(cl, "Iteration");
+		PROFILE_ALL(cl, "Iteration");
 
 		{
-			DX_PROFILE_BLOCK(cl, "Vertical");
+			PROFILE_ALL(cl, "Vertical");
 
 			dx_cpu_descriptor_handle tempUAV = temp->uavAt(outputMip);
 
@@ -1090,7 +1097,7 @@ void gaussianBlur(dx_command_list* cl,
 		sourceMip = outputMip; // From here on we sample from the output mip.
 
 		{
-			DX_PROFILE_BLOCK(cl, "Horizontal");
+			PROFILE_ALL(cl, "Horizontal");
 
 			dx_cpu_descriptor_handle outputUAV = inputOutput->uavAt(outputMip);
 
@@ -1202,7 +1209,7 @@ void screenSpaceReflections(dx_command_list* cl,
 	ssr_settings settings,
 	dx_dynamic_constant_buffer cameraCBV)
 {
-	DX_PROFILE_BLOCK(cl, "Screen space reflections");
+	PROFILE_ALL(cl, "Screen space reflections");
 
 	uint32 raycastWidth = raycastTexture->width;
 	uint32 raycastHeight = raycastTexture->height;
@@ -1211,7 +1218,7 @@ void screenSpaceReflections(dx_command_list* cl,
 	uint32 resolveHeight = resolveTexture->height;
 
 	{
-		DX_PROFILE_BLOCK(cl, "Raycast");
+		PROFILE_ALL(cl, "Raycast");
 
 		cl->setPipelineState(*ssrRaycastPipeline.pipeline);
 		cl->setComputeRootSignature(*ssrRaycastPipeline.rootSignature);
@@ -1243,7 +1250,7 @@ void screenSpaceReflections(dx_command_list* cl,
 	}
 
 	{
-		DX_PROFILE_BLOCK(cl, "Resolve");
+		PROFILE_ALL(cl, "Resolve");
 
 		cl->setPipelineState(*ssrResolvePipeline.pipeline);
 		cl->setComputeRootSignature(*ssrResolvePipeline.rootSignature);
@@ -1269,7 +1276,7 @@ void screenSpaceReflections(dx_command_list* cl,
 
 
 	{
-		DX_PROFILE_BLOCK(cl, "Temporal");
+		PROFILE_ALL(cl, "Temporal");
 
 		cl->setPipelineState(*ssrTemporalPipeline.pipeline);
 		cl->setComputeRootSignature(*ssrTemporalPipeline.rootSignature);
@@ -1291,7 +1298,7 @@ void screenSpaceReflections(dx_command_list* cl,
 	}
 
 	{
-		DX_PROFILE_BLOCK(cl, "Median Blur");
+		PROFILE_ALL(cl, "Median Blur");
 
 		cl->setPipelineState(*ssrMedianBlurPipeline.pipeline);
 		cl->setComputeRootSignature(*ssrMedianBlurPipeline.rootSignature);
@@ -1318,7 +1325,7 @@ void specularAmbient(dx_command_list* cl,
 	ref<dx_texture> output,
 	dx_dynamic_constant_buffer cameraCBV)
 {
-	DX_PROFILE_BLOCK(cl, "Specular ambient");
+	PROFILE_ALL(cl, "Specular ambient");
 
 	cl->setPipelineState(*specularAmbientPipeline.pipeline);
 	cl->setComputeRootSignature(*specularAmbientPipeline.rootSignature);
@@ -1346,7 +1353,7 @@ void temporalAntiAliasing(dx_command_list* cl,
 	ref<dx_texture> output,
 	vec4 jitteredCameraProjectionParams)
 {
-	DX_PROFILE_BLOCK(cl, "Temporal anti-aliasing");
+	PROFILE_ALL(cl, "Temporal anti-aliasing");
 
 	cl->setPipelineState(*taaPipeline.pipeline);
 	cl->setComputeRootSignature(*taaPipeline.rootSignature);
@@ -1374,7 +1381,7 @@ void downsample(dx_command_list* cl,
 	ref<dx_texture> output,
 	ref<dx_texture> temp)
 {
-	DX_PROFILE_BLOCK(cl, "Downsample");
+	PROFILE_ALL(cl, "Downsample");
 
 	barrier_batcher(cl)
 		.transition(output, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -1398,10 +1405,10 @@ void bloom(dx_command_list* cl,
 	ref<dx_texture> bloomTempTexture,
 	bloom_settings settings)
 {
-	DX_PROFILE_BLOCK(cl, "Bloom");
+	PROFILE_ALL(cl, "Bloom");
 
 	{
-		DX_PROFILE_BLOCK(cl, "Threshold");
+		PROFILE_ALL(cl, "Threshold");
 
 		cl->setPipelineState(*bloomThresholdPipeline.pipeline);
 		cl->setComputeRootSignature(*bloomThresholdPipeline.rootSignature);
@@ -1423,7 +1430,7 @@ void bloom(dx_command_list* cl,
 	}
 
 	{
-		DX_PROFILE_BLOCK(cl, "Combine");
+		PROFILE_ALL(cl, "Combine");
 
 		cl->setPipelineState(*bloomCombinePipeline.pipeline);
 		cl->setComputeRootSignature(*bloomCombinePipeline.rootSignature);
@@ -1448,7 +1455,7 @@ void tonemap(dx_command_list* cl,
 	ref<dx_texture> ldrOutput,
 	const tonemap_settings& settings)
 {
-	DX_PROFILE_BLOCK(cl, "Tonemapping");
+	PROFILE_ALL(cl, "Tonemapping");
 
 	tonemap_cb cb;
 	cb.A = settings.A;
@@ -1489,7 +1496,7 @@ void present(dx_command_list* cl,
 	ref<dx_texture> output,
 	sharpen_settings sharpenSettings)
 {
-	DX_PROFILE_BLOCK(cl, "Present");
+	PROFILE_ALL(cl, "Present");
 
 	uint32 xOffset = (output->width - ldrInput->width) / 2;
 	uint32 yOffset = (output->height - ldrInput->height) / 2;

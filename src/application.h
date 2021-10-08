@@ -46,6 +46,8 @@ private:
 	game_scene scene;
 	scene_editor editor;
 
+	memory_arena stackArena;
+
 
 	uint32 numSpotShadowRenderPasses;
 	uint32 numPointShadowRenderPasses;

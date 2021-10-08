@@ -3,6 +3,7 @@
 #include "collision_broad.h"
 #include "collision_narrow.h"
 #include "geometry/geometry.h"
+#include "core/cpu_profiling.h"
 
 
 extern physics_settings physicsSettings = {};
@@ -438,8 +439,10 @@ void testPhysicsInteraction(game_scene& scene, ray r)
 	}
 }
 
-static void getWorldSpaceColliders(game_scene& scene, bounding_box* outWorldspaceAABBs, collider_union* outWorldSpaceColliders)
+static void getWorldSpaceColliders(game_scene& scene, bounding_box* outWorldspaceAABBs, collider_union* outWorldSpaceColliders, uint16 dummyRigidBodyIndex)
 {
+	CPU_PROFILE_BLOCK("Get world space colliders");
+
 	uint32 pushIndex = 0;
 
 	rigid_body_component* rbBase = scene.raw<rigid_body_component>();
@@ -470,7 +473,7 @@ static void getWorldSpaceColliders(game_scene& scene, bounding_box* outWorldspac
 		}
 		else
 		{
-			col.objectIndex = UINT16_MAX;
+			col.objectIndex = dummyRigidBodyIndex;
 			col.objectType = physics_object_type_none;
 		}
 
@@ -568,8 +571,10 @@ static std::pair<vec3, uint32> getForceFieldStates(game_scene& scene, force_fiel
 	return { globalForceField, numLocalForceFields };
 }
 
-void physicsStep(game_scene& scene, float dt)
+void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 {
+	CPU_PROFILE_BLOCK("Physics step");
+
 	if (physicsSettings.globalTimeScale <= 0.f)
 	{
 		return;
@@ -578,32 +583,41 @@ void physicsStep(game_scene& scene, float dt)
 	dt = min(dt, 1.f / 30.f);
 	dt *= physicsSettings.globalTimeScale;
 
-	// TODO:
-	static broadphase_collision* possibleCollisions = new broadphase_collision[10000];
-	static rigid_body_global_state* rbGlobal = new rigid_body_global_state[1024];
-	static force_field_global_state* ffGlobal = new force_field_global_state[64];
-	static bounding_box* worldSpaceAABBs = new bounding_box[1024];
-	static collider_union* worldSpaceColliders = new collider_union[1024];
-	static collision_constraint* collisionConstraints = new collision_constraint[10000];
-	static non_collision_interaction* nonCollisionInteractions = new non_collision_interaction[1024];
-	
-	static distance_constraint_update* distanceConstraintUpdates = new distance_constraint_update[1024];
-	static ball_joint_constraint_update* ballJointConstraintUpdates = new ball_joint_constraint_update[1024];
-	static hinge_joint_constraint_update* hingeJointConstraintUpdates = new hinge_joint_constraint_update[1024];
-	static cone_twist_constraint_update* coneTwistConstraintUpdates = new cone_twist_constraint_update[1024];
+	uint32 numRigidBodies = scene.numberOfComponentsOfType<rigid_body_component>();
+	uint32 numForceFields = scene.numberOfComponentsOfType<force_field_component>();
+	uint32 numColliders = scene.numberOfComponentsOfType<collider_component>();
 
+	if (numRigidBodies == 0)
+	{
+		return;
+	}
+
+	memory_marker marker = arena.getMarker();
+
+	rigid_body_component* rbBase = scene.raw<rigid_body_component>();
+
+	rigid_body_global_state* rbGlobal = arena.allocate<rigid_body_global_state>(numRigidBodies + 1); // Reserve one slot for dummy.
+	force_field_global_state* ffGlobal = arena.allocate<force_field_global_state>(numForceFields);
+	bounding_box* worldSpaceAABBs = arena.allocate<bounding_box>(numColliders);
+	collider_union* worldSpaceColliders = arena.allocate<collider_union>(numColliders);
+
+	broadphase_collision* possibleCollisions = arena.allocate<broadphase_collision>(numColliders * numColliders); // Conservative estimate.
+
+	uint32 dummyRigidBodyIndex = numRigidBodies;
 
 	// Collision detection.
-	getWorldSpaceColliders(scene, worldSpaceAABBs, worldSpaceColliders);
-	uint32 numPossibleCollisions = broadphase(scene, 0, worldSpaceAABBs, possibleCollisions);
-	narrowphase_result narrowPhaseResult = narrowphase(worldSpaceColliders, possibleCollisions, numPossibleCollisions, collisionConstraints, nonCollisionInteractions);
+	getWorldSpaceColliders(scene, worldSpaceAABBs, worldSpaceColliders, dummyRigidBodyIndex);
+	uint32 numPossibleCollisions = broadphase(scene, 0, worldSpaceAABBs, arena, possibleCollisions);
+	non_collision_interaction* nonCollisionInteractions = arena.allocate<non_collision_interaction>(numPossibleCollisions);
+	collision_contact* contacts = arena.allocate<collision_contact>(numPossibleCollisions * 4); // Each collision can have up to 4 contact points.
+	constraint_body_pair* collisionBodyPairs = arena.allocate<constraint_body_pair>(numPossibleCollisions * 4);
 
+	narrowphase_result narrowPhaseResult = narrowphase(worldSpaceColliders, possibleCollisions, numPossibleCollisions, contacts, collisionBodyPairs, nonCollisionInteractions);
 
 	auto [globalForceField, numLocalForceFields] = getForceFieldStates(scene, ffGlobal);
 
 
 	// Handle non-collision interactions (triggers, force fields etc).
-	rigid_body_component* rbBase = scene.raw<rigid_body_component>();
 
 	for (uint32 i = 0; i < narrowPhaseResult.numNonCollisionInteractions; ++i)
 	{
@@ -621,6 +635,8 @@ void physicsStep(game_scene& scene, float dt)
 	}
 
 
+
+
 	//  Apply global forces (including gravity) and air drag and integrate forces.
 	for (auto [entityHandle, rb, transform] : scene.group<rigid_body_component, transform_component>().each())
 	{
@@ -631,27 +647,81 @@ void physicsStep(game_scene& scene, float dt)
 		rb.globalStateIndex = globalStateIndex;
 	}
 
+	// Kinematic rigid body. This is used in collision constraint solving, when a collider has no rigid body.
+	rbGlobal[dummyRigidBodyIndex] = {
+		quat::identity,
+		vec3(0.f),
+		vec3(0.f),
+		vec3(0.f),
+		0.f,
+		mat3::zero,
+	};
 
-	// Solve constraints.
-	finalizeCollisionVelocityConstraintInitialization(worldSpaceColliders, rbGlobal, collisionConstraints, narrowPhaseResult.numCollisions, dt);
-	
+
+	// Collect constraints.
 	uint32 numDistanceConstraints = scene.numberOfComponentsOfType<distance_constraint>();
 	uint32 numBallJointConstraints = scene.numberOfComponentsOfType<ball_joint_constraint>();
 	uint32 numHingeJointConstraints = scene.numberOfComponentsOfType<hinge_joint_constraint>();
 	uint32 numConeTwistConstraints = scene.numberOfComponentsOfType<cone_twist_constraint>();
 
-	initializeDistanceVelocityConstraints(scene, rbGlobal, scene.raw<distance_constraint>(), distanceConstraintUpdates, numDistanceConstraints, dt);
-	initializeBallJointVelocityConstraints(scene, rbGlobal, scene.raw<ball_joint_constraint>(), ballJointConstraintUpdates, numBallJointConstraints, dt);
-	initializeHingeJointVelocityConstraints(scene, rbGlobal, scene.raw<hinge_joint_constraint>(), hingeJointConstraintUpdates, numHingeJointConstraints, dt);
-	initializeConeTwistVelocityConstraints(scene, rbGlobal, scene.raw<cone_twist_constraint>(), coneTwistConstraintUpdates, numConeTwistConstraints, dt);
+	uint32 numContacts = narrowPhaseResult.numContacts;
 
-	for (uint32 it = 0; it < physicsSettings.numRigidSolverIterations; ++it)
+	distance_constraint* distanceConstraints = scene.raw<distance_constraint>();
+	ball_joint_constraint* ballJointConstraints = scene.raw<ball_joint_constraint>();
+	hinge_joint_constraint* hingeJointConstraints = scene.raw<hinge_joint_constraint>();
+	cone_twist_constraint* coneTwistConstraints = scene.raw<cone_twist_constraint>();
+
+	distance_constraint_update* distanceConstraintUpdates = arena.allocate<distance_constraint_update>(numDistanceConstraints);
+	ball_joint_constraint_update* ballJointConstraintUpdates = arena.allocate<ball_joint_constraint_update>(numBallJointConstraints);
+	hinge_joint_constraint_update* hingeJointConstraintUpdates = arena.allocate<hinge_joint_constraint_update>(numHingeJointConstraints);
+	cone_twist_constraint_update* coneTwistConstraintUpdates = arena.allocate<cone_twist_constraint_update>(numConeTwistConstraints);
+
+	collision_constraint* collisionConstraints;
+	simd_collision_constraint collisionConstraintsSIMD;
+	if (!physicsSettings.simd)
 	{
-		solveDistanceVelocityConstraints(distanceConstraintUpdates, numDistanceConstraints, rbGlobal);
-		solveBallJointVelocityConstraints(ballJointConstraintUpdates, numBallJointConstraints, rbGlobal);
-		solveHingeJointVelocityConstraints(hingeJointConstraintUpdates, numHingeJointConstraints, rbGlobal);
-		solveConeTwistVelocityConstraints(coneTwistConstraintUpdates, numConeTwistConstraints, rbGlobal);
-		solveCollisionVelocityConstraints(collisionConstraints, narrowPhaseResult.numCollisions, rbGlobal);
+		collisionConstraints = arena.allocate<collision_constraint>(numContacts);
+	}
+
+
+	// Solve constraints.
+	{
+		CPU_PROFILE_BLOCK("Initialize constraints");
+
+		if (physicsSettings.simd)
+		{
+			initializeCollisionVelocityConstraintsSIMD(arena, rbGlobal, contacts, collisionBodyPairs, numContacts, dummyRigidBodyIndex, collisionConstraintsSIMD, dt);
+		}
+		else
+		{
+			initializeCollisionVelocityConstraints(rbGlobal, contacts, collisionBodyPairs, collisionConstraints, numContacts, dt);
+		}
+		
+
+		initializeDistanceVelocityConstraints(scene, rbGlobal, distanceConstraints, distanceConstraintUpdates, numDistanceConstraints, dt);
+		initializeBallJointVelocityConstraints(scene, rbGlobal, ballJointConstraints, ballJointConstraintUpdates, numBallJointConstraints, dt);
+		initializeHingeJointVelocityConstraints(scene, rbGlobal, hingeJointConstraints, hingeJointConstraintUpdates, numHingeJointConstraints, dt);
+		initializeConeTwistVelocityConstraints(scene, rbGlobal, coneTwistConstraints, coneTwistConstraintUpdates, numConeTwistConstraints, dt);
+	}
+	{
+		CPU_PROFILE_BLOCK("Solve constraints");
+
+		for (uint32 it = 0; it < physicsSettings.numRigidSolverIterations; ++it)
+		{
+			solveDistanceVelocityConstraints(distanceConstraintUpdates, numDistanceConstraints, rbGlobal);
+			solveBallJointVelocityConstraints(ballJointConstraintUpdates, numBallJointConstraints, rbGlobal);
+			solveHingeJointVelocityConstraints(hingeJointConstraintUpdates, numHingeJointConstraints, rbGlobal);
+			solveConeTwistVelocityConstraints(coneTwistConstraintUpdates, numConeTwistConstraints, rbGlobal);
+
+			if (physicsSettings.simd)
+			{
+				solveCollisionVelocityConstraintsSIMD(collisionConstraintsSIMD, rbGlobal);
+			}
+			else
+			{
+				solveCollisionVelocityConstraints(contacts, collisionConstraints, collisionBodyPairs, numContacts, rbGlobal);
+			}
+		}
 	}
 
 
@@ -670,6 +740,8 @@ void physicsStep(game_scene& scene, float dt)
 		cloth.applyWindForce(globalForceField);
 		cloth.simulate(physicsSettings.numClothVelocityIterations, physicsSettings.numClothPositionIterations, physicsSettings.numClothDriftIterations, dt);
 	}
+
+	arena.resetToMarker(marker);
 }
 
 // This function returns the inertia tensors with respect to the center of gravity, so with a coordinate system centered at the COG.

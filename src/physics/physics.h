@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/math.h"
+#include "core/memory.h"
 #include "bounding_volumes.h"
 #include "scene/scene.h"
 #include "constraints.h"
@@ -214,9 +215,22 @@ struct collider_entity_iterator
 	};
 
 	iterator begin() { return iterator{ firstColliderEntity }; }
-	iterator end() { return iterator{ { entt::entity(entt::null), firstColliderEntity.registry } }; }
+	iterator end() { return iterator{ scene_entity{ entt::entity(entt::null), firstColliderEntity.registry } }; }
 
 	scene_entity firstColliderEntity = {};
+};
+
+struct collider_component_iterator : collider_entity_iterator
+{
+	collider_component_iterator(scene_entity entity) : collider_entity_iterator(entity) {}
+
+	struct iterator : collider_entity_iterator::iterator 
+	{
+		collider_component& operator*() { return entity.getComponent<collider_component>(); }
+	};
+
+	iterator begin() { return iterator{ firstColliderEntity }; }
+	iterator end() { return iterator{ scene_entity{ entt::entity(entt::null), firstColliderEntity.registry } }; }
 };
 
 struct constraint_entity_iterator
@@ -259,9 +273,11 @@ struct physics_settings
 	float testForce = 1000.f;
 
 	float globalTimeScale = 1.f;
+
+	bool simd = true;
 };
 
 extern physics_settings physicsSettings;
 
 void testPhysicsInteraction(game_scene& scene, ray r);
-void physicsStep(game_scene& scene, float dt);
+void physicsStep(game_scene& scene, memory_arena& arena, float dt);

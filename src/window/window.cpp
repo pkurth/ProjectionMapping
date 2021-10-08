@@ -376,6 +376,11 @@ bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clie
 		atLeastOneWindowWasOpened = true;
 	}
 
+	if (!mainWindow)
+	{
+		mainWindow = this;
+	}
+
 	open = true;
 	this->visible = visible;
 	if (visible)
@@ -415,7 +420,7 @@ void win32_window::setFileDropCallback(std::function<void(const fs::path&)> cb)
 	fileDropCallback = cb;
 }
 
-win32_window::win32_window(win32_window&& o)
+win32_window::win32_window(win32_window&& o) noexcept
 {
 	*this = std::move(o);
 }
