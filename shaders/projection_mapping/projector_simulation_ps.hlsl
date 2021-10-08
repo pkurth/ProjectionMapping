@@ -59,12 +59,11 @@ ps_output main(ps_input IN)
 			float distance = length(V);
 			V /= distance;
 
-			float lambertian = saturate(dot(N, V));
-			float attenuation = 1.f;// 1.f / (distance * distance);
+			float angleAttenuation = saturate(dot(N, V));
+			float distanceAttenuation = 1.f;// 1.f / (distance * distance);
+			float physicalIntensity = angleAttenuation * distanceAttenuation;
 
 			float softwareIntensity = intensities[projIndex].SampleLevel(borderSampler, uv, 0);
-
-			float physicalIntensity = lambertian * attenuation;
 
 			float3 renderResult = renderResults[projIndex].SampleLevel(borderSampler, uv, 0).rgb;
 			color += renderResult * physicalIntensity * softwareIntensity;
