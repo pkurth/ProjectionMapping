@@ -32,6 +32,8 @@ void projector_manager::updateAndRender()
 			ImGui::PropertySlider("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius, 0, MORPHOLOGY_MAX_RADIUS);
 			ImGui::PropertyCheckbox("Blur depth discontinuities", projector_renderer::blurDepthDiscontinuities);
 
+			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
+
 			ImGui::EndProperties();
 		}
 

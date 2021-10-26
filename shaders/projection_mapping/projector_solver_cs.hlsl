@@ -17,6 +17,7 @@ RWTexture2D<float> outIntensities[]			: register(u0, space0);
 SamplerState borderSampler					: register(s0);
 
 
+
 [RootSignature(PROJECTOR_SOLVER_RS)]
 [numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
 void main(cs_input IN)
@@ -63,13 +64,14 @@ void main(cs_input IN)
 			float otherDepth = depthTextures[projIndex].SampleLevel(borderSampler, otherUV, 0);
 			if (testDepth <= otherDepth + 0.00001f)
 			{
-				float3 otherV = normalize(projectors[projIndex].position.xyz - worldPosition);
+				float distance = length(projectors[projIndex].position.xyz - worldPosition);
+				float3 V = normalize(projectors[projIndex].position.xyz - worldPosition);
 				
-				float otherPhysicalIntensity = saturate(dot(N, otherV));
-				float otherSoftwareIntensity = intensities[projIndex].SampleLevel(borderSampler, otherUV, 0);
+				float physicalIntensity = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
+				float softwareIntensity = intensities[projIndex].SampleLevel(borderSampler, otherUV, 0);
 
-				intensityByOtherProjectors += otherPhysicalIntensity * otherSoftwareIntensity;
-				maxPhysicalIntensityByOtherProjectors = max(maxPhysicalIntensityByOtherProjectors, otherPhysicalIntensity);
+				intensityByOtherProjectors += physicalIntensity * softwareIntensity;
+				maxPhysicalIntensityByOtherProjectors = max(maxPhysicalIntensityByOtherProjectors, physicalIntensity);
 			}
 		}
 	}
@@ -77,8 +79,9 @@ void main(cs_input IN)
 	const float desiredTotalIntensity = 0.7f;
 	float remainingIntensity = desiredTotalIntensity - intensityByOtherProjectors;
 
+	float distance = length(projectors[index].position.xyz - worldPosition);
 	float3 V = normalize(projectors[index].position.xyz - worldPosition);
-	float possiblePhysicalIntensity = saturate(dot(N, V));
+	float possiblePhysicalIntensity = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
 
 
 	if (possiblePhysicalIntensity > maxPhysicalIntensityByOtherProjectors)

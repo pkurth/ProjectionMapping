@@ -140,6 +140,7 @@ void projector_solver::solve()
 			projector_solver_cb cb;
 			cb.currentIndex = proj;
 			cb.numProjectors = numProjectors;
+			cb.referenceDistance = referenceDistance;
 
 			uint32 width = widths[proj];
 			uint32 height = heights[proj];
@@ -199,7 +200,7 @@ PIPELINE_RENDER_IMPL(visualize_intensities_pipeline)
 	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
 
 	cl->setGraphics32BitConstants(PROJECTOR_INTENSITY_VISUALIZATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
-	cl->setGraphics32BitConstants(PROJECTOR_INTENSITY_VISUALIZATION_RS_CB, solver.numProjectors);
+	cl->setGraphics32BitConstants(PROJECTOR_INTENSITY_VISUALIZATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
 	cl->setRootGraphicsSRV(PROJECTOR_INTENSITY_VISUALIZATION_RS_VIEWPROJS, solver.viewProjsGPUAddress);
 	cl->setGraphicsDescriptorTable(PROJECTOR_INTENSITY_VISUALIZATION_RS_DEPTH_TEXTURES, solver.depthTexturesBaseDescriptor);
 	cl->setGraphicsDescriptorTable(PROJECTOR_INTENSITY_VISUALIZATION_RS_INTENSITIES, solver.intensitiesSRVBaseDescriptor);
@@ -241,7 +242,7 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
 
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
-	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, solver.numProjectors);
+	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
 	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.viewProjsGPUAddress);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_RENDER_RESULTS, solver.linearRenderResultsBaseDescriptor);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES, solver.depthTexturesBaseDescriptor);

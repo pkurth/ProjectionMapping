@@ -20,17 +20,33 @@ struct projector_solver_cb
 {
     uint32 currentIndex;
     uint32 numProjectors;
+    float referenceDistance;
 };
 
 struct projector_visualization_cb
 {
     uint32 numProjectors;
+    float referenceDistance;
 };
+
+#ifdef HLSL
+#define clamp01 saturate
+#endif
+
+static float getAngleAttenuation(vec3 N, vec3 V)
+{
+    return clamp01(dot(N, V));
+}
+
+static float getDistanceAttenuation(float distance, float referenceDistance)
+{
+    return 1.f / pow(2.f, distance - referenceDistance);
+}
 
 
 #define PROJECTOR_SOLVER_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=2, b0),"  \
+    "RootConstants(num32BitConstants=3, b0),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
@@ -64,7 +80,7 @@ struct projector_visualization_cb
     "DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
     "DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
     "RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_VERTEX), " \
-    "RootConstants(num32BitConstants=1, b0, space=1, visibility=SHADER_VISIBILITY_PIXEL),"  \
+    "RootConstants(num32BitConstants=2, b0, space=1, visibility=SHADER_VISIBILITY_PIXEL),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
@@ -123,7 +139,7 @@ struct present_cb
     "DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
     "DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
     "RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_VERTEX), " \
-    "RootConstants(num32BitConstants=1, b0, space=1, visibility=SHADER_VISIBILITY_PIXEL),"  \
+    "RootConstants(num32BitConstants=2, b0, space=1, visibility=SHADER_VISIBILITY_PIXEL),"  \
     "SRV(t0, space=0, visibility=SHADER_VISIBILITY_PIXEL), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE), visibility=SHADER_VISIBILITY_PIXEL ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE), visibility=SHADER_VISIBILITY_PIXEL ), " \

@@ -58,11 +58,8 @@ ps_output main(ps_input IN)
 		{
 			float distance = length(V);
 			V /= distance;
-
-			float angleAttenuation = saturate(dot(N, V));
-			float distanceAttenuation = 1.f;// 1.f / (distance * distance);
-			float physicalIntensity = angleAttenuation * distanceAttenuation;
-
+			
+			float physicalIntensity = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
 			float softwareIntensity = intensities[projIndex].SampleLevel(borderSampler, uv, 0);
 
 			float3 renderResult = renderResults[projIndex].SampleLevel(borderSampler, uv, 0).rgb;

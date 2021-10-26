@@ -1230,7 +1230,7 @@ void scene_editor::drawEntityCreationPopup()
 		if (ImGui::MenuItem("Projector", "B") || ImGui::IsKeyPressed('B'))
 		{
 			auto projector = scene->createEntity("Projector")
-				.addComponent<position_rotation_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f), quat::identity)
+				.addComponent<position_rotation_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -1.f), scene->camera.rotation)
 				.addComponent<projector_component>();
 
 			setSelectedEntity(projector);

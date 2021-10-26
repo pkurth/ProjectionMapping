@@ -15,7 +15,7 @@ struct projector_solver
 	void solve();
 
 	uint32 numIterationsPerFrame = 1;
-
+	float referenceDistance = 2.f;
 
 	void visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass,
 		const mat4& transform,
