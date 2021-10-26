@@ -10,6 +10,7 @@ Texture2D<float4> renderResults[]			: register(t0, space1);
 Texture2D<float2> worldNormals[]			: register(t0, space2);
 Texture2D<float> depthTextures[]			: register(t0, space3);
 Texture2D<float> intensities[]				: register(t0, space4);
+Texture2D<float> masks[]					: register(t0, space5);
 
 RWTexture2D<float> outIntensities[]			: register(u0, space0);
 
@@ -24,19 +25,21 @@ void main(cs_input IN)
 
 	uint2 texCoord = IN.dispatchThreadID.xy;
 	float2 dimensions = projectors[index].screenDims;
-	float2 invDimensions = projectors[index].invScreenDims;
 	if (texCoord.x >= (uint)dimensions.x || texCoord.y >= (uint)dimensions.y)
 	{
 		return;
 	}
 
-	uint numProjectors = cb.numProjectors;
 	float depth = depthTextures[index][texCoord];
 	if (depth == 1.f)
 	{
 		outIntensities[index][texCoord] = 0.f;
 		return;
 	}
+
+	uint numProjectors = cb.numProjectors;
+	float2 invDimensions = projectors[index].invScreenDims;
+
 
 	float2 uv = (float2(texCoord) + float2(0.5f, 0.5f)) * invDimensions;
 
@@ -71,10 +74,12 @@ void main(cs_input IN)
 		}
 	}
 
-	float remainingIntensity = 1.f - intensityByOtherProjectors;
+	const float desiredTotalIntensity = 0.7f;
+	float remainingIntensity = desiredTotalIntensity - intensityByOtherProjectors;
 
 	float3 V = normalize(projectors[index].position.xyz - worldPosition);
 	float possiblePhysicalIntensity = saturate(dot(N, V));
+
 
 	if (possiblePhysicalIntensity > maxPhysicalIntensityByOtherProjectors)
 	{
@@ -82,7 +87,10 @@ void main(cs_input IN)
 		remainingIntensity *= 1.001f;
 	}
 
+
 	float intensity = saturate(remainingIntensity / possiblePhysicalIntensity);
+	//float mask = 1.f - masks[index][texCoord];
+	//intensity *= mask;
 
 	outIntensities[index][texCoord] = intensity;
 }

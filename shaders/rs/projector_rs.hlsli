@@ -36,6 +36,7 @@ struct projector_visualization_cb
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=5, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "StaticSampler(s0," \
             "addressU = TEXTURE_ADDRESS_BORDER," \
@@ -50,7 +51,8 @@ struct projector_visualization_cb
 #define PROJECTOR_SOLVER_RS_WORLD_NORMALS       3
 #define PROJECTOR_SOLVER_RS_DEPTH_TEXTURES      4
 #define PROJECTOR_SOLVER_RS_INTENSITIES         5
-#define PROJECTOR_SOLVER_RS_OUT_INTENSITIES     6
+#define PROJECTOR_SOLVER_RS_MASKS               6
+#define PROJECTOR_SOLVER_RS_OUT_INTENSITIES     7
 
 
 

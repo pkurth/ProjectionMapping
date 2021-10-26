@@ -130,6 +130,7 @@ void projector_solver::solve()
 	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
 	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
 	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_INTENSITIES, intensitiesSRVBaseDescriptor);
+	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
 	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_OUT_INTENSITIES, intensitiesUAVBaseDescriptor);
 
 	for (uint32 iter = 0; iter < numIterationsPerFrame; ++iter)
