@@ -9,15 +9,18 @@ game_scene::game_scene()
 	(void)registry.group<collider_component, sap_endpoint_indirection_component>(); // Colliders and SAP endpoints are always sorted in the same order.
 	(void)registry.group<transform_component, dynamic_transform_component, rigid_body_component>();
 	(void)registry.group<transform_component, rigid_body_component>();
+
+#ifndef PHYSICS_ONLY
 	(void)registry.group<position_component, point_light_component>();
 	(void)registry.group<position_rotation_component, spot_light_component>();
-
-	registry.on_construct<collider_component>().connect<&onColliderAdded>();
-	registry.on_destroy<collider_component>().connect<&onColliderRemoved>();
+#endif
 }
 
 void game_scene::clearAll()
 {
+	void clearBroadphase(game_scene & scene);
+	clearBroadphase(*this);
+
 	deleteAllConstraints(*this);
 	registry.clear();
 }
@@ -33,8 +36,11 @@ scene_entity game_scene::copyEntity(scene_entity src)
 	if (auto* c = src.getComponentIfExists<position_component>()) { dest.addComponent<position_component>(*c); }
 	if (auto* c = src.getComponentIfExists<position_rotation_component>()) { dest.addComponent<position_rotation_component>(*c); }
 	if (auto* c = src.getComponentIfExists<dynamic_transform_component>()) { dest.addComponent<dynamic_transform_component>(*c); }
+
+#ifndef PHYSICS_ONLY
 	if (auto* c = src.getComponentIfExists<point_light_component>()) { dest.addComponent<point_light_component>(*c); }
 	if (auto* c = src.getComponentIfExists<spot_light_component>()) { dest.addComponent<spot_light_component>(*c); }
+#endif
 
 	for (collider_component& collider : collider_component_iterator(src))
 	{
@@ -58,6 +64,8 @@ scene_entity game_scene::copyEntity(scene_entity src)
 
 void game_scene::deleteEntity(scene_entity e)
 {
+	void removeColliderFromBroadphase(scene_entity entity);
+
 	if (physics_reference_component* reference = e.getComponentIfExists<physics_reference_component>())
 	{
 		scene_entity colliderEntity = { reference->firstColliderEntity, &registry };
@@ -65,6 +73,8 @@ void game_scene::deleteEntity(scene_entity e)
 		{
 			collider_component& collider = colliderEntity.getComponent<collider_component>();
 			entt::entity next = collider.nextEntity;
+
+			removeColliderFromBroadphase(colliderEntity);
 		
 			registry.destroy(colliderEntity.handle);
 		

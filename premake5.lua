@@ -232,6 +232,7 @@ project "D3D12ProjectionMapping"
 	}
 
 	vectorextensions "AVX2"
+	floatingpoint "Fast"
 
 	filter "configurations:Debug"
         runtime "Debug"
@@ -247,7 +248,9 @@ project "D3D12ProjectionMapping"
 		defines {
 			"_UNICODE",
 			"UNICODE",
-			"_CRT_SECURE_NO_WARNINGS"
+			"_CRT_SECURE_NO_WARNINGS",
+			"ENABLE_CPU_PROFILING=1",
+			"ENABLE_DX_PROFILING=1",
 		}
 		
 		if turing_or_higher then
@@ -335,4 +338,3 @@ project "D3D12ProjectionMapping"
 			shadertype("Amplification")
 			shadermodel "6.5" -- Required for amplification shaders.
 	end
-

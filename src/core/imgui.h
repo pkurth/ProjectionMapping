@@ -67,6 +67,9 @@ namespace ImGui
 	bool BeginTree(const char* label, bool defaultOpen = false);
 	void EndTree();
 
+	inline void Value(const char* prefix, int64 v) { ImGui::Text("%s: %lld", prefix, v); }
+	inline void Value(const char* prefix, uint64 v) { ImGui::Text("%s: %llu", prefix, v); }
+	inline void Value(const char* prefix, const char* v) { ImGui::Text("%s: %s", prefix, v); }
 
 
 
@@ -74,6 +77,16 @@ namespace ImGui
 	void EndProperties();
 
 	void PropertyValue(const char* label, const char* format, ...);
+
+	inline void PropertyValue(const char* label, bool v) { ImGui::PropertyValue(label, v ? "True" : "False"); }
+	inline void PropertyValue(const char* label, float v, const char* format = "%.3f") { ImGui::PropertyValue(label, format, v); }
+	inline void PropertyValue(const char* label, int32 v, const char* format = "%d") { ImGui::PropertyValue(label, format, v); }
+	inline void PropertyValue(const char* label, uint32 v, const char* format = "%u") { ImGui::PropertyValue(label, format, v); }
+	inline void PropertyValue(const char* label, int64 v, const char* format = "%lld") { ImGui::PropertyValue(label, format, v); }
+	inline void PropertyValue(const char* label, uint64 v, const char* format = "%llu") { ImGui::PropertyValue(label, format, v); }
+	inline void PropertyValue(const char* label, vec2 v, const char* format = "%.3f, %.3f") { ImGui::PropertyValue(label, format, v.x, v.y); }
+	inline void PropertyValue(const char* label, vec3 v, const char* format = "%.3f, %.3f, %.3f") { ImGui::PropertyValue(label, format, v.x, v.y, v.z); }
+	inline void PropertyValue(const char* label, vec4 v, const char* format = "%.3f, %.3f, %.3f, %.3f") { ImGui::PropertyValue(label, format, v.x, v.y, v.z, v.w); }
 
 	bool PropertyCheckbox(const char* label, bool& v);
 

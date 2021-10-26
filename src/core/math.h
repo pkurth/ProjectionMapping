@@ -15,7 +15,9 @@
 #define M_PI_OVER_180 (M_PI / 180.f)
 #define M_180_OVER_PI (180.f / M_PI)
 #define SQRT_PI	1.77245385090f
+#define INV_PI 0.31830988618379f
 #define M_TAU 6.28318530718f
+#define INV_TAU 0.159154943091895335f
 
 #define EPSILON 1e-6f
 
@@ -25,9 +27,9 @@
 static constexpr float lerp(float l, float u, float t) { return l + t * (u - l); }
 static constexpr float inverseLerp(float l, float u, float v) { return (v - l) / (u - l); }
 static constexpr float remap(float v, float oldL, float oldU, float newL, float newU) { return lerp(newL, newU, inverseLerp(oldL, oldU, v)); }
-static constexpr float clamp(float v, float l, float u) { return min(u, max(l, v)); }
-static constexpr uint32 clamp(uint32 v, uint32 l, uint32 u) { return min(u, max(l, v)); }
-static constexpr int32 clamp(int32 v, int32 l, int32 u) { return min(u, max(l, v)); }
+static constexpr float clamp(float v, float l, float u) { float r = max(l, v); r = min(u, r); return r; }
+static constexpr uint32 clamp(uint32 v, uint32 l, uint32 u) { uint32 r = max(l, v); r = min(u, r); return r; }
+static constexpr int32 clamp(int32 v, int32 l, int32 u) { int32 r = max(l, v); r = min(u, r); return r; }
 static constexpr float clamp01(float v) { return clamp(v, 0.f, 1.f); }
 static constexpr float saturate(float v) { return clamp01(v); }
 static constexpr uint32 bucketize(uint32 problemSize, uint32 bucketSize) { return (problemSize + bucketSize - 1) / bucketSize; }
@@ -35,6 +37,7 @@ static constexpr uint64 bucketize(uint64 problemSize, uint64 bucketSize) { retur
 
 static void copySign(float from, float& to) { to = copysign(to, from); }
 
+static void flushDenormalsToZero() { _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON); }
 
 // Constexpr-version of _BitScanForward. Returns -1 if mask is zero.
 static constexpr uint32 indexOfLeastSignificantSetBit(uint32 i)
@@ -650,9 +653,9 @@ static float length(vec2 a) { return sqrt(squaredLength(a)); }
 static float length(vec3 a) { return sqrt(squaredLength(a)); }
 static float length(vec4 a) { return sqrt(squaredLength(a)); }
 
-static vec2 noz(vec2 a) { float sl = squaredLength(a); return (sl == 0.f) ? vec2(0.f, 0.f) : (a * (1.f / sqrt(sl))); }
-static vec3 noz(vec3 a) { float sl = squaredLength(a); return (sl == 0.f) ? vec3(0.f, 0.f, 0.f) : (a * (1.f / sqrt(sl))); }
-static vec4 noz(vec4 a) { float sl = squaredLength(a); return (sl == 0.f) ? vec4(0.f, 0.f, 0.f, 0.f) : (a * (1.f / sqrt(sl))); }
+static vec2 noz(vec2 a) { float sl = squaredLength(a); return (sl < 1e-8f) ? vec2(0.f, 0.f) : (a * (1.f / sqrt(sl))); }
+static vec3 noz(vec3 a) { float sl = squaredLength(a); return (sl < 1e-8f) ? vec3(0.f, 0.f, 0.f) : (a * (1.f / sqrt(sl))); }
+static vec4 noz(vec4 a) { float sl = squaredLength(a); return (sl < 1e-8f) ? vec4(0.f, 0.f, 0.f, 0.f) : (a * (1.f / sqrt(sl))); }
 
 static vec2 normalize(vec2 a) { float l = length(a); return a * (1.f / l); }
 static vec3 normalize(vec3 a) { float l = length(a); return a * (1.f / l); }
@@ -728,7 +731,43 @@ static vec4 exp(vec4 v) { return vec4(exp(v.f4)); }
 
 static vec2 pow(vec2 v, float e) { return vec2(pow(v.x, e), pow(v.y, e)); }
 static vec3 pow(vec3 v, float e) { return vec3(pow(v.x, e), pow(v.y, e), pow(v.z, e)); }
-static vec4 pow(vec4 v, float e) { return vec4(pow(v.f4, e)); }
+static vec4 pow(vec4 v, float e) { return vec4(pow(v.f4, floatx4(e))); }
+
+static vec2 minimum(vec2 a, vec2 b) { return vec2(min(a.x, b.x), min(a.y, b.y)); }
+static vec3 minimum(vec3 a, vec3 b) { return vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)); }
+static vec4 minimum(vec4 a, vec4 b) { return vec4(minimum(a.f4, b.f4)); }
+
+static vec2 maximum(vec2 a, vec2 b) { return vec2(max(a.x, b.x), max(a.y, b.y)); }
+static vec3 maximum(vec3 a, vec3 b) { return vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z)); }
+static vec4 maximum(vec4 a, vec4 b) { return vec4(maximum(a.f4, b.f4)); }
+
+static vec2 remap(vec2 v, vec2 oldL, vec2 oldU, vec2 newL, vec2 newU)
+{
+	return
+	{
+		remap(v.x, oldL.x, oldU.x, newL.x, newU.x),
+		remap(v.y, oldL.y, oldU.y, newL.y, newU.y),
+	};
+}
+static vec3 remap(vec3 v, vec3 oldL, vec3 oldU, vec3 newL, vec3 newU)
+{
+	return
+	{
+		remap(v.x, oldL.x, oldU.x, newL.x, newU.x),
+		remap(v.y, oldL.y, oldU.y, newL.y, newU.y),
+		remap(v.z, oldL.z, oldU.z, newL.z, newU.z),
+	};
+}
+static vec4 remap(vec4 v, vec4 oldL, vec4 oldU, vec4 newL, vec4 newU)
+{
+	return
+	{
+		remap(v.x, oldL.x, oldU.x, newL.x, newU.x),
+		remap(v.y, oldL.y, oldU.y, newL.y, newU.y),
+		remap(v.z, oldL.z, oldU.z, newL.z, newU.z),
+		remap(v.w, oldL.w, oldU.w, newL.w, newU.w),
+	};
+}
 
 mat2 operator*(const mat2& a, const mat2& b);
 mat3 operator*(const mat3& a, const mat3& b);

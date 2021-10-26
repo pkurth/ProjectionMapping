@@ -4,9 +4,11 @@
 //#include <entt/entt.hpp>
 #include <entt/entity/registry.hpp>
 #include "components.h"
+#ifndef PHYSICS_ONLY
 #include "rendering/light_source.h"
 #include "rendering/pbr.h"
 #include "core/camera.h"
+#endif
 
 struct game_scene;
 
@@ -24,6 +26,8 @@ struct scene_entity
 	{
 		if constexpr (std::is_same_v<component_t, struct collider_component>)
 		{
+			void addColliderToBroadphase(scene_entity entity);
+
 			if (!hasComponent<physics_reference_component>())
 			{
 				addComponent<physics_reference_component>();
@@ -34,6 +38,7 @@ struct scene_entity
 
 			entt::entity child = registry->create();
 			collider_component& collider = registry->emplace<collider_component>(child, std::forward<args>(a)...);
+			addColliderToBroadphase(scene_entity(child, registry));
 
 			collider.parentEntity = handle;
 			collider.nextEntity = reference.firstColliderEntity;
@@ -112,6 +117,21 @@ struct scene_entity
 	const component_t* getComponentIfExists() const
 	{
 		return registry->try_get<component_t>(handle);
+	}
+
+	template <typename component_t>
+	uint32 getComponentIndex() const
+	{
+		auto pool = registry->pool_if_exists<component_t>();
+		assert(pool);
+		return (uint32)pool->index(handle);
+	}
+
+	template <typename component_t>
+	uint32 getComponentIndexIfExists() const
+	{
+		auto pool = registry->pool_if_exists<component_t>();
+		return (pool && pool->contains(handle)) ? (uint32)pool->index(handle) : (uint32)-1;
 	}
 
 	template <typename component_t>
@@ -209,7 +229,8 @@ struct game_scene
 	template <typename component_t>
 	auto raw()
 	{
-		return registry.view<component_t>().raw();
+		component_t** r = registry.view<component_t>().raw();
+		return r ? *r : 0;
 	}
 
 	template <typename func_t>
@@ -222,6 +243,14 @@ struct game_scene
 	uint32 numberOfComponentsOfType()
 	{
 		return (uint32)registry.size<component_t>();
+	}
+
+	template <typename component_t>
+	component_t& getComponentAtIndex(uint32 index)
+	{
+		auto pool = registry.pool_if_exists<component_t>();
+		assert(pool);
+		return pool->element_at(index);
 	}
 
 	template <typename context_t, typename... args>
@@ -251,9 +280,11 @@ struct game_scene
 	entt::registry registry;
 
 
+#ifndef PHYSICS_ONLY
 	render_camera camera;
 	directional_light sun;
 	ref<pbr_environment> environment;
+#endif
 };
 
 inline scene_entity::scene_entity(entt::entity handle, game_scene& scene) : handle(handle), registry(&scene.registry) {}

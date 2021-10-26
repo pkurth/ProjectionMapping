@@ -8,6 +8,7 @@
 #include "geometry/mesh.h"
 #include "physics/physics.h"
 #include "physics/ragdoll.h"
+#include "physics/vehicle.h"
 #include "scene/serialization.h"
 #include "projection_mapping/projector.h"
 #include "rendering/debug_visualization.h"
@@ -491,9 +492,16 @@ bool scene_editor::drawSceneHierarchy()
 								}
 							}
 
+							if (!kinematic)
+							{
+								ImGui::PropertyValue("Mass", 1.f / rb.invMass, "%.3fkg");
+							}
 							ImGui::PropertySlider("Linear velocity damping", rb.linearDamping);
 							ImGui::PropertySlider("Angular velocity damping", rb.angularDamping);
 							ImGui::PropertySlider("Gravity factor", rb.gravityFactor);
+
+							//ImGui::PropertyValue("Linear velocity", rb.linearVelocity);
+							//ImGui::PropertyValue("Angular velocity", rb.angularVelocity);
 
 							ImGui::EndProperties();
 						}
@@ -587,11 +595,11 @@ bool scene_editor::drawSceneHierarchy()
 							{
 								case constraint_type_distance:
 								{
-									drawComponent<distance_constraint>(constraintEntity, "Distance constraint", [this](distance_constraint& constraint)
+									drawComponent<distance_constraint>(constraintEntity, "Distance constraint", [this, constraintEntity = constraintEntity](distance_constraint& constraint)
 									{
 										if (ImGui::BeginProperties())
 										{
-											scene_entity otherEntity = getOtherEntity(constraint, selectedEntity);
+											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
 											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
 											{
 												setSelectedEntity(otherEntity);
@@ -603,13 +611,13 @@ bool scene_editor::drawSceneHierarchy()
 									});
 								} break;
 
-								case constraint_type_ball_joint:
+								case constraint_type_ball:
 								{
-									drawComponent<ball_joint_constraint>(constraintEntity, "Ball joint constraint", [this](ball_joint_constraint& constraint)
+									drawComponent<ball_constraint>(constraintEntity, "Ball constraint", [this, constraintEntity = constraintEntity](ball_constraint& constraint)
 									{
 										if (ImGui::BeginProperties())
 										{
-											scene_entity otherEntity = getOtherEntity(constraint, selectedEntity);
+											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
 											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
 											{
 												setSelectedEntity(otherEntity);
@@ -620,13 +628,30 @@ bool scene_editor::drawSceneHierarchy()
 									});
 								} break;
 
-								case constraint_type_hinge_joint:
+								case constraint_type_fixed:
 								{
-									drawComponent<hinge_joint_constraint>(constraintEntity, "Hinge joint constraint", [this](hinge_joint_constraint& constraint)
+									drawComponent<fixed_constraint>(constraintEntity, "Fixed constraint", [this, constraintEntity = constraintEntity](fixed_constraint& constraint)
 									{
 										if (ImGui::BeginProperties())
 										{
-											scene_entity otherEntity = getOtherEntity(constraint, selectedEntity);
+											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
+											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
+											{
+												setSelectedEntity(otherEntity);
+											}
+
+											ImGui::EndProperties();
+										}
+									});
+								} break;
+
+								case constraint_type_hinge:
+								{
+									drawComponent<hinge_constraint>(constraintEntity, "Hinge constraint", [this, constraintEntity = constraintEntity](hinge_constraint& constraint)
+									{
+										if (ImGui::BeginProperties())
+										{
+											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
 											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
 											{
 												setSelectedEntity(otherEntity);
@@ -665,7 +690,7 @@ bool scene_editor::drawSceneHierarchy()
 
 												if (constraint.motorType == constraint_velocity_motor)
 												{
-													ImGui::PropertySliderAngle("Motor velocity", constraint.motorVelocity, -360.f, 360.f);
+													ImGui::PropertySliderAngle("Motor velocity", constraint.motorVelocity, -1000.f, 1000.f);
 												}
 												else
 												{
@@ -674,7 +699,7 @@ bool scene_editor::drawSceneHierarchy()
 													ImGui::PropertySliderAngle("Motor target angle", constraint.motorTargetAngle, rad2deg(lo), rad2deg(hi));
 												}
 
-												ImGui::PropertySlider("Max motor torque", constraint.maxMotorTorque, 0.001f, 1000.f);
+												ImGui::PropertySlider("Max motor torque", constraint.maxMotorTorque, 0.001f, 10000.f);
 											}
 											ImGui::EndProperties();
 										}
@@ -683,11 +708,11 @@ bool scene_editor::drawSceneHierarchy()
 
 								case constraint_type_cone_twist:
 								{
-									drawComponent<cone_twist_constraint>(constraintEntity, "Cone twist constraint", [this](cone_twist_constraint& constraint)
+									drawComponent<cone_twist_constraint>(constraintEntity, "Cone twist constraint", [this, constraintEntity = constraintEntity](cone_twist_constraint& constraint)
 									{
 										if (ImGui::BeginProperties())
 										{
-											scene_entity otherEntity = getOtherEntity(constraint, selectedEntity);
+											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
 											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
 											{
 												setSelectedEntity(otherEntity);
@@ -756,6 +781,67 @@ bool scene_editor::drawSceneHierarchy()
 
 												ImGui::PropertySliderAngle("Swing motor axis angle", constraint.swingMotorAxis, -180.f, 180.f);
 												ImGui::PropertySlider("Max swing motor torque", constraint.maxSwingMotorTorque, 0.001f, 1000.f);
+											}
+											ImGui::EndProperties();
+										}
+									});
+								} break;
+
+								case constraint_type_slider:
+								{
+									drawComponent<slider_constraint>(constraintEntity, "Slider constraint", [this, constraintEntity = constraintEntity](slider_constraint& constraint)
+									{
+										if (ImGui::BeginProperties())
+										{
+											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
+											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
+											{
+												setSelectedEntity(otherEntity);
+											}
+
+											bool minLimitActive = constraint.negDistanceLimit <= 0.f;
+											if (ImGui::PropertyCheckbox("Lower limit active", minLimitActive))
+											{
+												constraint.negDistanceLimit = -constraint.negDistanceLimit;
+											}
+											if (minLimitActive)
+											{
+												float minLimit = -constraint.negDistanceLimit;
+												ImGui::PropertySlider("Lower limit", minLimit, 0.f, 1000.f, "-%.3f");
+												constraint.negDistanceLimit = -minLimit;
+											}
+
+											bool maxLimitActive = constraint.posDistanceLimit >= 0.f;
+											if (ImGui::PropertyCheckbox("Upper limit active", maxLimitActive))
+											{
+												constraint.posDistanceLimit = -constraint.posDistanceLimit;
+											}
+											if (maxLimitActive)
+											{
+												ImGui::PropertySlider("Upper limit", constraint.posDistanceLimit, 0.f, 1000.f);
+											}
+
+											bool motorActive = constraint.maxMotorForce > 0.f;
+											if (ImGui::PropertyCheckbox("Motor active", motorActive))
+											{
+												constraint.maxMotorForce = -constraint.maxMotorForce;
+											}
+											if (motorActive)
+											{
+												ImGui::PropertyDropdown("Motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)constraint.motorType);
+
+												if (constraint.motorType == constraint_velocity_motor)
+												{
+													ImGui::PropertySlider("Motor velocity", constraint.motorVelocity, -10.f, 10.f);
+												}
+												else
+												{
+													float lo = minLimitActive ? constraint.negDistanceLimit : -100.f;
+													float hi = maxLimitActive ? constraint.posDistanceLimit : 100.f;
+													ImGui::PropertySlider("Motor target distance", constraint.motorTargetDistance, lo, hi);
+												}
+
+												ImGui::PropertySlider("Max motor force", constraint.maxMotorForce, 0.001f, 1000.f);
 											}
 											ImGui::EndProperties();
 										}
@@ -1118,7 +1204,8 @@ void scene_editor::drawEntityCreationPopup()
 		{
 			auto cloth = scene->createEntity("Cloth")
 				.addComponent<transform_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f), scene->camera.rotation)
-				.addComponent<cloth_component>(10.f, 10.f, 20u, 20u, 8.f);
+				.addComponent<cloth_component>(10.f, 10.f, 20u, 20u, 8.f)
+				.addComponent<cloth_render_component>();
 
 			setSelectedEntity(cloth);
 			clicked = true;
@@ -1128,6 +1215,13 @@ void scene_editor::drawEntityCreationPopup()
 		{
 			auto ragdoll = humanoid_ragdoll::create(*scene, scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f));
 			setSelectedEntity(ragdoll.torso);
+			clicked = true;
+		}
+
+		if (ImGui::MenuItem("Vehicle", "V") || ImGui::IsKeyPressed('V'))
+		{
+			auto vehicle = vehicle::create(*scene, scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -4.f));
+			setSelectedEntity(vehicle.motor);
 			clicked = true;
 		}
 

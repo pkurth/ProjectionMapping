@@ -6,7 +6,7 @@
 	url = git@github.com:pkurth/assimp.git
 [submodule "ext/entt"]
 	path = ext/entt
-	url = git@github.com:skypjack/entt.git
+	url = git@github.com:pkurth/entt.git
 [submodule "ext/directxtex"]
 	path = ext/directxtex
 	url = git@github.com:microsoft/DirectXTex.git

@@ -297,53 +297,60 @@ bool ray::intersectCylinder(const bounding_cylinder& cylinder, float& outT) cons
 
 	quat q = rotateFromTo(axis, vec3(0.f, 1.f, 0.f));
 
-	vec3 posA = cylinder.positionA;
-	vec3 posB = posA + vec3(0.f, height, 0.f);
-
-	o = q * (o - posA);
+	// Cylinder base is at 0,0,0. Second point is above it.
+	o = q * (o - cylinder.positionA);
 	d = q * d;
 
-	float a = d.x * d.x + d.z * d.z;
-	float b = d.x * o.x + d.z * o.z;
-	float c = o.x * o.x + o.z * o.z - cylinder.radius * cylinder.radius;
-
-	float delta = b * b - a * c;
 
 	float epsilon = 1e-6f;
 
-	if (delta < epsilon)
+	float y = -1.f;
+	if (squaredLength(vec2(o.x, o.z)) > cylinder.radius * cylinder.radius)
 	{
-		return false;
+		// We are outside the infinite cylinder. Only in this case it is possible to hit the sides.
+
+		float a = d.x * d.x + d.z * d.z;
+		float b = d.x * o.x + d.z * o.z;
+		float c = o.x * o.x + o.z * o.z - cylinder.radius * cylinder.radius;
+
+		float delta = b * b - a * c;
+
+		if (delta < epsilon)
+		{
+			return false;
+		}
+
+		outT = (-b - sqrt(delta)) / a;
+		if (outT <= epsilon)
+		{
+			return false; // Behind ray.
+		}
+
+		y = o.y + outT * d.y;
 	}
 
-	outT = (-b - sqrt(delta)) / a;
-	if (outT <= epsilon)
-	{
-		return false; // Behind ray.
-	}
-
-
-	float y = o.y + outT * d.y;
-
-	// Check bases.
+	// Check bases. Always true if the above if is not taken.
 	if (y > height + epsilon || y < -epsilon) 
 	{
+		vec3 posA = vec3(0.f, 0.f, 0.f);
+		vec3 posB = vec3(0.f, height, 0.f);
+
 		ray localRay = { o, d };
 
 		float dist;
-		bool b1 = localRay.intersectDisk(posB, vec3(0.f, 1.f, 0.f), cylinder.radius, dist);
+		bool b1 = d.y < 0.f && localRay.intersectDisk(posB, vec3(0.f, 1.f, 0.f), cylinder.radius, dist);
 		if (b1)
 		{
 			outT = dist;
 		}
-		bool b2 = localRay.intersectDisk(posA, vec3(0.f, -1.f, 0.f), cylinder.radius, dist);
-		if (b2 && dist > epsilon && outT >= dist)
+		bool b2 = d.y > 0.f && localRay.intersectDisk(posA, vec3(0.f, -1.f, 0.f), cylinder.radius, dist);
+		if (b2)
 		{
 			outT = dist;
 		}
-	}
 
-	y = o.y + outT * d.y;
+		y = o.y + outT * d.y;
+	}
 
 	return y > -epsilon && y < height + epsilon;
 }
@@ -713,6 +720,28 @@ bool sphereVsCapsule(const bounding_sphere& s, const bounding_capsule& c)
 	return sphereVsSphere(s, bounding_sphere{ closestPoint, c.radius });
 }
 
+bool sphereVsCylinder(const bounding_sphere& s, const bounding_cylinder& c)
+{
+	vec3 ab = c.positionB - c.positionA;
+	float t = dot(s.center - c.positionA, ab) / squaredLength(ab);
+	if (t >= 0.f && t <= 1.f)
+	{
+		return sphereVsSphere(s, bounding_sphere{ lerp(c.positionA, c.positionB, t), c.radius });
+	}
+
+	vec3 p = (t <= 0.f) ? c.positionA : c.positionB;
+	vec3 up = (t <= 0.f) ? -ab : ab;
+
+	vec3 projectedDirToCenter = normalize(cross(cross(up, s.center - p), up));
+	vec3 endA = p + projectedDirToCenter * c.radius;
+	vec3 endB = p - projectedDirToCenter * c.radius;
+
+	vec3 closestToSphere = closestPoint_PointSegment(s.center, line_segment{ endA, endB });
+	float sqDistance = squaredLength(closestToSphere - s.center);
+
+	return sqDistance <= s.radius;
+}
+
 bool sphereVsAABB(const bounding_sphere& s, const bounding_box& a)
 {
 	vec3 p = closestPoint_PointAABB(s.center, a);
@@ -747,6 +776,13 @@ bool capsuleVsCapsule(const bounding_capsule& a, const bounding_capsule& b)
 	return sphereVsSphere(bounding_sphere{ closestPoint1, a.radius }, bounding_sphere{ closestPoint2, b.radius });
 }
 
+bool capsuleVsCylinder(const bounding_capsule& a, const bounding_cylinder& b)
+{
+	vec3 closestPoint1, closestPoint2;
+	closestPoint_SegmentSegment(line_segment{ a.positionA, a.positionB }, line_segment{ b.positionA, b.positionB }, closestPoint1, closestPoint2);
+	return sphereVsCylinder(bounding_sphere{ closestPoint1, a.radius }, b);
+}
+
 bool capsuleVsAABB(const bounding_capsule& c, const bounding_box& b)
 {
 	capsule_support_fn capsuleSupport{ c };
@@ -774,6 +810,44 @@ bool capsuleVsHull(const bounding_capsule& c, const bounding_hull& h)
 
 	gjk_simplex gjkSimplex;
 	return gjkIntersectionTest(capsuleSupport, hullSupport, gjkSimplex);
+}
+
+bool cylinderVsCylinder(const bounding_cylinder& a, const bounding_cylinder& b)
+{
+	cylinder_support_fn cylinderSupportA{ a };
+	cylinder_support_fn cylinderSupportB{ b };
+
+	gjk_simplex gjkSimplex;
+	return gjkIntersectionTest(cylinderSupportA, cylinderSupportB, gjkSimplex);
+}
+
+bool cylinderVsAABB(const bounding_cylinder& c, const bounding_box& b)
+{
+	cylinder_support_fn cylinderSupport{ c };
+	aabb_support_fn boxSupport{ b };
+
+	gjk_simplex gjkSimplex;
+	return gjkIntersectionTest(cylinderSupport, boxSupport, gjkSimplex);
+}
+
+bool cylinderVsOBB(const bounding_cylinder& c, const bounding_oriented_box& o)
+{
+	bounding_box aabb = bounding_box::fromCenterRadius(o.center, o.radius);
+	bounding_cylinder c_ = {
+		conjugate(o.rotation) * (c.positionA - o.center) + o.center,
+		conjugate(o.rotation) * (c.positionB - o.center) + o.center,
+		c.radius };
+
+	return cylinderVsAABB(c_, aabb);
+}
+
+bool cylinderVsHull(const bounding_cylinder& c, const bounding_hull& h)
+{
+	cylinder_support_fn cylinderSupport{ c };
+	hull_support_fn hullSupport{ h };
+
+	gjk_simplex gjkSimplex;
+	return gjkIntersectionTest(cylinderSupport, hullSupport, gjkSimplex);
 }
 
 bool aabbVsAABB(const bounding_box& a, const bounding_box& b)

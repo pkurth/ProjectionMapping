@@ -12,7 +12,7 @@ struct broadphase_collision
 	uint16 colliderB;
 };
 
-uint32 broadphase(struct game_scene& scene, uint32 sortingAxis, bounding_box* worldSpaceAABBs, memory_arena& arena, broadphase_collision* outOverlaps);
+uint32 broadphase(struct game_scene& scene, bounding_box* worldSpaceAABBs, memory_arena& arena, broadphase_collision* outOverlaps);
 
 
 
@@ -25,6 +25,3 @@ struct sap_endpoint_indirection_component
 	uint16 startEndpoint;
 	uint16 endEndpoint;
 };
-
-void onColliderAdded(entt::registry& registry, entt::entity entity);
-void onColliderRemoved(entt::registry& registry, entt::entity entity);

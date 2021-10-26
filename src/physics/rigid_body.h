@@ -7,11 +7,12 @@ struct rigid_body_global_state
 {
 	// Don't change the order here. It's currently required by the SIMD code.
 	quat rotation;
+	vec3 localCOGPosition;
 	vec3 position;
+	mat3 invInertia;
+	float invMass;
 	vec3 linearVelocity;
 	vec3 angularVelocity;
-	float invMass;
-	mat3 invInertia;
 };
 
 struct rigid_body_component
@@ -42,6 +43,4 @@ struct rigid_body_component
 
 	vec3 forceAccumulator;
 	vec3 torqueAccumulator;
-
-	uint16 globalStateIndex;
 };

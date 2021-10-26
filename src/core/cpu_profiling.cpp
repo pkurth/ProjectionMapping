@@ -9,9 +9,10 @@ bool cpuProfilerWindowOpen = false;
 
 #if ENABLE_CPU_PROFILING
 
-std::atomic<uint32> cpuProfileArrayAndEventIndex;
-std::atomic<uint32> cpuProfileEventsCompletelyWritten[2];
+std::atomic<uint32> cpuProfileIndex;
+std::atomic<uint32> cpuProfileCompletelyWritten[2];
 profile_event cpuProfileEvents[2][MAX_NUM_CPU_PROFILE_EVENTS];
+profile_stat cpuProfileStats[2][MAX_NUM_CPU_PROFILE_STATS];
 
 
 #define MAX_NUM_CPU_PROFILE_THREADS 128
@@ -24,6 +25,9 @@ struct cpu_profile_frame : profile_frame
 
 	profile_block profileBlockPool[MAX_NUM_CPU_PROFILE_BLOCKS];
 	uint32 totalNumProfileBlocks;
+
+	profile_stat stats[MAX_NUM_CPU_PROFILE_STATS];
+	uint32 numStats;
 };
 
 static uint32 profileThreads[MAX_NUM_CPU_PROFILE_THREADS];
@@ -93,14 +97,17 @@ void cpuProfilingResolveTimeStamps()
 {
 	uint32 currentFrame = profileFrameWriteIndex;
 
-	uint32 arrayIndex = cpuProfileArrayAndEventIndex >> 31; // We are only interested in the most significant bit here, so don't worry about thread safety.
-	uint32 currentArrayAndEventIndex = cpuProfileArrayAndEventIndex.exchange((1 - arrayIndex) << 31); // Swap array and get current event count.
+	uint32 arrayIndex = _CPU_PROFILE_GET_ARRAY_INDEX(cpuProfileIndex); // We are only interested in the most significant bit here, so don't worry about thread safety.
+	uint32 currentIndex = cpuProfileIndex.exchange((1 - arrayIndex) << 31); // Swap array and get current event count.
 
 	profile_event* events = cpuProfileEvents[arrayIndex];
-	uint32 numEvents = currentArrayAndEventIndex & ((1u << 31) - 1);
+	uint32 numEvents = _CPU_PROFILE_GET_EVENT_INDEX(currentIndex);
+	auto stats = cpuProfileStats[arrayIndex];
+	uint32 numStats = _CPU_PROFILE_GET_STAT_INDEX(currentIndex);
+	uint32 numWrites = numEvents + numStats;
 
-	while (numEvents > cpuProfileEventsCompletelyWritten[arrayIndex]) {} // Wait until all events have been written completely.
-	cpuProfileEventsCompletelyWritten[arrayIndex] = 0;
+	while (numWrites > cpuProfileCompletelyWritten[arrayIndex]) {} // Wait until all events and stats have been written completely.
+	cpuProfileCompletelyWritten[arrayIndex] = 0;
 
 
 	static bool initializedStack = false;
@@ -185,6 +192,10 @@ void cpuProfilingResolveTimeStamps()
 					}
 					block->duration = (float)(endClock - block->startClock) / clockFrequency * 1000.f;
 				}
+
+				frame->numStats = numStats;
+				memcpy(frame->stats, stats, numStats * sizeof(profile_stat));
+
 
 				cpu_profile_frame* oldFrame = frame;
 
@@ -288,6 +299,30 @@ void cpuProfilingResolveTimeStamps()
 					timeline.drawMillisecondSpacings(frame);
 					timeline.handleUserInteractions();
 
+					if (frame.numStats != 0)
+					{
+						ImGui::Dummy(ImVec2(0, 30.f));
+						if (ImGui::BeginChild("Stats"))
+						{
+							ImGui::Text("Frame stats");
+							ImGui::Separator();
+							for (uint32 i = 0; i < frame.numStats; ++i)
+							{
+								const profile_stat& stat = frame.stats[i];
+								switch (stat.type)
+								{
+									case profile_stat_type_bool: ImGui::Value(stat.label, stat.boolValue); break;
+									case profile_stat_type_int32: ImGui::Value(stat.label, stat.int32Value); break;
+									case profile_stat_type_uint32: ImGui::Value(stat.label, stat.uint32Value); break;
+									case profile_stat_type_int64: ImGui::Value(stat.label, stat.int64Value); break;
+									case profile_stat_type_uint64: ImGui::Value(stat.label, stat.uint64Value); break;
+									case profile_stat_type_float: ImGui::Value(stat.label, stat.floatValue); break;
+									case profile_stat_type_string: ImGui::Value(stat.label, stat.stringValue); break;
+								}
+							}
+						}
+						ImGui::EndChild();
+					}
 				}
 			}
 		}

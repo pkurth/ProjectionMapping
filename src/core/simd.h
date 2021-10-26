@@ -4,10 +4,10 @@
 #include <emmintrin.h>
 #include <immintrin.h>
 
-#define SIMD_SSE_2 // Not quite correct but I think it is safe to assume that every processor has SSE2.
+#define SIMD_SSE_2 // All x64 processors support SSE2.
 
 #if defined(__AVX__)
-#if defined(__AVX512BW__)
+#if defined(__AVX512F__)
 #define SIMD_AVX_512
 #define SIMD_AVX_2
 #elif defined(__AVX2__)
@@ -23,6 +23,145 @@
 #define POLY2(x, c0, c1, c2) fmadd(POLY1(x, c1, c2), x, (c0))
 #define POLY3(x, c0, c1, c2, c3) fmadd(POLY2(x, c1, c2, c3), x, (c0))
 #define POLY4(x, c0, c1, c2, c3, c4) fmadd(POLY3(x, c1, c2, c3, c4), x, (c0))
+
+
+template <typename float_t>
+static float_t cosInternal(float_t x)
+{
+	const float_t tp = 1.f / (2.f * 3.14159265359f);
+	const float_t q = 0.25f;
+	const float_t h = 0.5f;
+	const float_t o = 1.f;
+	const float_t s = 16.f;
+	const float_t v = 0.225f;
+
+	x *= tp;
+	x -= q + floor(x + q);
+	x *= s * (abs(x) - h);
+	x += v * x * (abs(x) - o);
+	return x;
+}
+
+template <typename float_t> 
+static float_t sinInternal(float_t x) 
+{ 
+	return cosInternal(x - (3.14159265359f * 0.5f)); 
+}
+
+template <typename float_t, typename int_t>
+static float_t exp2Internal(float_t x)
+{
+	x = minimum(x, 129.00000f);
+	x = maximum(x, -126.99999f);
+
+	int_t ipart = convert(x - 0.5f);
+	float_t fpart = x - convert(ipart);
+	float_t expipart = reinterpret((ipart + 127) << 23);
+	float_t expfpart = POLY3(fpart, 9.9992520e-1f, 6.9583356e-1f, 2.2606716e-1f, 7.8024521e-2f);
+	return expipart * expfpart;
+}
+
+template <typename float_t, typename int_t>
+static float_t log2Internal(float_t x)
+{
+	int_t exp = 0x7F800000;
+	int_t mant = 0x007FFFFF;
+
+	float_t one = 1;
+	int_t i = reinterpret(x);
+
+	float_t e = convert(((i & exp) >> 23) - 127);
+	float_t m = reinterpret(i & mant) | one;
+	float_t p = POLY4(m, 2.8882704548164776201f, -2.52074962577807006663f, 1.48116647521213171641f, -0.465725644288844778798f, 0.0596515482674574969533f);
+
+	return fmadd(p, m - one, e);
+}
+
+template <typename float_t, typename int_t>
+static float_t powInternal(float_t x, float_t y)
+{
+	return exp2Internal<float_t, int_t>(log2Internal<float_t, int_t>(x) * y);
+}
+
+template <typename float_t, typename int_t>
+static float_t expInternal(float_t x)
+{
+	float_t a = 12102203.f; // (1 << 23) / log(2).
+	int_t b = 127 * (1 << 23) - 298765;
+	int_t t = convert(a * x) + b;
+	return reinterpret(t);
+}
+
+template <typename float_t>
+static float_t tanhInternal(float_t x)
+{
+	float_t a = exp(x);
+	float_t b = exp(-x);
+	return (a - b) / (a + b);
+}
+
+template <typename float_t, typename int_t>
+static float_t atanInternal(float_t x)
+{
+	const int_t sign_mask = 0x80000000;
+	const float_t b = 0.596227f;
+
+	// Extract the sign bit.
+	int_t ux_s = sign_mask & reinterpret(x);
+
+	// Calculate the arctangent in the first quadrant.
+	float_t bx_a = abs(b * x);
+	float_t num = fmadd(x, x, bx_a);
+	float_t atan_1q = num / (1.f + bx_a + num);
+
+	// Restore the sign bit.
+	int_t atan_2q = ux_s | reinterpret(atan_1q);
+	return reinterpret(atan_2q) * float_t(3.14159265359f * 0.5f);
+}
+
+template <typename float_t, typename int_t>
+static float_t atan2Internal(float_t y, float_t x)
+{
+	const int_t sign_mask = 0x80000000;
+	const float_t b = 0.596227f;
+
+	// Extract the sign bits.
+	int_t ux_s = sign_mask & reinterpret(x);
+	int_t uy_s = sign_mask & reinterpret(y);
+
+	// Determine the quadrant offset.
+	float_t q = convert(((~ux_s & uy_s) >> 29) | (ux_s >> 30));
+
+	// Calculate the arctangent in the first quadrant.
+	float_t bxy_a = abs(b * x * y);
+	float_t num = fmadd(y, y, bxy_a);
+	float_t atan_1q = num / (fmadd(x, x, bxy_a + num));
+
+	// Translate it to the proper quadrant.
+	int_t uatan_2q = (ux_s ^ uy_s) | reinterpret(atan_1q);
+
+	float_t result04 = q + reinterpret(uatan_2q); // In the [0, 4) range for the 4 quadrants.
+
+	auto negQuadrant = result04 >= 2.f;
+	float_t result = ifThen(negQuadrant, result04 - 4.f, result04);
+	return result * float_t(3.14159265359f * 0.5f);
+}
+
+template <typename float_t>
+static float_t acosInternal(float_t x)
+{
+	// https://developer.download.nvidia.com/cg/acos.html
+
+	float_t negate = ifThen(x < 0.f, 1.f, 0.f);
+	x = abs(x);
+	float_t ret = -0.0187293f;
+	ret = fmadd(ret, x, 0.0742610f);
+	ret = fmadd(ret, x, -0.2121144f);
+	ret = fmadd(ret, x, 1.5707288f);
+	ret = ret * sqrt(1.f - x);
+	ret = ret - negate * ret * float_t(2.f);
+	return fmadd(negate, 3.14159265359f, ret);
+}
 
 
 #if defined(SIMD_SSE_2)
@@ -240,76 +379,16 @@ static floatx4 clamp01(floatx4 v) { return clamp(v, 0.f, 1.f); }
 static floatx4 signOf(floatx4 f) { floatx4 z = floatx4::zero(); return ifThen(f < z, floatx4(-1), ifThen(f == z, z, floatx4(1))); }
 static floatx4 signbit(floatx4 f) { return (f & -0.f) >> 31; }
 
-static floatx4 cos(floatx4 x) 
-{ 
-	static const floatx4 tp = 1.f / (2.f * 3.14159265359f);
-	static const floatx4 q = 0.25f;
-	static const floatx4 h = 0.5f;
-	static const floatx4 o = 1.f;
-	static const floatx4 s = 16.f;
-	static const floatx4 v = 0.225f;
-
-	x *= tp;
-	x -= q + floor(x + q);
-	x *= s * (abs(x) - h);
-	x += v * x * (abs(x) - o);
-	return x;
-}
-
-static floatx4 sin(floatx4 x) { return cos(x - (3.14159265359f * 0.5f)); }
-
-
-static floatx4 exp2(floatx4 x)
-{
-	x = minimum(x, 129.00000f);
-	x = maximum(x, -126.99999f);
-
-	intx4 ipart = convert(x - 0.5f);
-	floatx4 fpart = x - convert(ipart);
-	floatx4 expipart = reinterpret((ipart + 127) << 23);
-	floatx4 expfpart = POLY3(fpart, 9.9992520e-1f, 6.9583356e-1f, 2.2606716e-1f, 7.8024521e-2f);
-	return expipart * expfpart;
-}
-
-static floatx4 log2(floatx4 x)
-{
-	intx4 exp = 0x7F800000;
-	intx4 mant = 0x007FFFFF;
-
-	floatx4 one = 1;
-	intx4 i = reinterpret(x);
-
-	floatx4 e = convert(((i & exp) >> 23) - 127);
-	floatx4 m = reinterpret(i & mant) | one;
-	floatx4 p = POLY4(m, 2.8882704548164776201f, -2.52074962577807006663f, 1.48116647521213171641f, -0.465725644288844778798f, 0.0596515482674574969533f);
-
-	return fmadd(p, m - one, e);
-}
-
-static floatx4 pow(floatx4 x, floatx4 y)
-{
-	return exp2(log2(x) * y);
-}
-
-static floatx4 pow(floatx4 x, float y)
-{
-	return exp2(log2(x) * floatx4(y));
-}
-
-static floatx4 exp(floatx4 x)
-{
-	floatx4 a = 12102203.f; // (1 << 23) / log(2).
-	intx4 b = 127 * (1 << 23) - 298765;
-	intx4 t = convert(a * x) + b;
-	return reinterpret(t);
-}
-
-static floatx4 tanh(floatx4 x)
-{
-	floatx4 a = exp(x);
-	floatx4 b = exp(-x);
-	return (a - b) / (a + b);
-}
+static floatx4 cos(floatx4 x) { return cosInternal(x); }
+static floatx4 sin(floatx4 x) { return sinInternal(x); }
+static floatx4 exp2(floatx4 x) { return exp2Internal<floatx4, intx4>(x); }
+static floatx4 log2(floatx4 x) { return log2Internal<floatx4, intx4>(x); }
+static floatx4 pow(floatx4 x, floatx4 y) { return powInternal<floatx4, intx4>(x, y); }
+static floatx4 exp(floatx4 x) { return expInternal<floatx4, intx4>(x); }
+static floatx4 tanh(floatx4 x) { return tanhInternal(x); }
+static floatx4 atan(floatx4 x) { return atanInternal<floatx4, intx4>(x); }
+static floatx4 atan2(floatx4 y, floatx4 x) { return atan2Internal<floatx4, intx4>(y, x); }
+static floatx4 acos(floatx4 x) { return acosInternal(x); }
 
 static intx4 fillWithFirstLane(intx4 a)
 {
@@ -322,7 +401,7 @@ static void transpose(floatx4& out0, floatx4& out1, floatx4& out2, floatx4& out3
 	_MM_TRANSPOSE4_PS(out0.f, out1.f, out2.f, out3.f);
 }
 
-static void load4(float* baseAddress, uint16* indices, uint32 stride,
+static void load4(const float* baseAddress, const uint16* indices, uint32 stride,
 	floatx4& out0, floatx4& out1, floatx4& out2, floatx4& out3)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -335,7 +414,7 @@ static void load4(float* baseAddress, uint16* indices, uint32 stride,
 	transpose(out0, out1, out2, out3);
 }
 
-static void store4(float* baseAddress, uint16* indices, uint32 stride,
+static void store4(float* baseAddress, const uint16* indices, uint32 stride,
 	floatx4 in0, floatx4 in1, floatx4 in2, floatx4 in3)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -348,7 +427,7 @@ static void store4(float* baseAddress, uint16* indices, uint32 stride,
 	in3.store(baseAddress + strideInFloats * indices[3]);
 }
 
-static void load8(float* baseAddress, uint16* indices, uint32 stride,
+static void load8(const float* baseAddress, const uint16* indices, uint32 stride,
 	floatx4& out0, floatx4& out1, floatx4& out2, floatx4& out3, floatx4& out4, floatx4& out5, floatx4& out6, floatx4& out7)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -366,7 +445,7 @@ static void load8(float* baseAddress, uint16* indices, uint32 stride,
 	transpose(out4, out5, out6, out7);
 }
 
-static void store8(float* baseAddress, uint16* indices, uint32 stride,
+static void store8(float* baseAddress, const uint16* indices, uint32 stride,
 	floatx4 in0, floatx4 in1, floatx4 in2, floatx4 in3, floatx4 in4, floatx4 in5, floatx4 in6, floatx4 in7)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -638,70 +717,16 @@ static floatx8 clamp01(floatx8 v) { return clamp(v, 0.f, 1.f); }
 static floatx8 signOf(floatx8 f) { floatx8 z = floatx8::zero(); return ifThen(f < z, floatx8(-1), ifThen(f == z, z, floatx8(1))); }
 static floatx8 signbit(floatx8 f) { return (f & -0.f) >> 31; }
 
-static floatx8 cos(floatx8 x)
-{
-	const floatx8 tp = 1.f / (2.f * 3.14159265359f);
-	const floatx8 q = 0.25f;
-	const floatx8 h = 0.5f;
-	const floatx8 o = 1.f;
-	const floatx8 s = 16.f;
-	const floatx8 v = 0.225f;
-
-	x *= tp;
-	x -= q + floor(x + q);
-	x *= s * (abs(x) - h);
-	x += v * x * (abs(x) - o);
-	return x;
-}
-
-static floatx8 sin(floatx8 x) { return cos(x - (3.14159265359f * 0.5f)); }
-
-static floatx8 exp2(floatx8 x)
-{
-	x = minimum(x, 129.00000f);
-	x = maximum(x, -126.99999f);
-
-	intx8 ipart = convert(x - 0.5f);
-	floatx8 fpart = x - convert(ipart);
-	floatx8 expipart = reinterpret((ipart + 127) << 23);
-	floatx8 expfpart = POLY3(fpart, 9.9992520e-1f, 6.9583356e-1f, 2.2606716e-1f, 7.8024521e-2f);
-	return expipart * expfpart;
-}
-
-static floatx8 log2(floatx8 x)
-{
-	intx8 exp = 0x7F800000;
-	intx8 mant = 0x007FFFFF;
-
-	floatx8 one = 1;
-	intx8 i = reinterpret(x);
-
-	floatx8 e = convert(((i & exp) >> 23) - 127);
-	floatx8 m = reinterpret(i & mant) | one;
-	floatx8 p = POLY4(m, 2.8882704548164776201f, -2.52074962577807006663f, 1.48116647521213171641f, -0.465725644288844778798f, 0.0596515482674574969533f);
-
-	return fmadd(p, m - one, e);
-}
-
-static floatx8 pow(floatx8 x, floatx8 y)
-{
-	return exp2(log2(x) * y);
-}
-
-static floatx8 exp(floatx8 x)
-{
-	floatx8 a = 12102203.f; // (1 << 23) / log(2).
-	intx8 b = 127 * (1 << 23) - 298765;
-	intx8 t = convert(a * x) + b;
-	return reinterpret(t);
-}
-
-static floatx8 tanh(floatx8 x)
-{
-	floatx8 a = exp(x);
-	floatx8 b = exp(-x);
-	return (a - b) / (a + b);
-}
+static floatx8 cos(floatx8 x) { return cosInternal(x); }
+static floatx8 sin(floatx8 x) { return sinInternal(x); }
+static floatx8 exp2(floatx8 x) { return exp2Internal<floatx8, intx8>(x); }
+static floatx8 log2(floatx8 x) { return log2Internal<floatx8, intx8>(x); }
+static floatx8 pow(floatx8 x, floatx8 y) { return powInternal<floatx8, intx8>(x, y); }
+static floatx8 exp(floatx8 x) { return expInternal<floatx8, intx8>(x); }
+static floatx8 tanh(floatx8 x) { return tanhInternal(x); }
+static floatx8 atan(floatx8 x) { return atanInternal<floatx8, intx8>(x); }
+static floatx8 atan2(floatx8 y, floatx8 x) { return atan2Internal<floatx8, intx8>(y, x); }
+static floatx8 acos(floatx8 x) { return acosInternal(x); }
 
 static floatx8 concat(floatx4 a, floatx4 b)
 {
@@ -766,7 +791,7 @@ static void transpose(floatx8& out0, floatx8& out1, floatx8& out2, floatx8& out3
 	transpose32(out4, out5, out6, out7);
 }
 
-static void load4(float* baseAddress, uint16* indices, uint32 stride,
+static void load4(const float* baseAddress, const uint16* indices, uint32 stride,
 	floatx8& out0, floatx8& out1, floatx8& out2, floatx8& out3)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -788,7 +813,7 @@ static void load4(float* baseAddress, uint16* indices, uint32 stride,
 	transpose32(out0, out1, out2, out3);
 }
 
-static void load8(float* baseAddress, uint16* indices, uint32 stride,
+static void load8(const float* baseAddress, const uint16* indices, uint32 stride,
 	floatx8& out0, floatx8& out1, floatx8& out2, floatx8& out3, floatx8& out4, floatx8& out5, floatx8& out6, floatx8& out7)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -805,7 +830,7 @@ static void load8(float* baseAddress, uint16* indices, uint32 stride,
 	transpose(out0, out1, out2, out3, out4, out5, out6, out7);
 }
 
-static void store8(float* baseAddress, uint16* indices, uint32 stride,
+static void store8(float* baseAddress, const uint16* indices, uint32 stride,
 	floatx8 in0, floatx8 in1, floatx8 in2, floatx8 in3, floatx8 in4, floatx8 in5, floatx8 in6, floatx8 in7)
 {
 	const uint32 strideInFloats = stride / sizeof(float);
@@ -981,70 +1006,16 @@ static floatx16 clamp01(floatx16 v) { return clamp(v, 0.f, 1.f); }
 static floatx16 signOf(floatx16 f) { return ifThen(f < 0.f, floatx16(-1), ifThen(f == 0.f, zerox16(), floatx16(1))); }
 static floatx16 signbit(floatx16 f) { return (f & -0.f) >> 31; }
 
-static floatx16 cos(floatx16 x)
-{
-	const floatx16 tp = 1.f / (2.f * 3.14159265359f);
-	const floatx16 q = 0.25f;
-	const floatx16 h = 0.5f;
-	const floatx16 o = 1.f;
-	const floatx16 s = 16.f;
-	const floatx16 v = 0.225f;
-
-	x *= tp;
-	x -= q + floor(x + q);
-	x *= s * (abs(x) - h);
-	x += v * x * (abs(x) - o);
-	return x;
-}
-
-static floatx16 sin(floatx16 x) { return cos(x - (3.14159265359f * 0.5f)); }
-
-static floatx16 exp2(floatx16 x)
-{
-	x = minimum(x, 129.00000f);
-	x = maximum(x, -126.99999f);
-
-	intx16 ipart = convert(x - 0.5f);
-	floatx16 fpart = x - convert(ipart);
-	floatx16 expipart = reinterpret((ipart + 127) << 23);
-	floatx16 expfpart = POLY3(fpart, 9.9992520e-1f, 6.9583356e-1f, 2.2606716e-1f, 7.8024521e-2f);
-	return expipart * expfpart;
-}
-
-static floatx16 log2(floatx16 x)
-{
-	intx16 exp = 0x7F800000;
-	intx16 mant = 0x007FFFFF;
-
-	floatx16 one = 1;
-	intx16 i = reinterpret(x);
-
-	floatx16 e = convert(((i & exp) >> 23) - 127);
-	floatx16 m = reinterpret(i & mant) | one;
-	floatx16 p = POLY4(m, 2.8882704548164776201f, -2.52074962577807006663f, 1.48116647521213171641f, -0.465725644288844778798f, 0.0596515482674574969533f);
-
-	return fmadd(p, m - one, e);
-}
-
-static floatx16 pow(floatx16 x, floatx16 y)
-{
-	return exp2(log2(x) * y);
-}
-
-static floatx16 exp(floatx16 x)
-{
-	floatx16 a = 12102203.f; // (1 << 23) / log(2).
-	intx16 b = 127 * (1 << 23) - 298765;
-	intx16 t = convert(a * x) + b;
-	return reinterpret(t);
-}
-
-static floatx16 tanh(floatx16 x)
-{
-	floatx16 a = exp(x);
-	floatx16 b = exp(-x);
-	return (a - b) / (a + b);
-}
+static floatx16 cos(floatx16 x) { return cosInternal(x); }
+static floatx16 sin(floatx16 x) { return sinInternal(x); }
+static floatx16 exp2(floatx16 x) { return exp2Internal<floatx16, intx16>(x); }
+static floatx16 log2(floatx16 x) { return log2Internal<floatx16, intx16>(x); }
+static floatx16 pow(floatx16 x, floatx16 y) { return powInternal<floatx16, intx16>(x, y); }
+static floatx16 exp(floatx16 x) { return expInternal<floatx16, intx16>(x); }
+static floatx16 tanh(floatx16 x) { return tanhInternal(x); }
+static floatx16 atan(floatx16 x) { return atanInternal<floatx16, intx16>(x); }
+static floatx16 atan2(floatx16 y, floatx16 x) { return atan2Internal<floatx16, intx16>(y, x); }
+static floatx16 acos(floatx16 x) { return acosInternal(x); }
 
 
 #endif
@@ -1053,16 +1024,16 @@ static floatx16 tanh(floatx16 x)
 #if defined(SIMD_AVX_512)
 typedef floatx16 floatx;
 typedef intx16 intx;
-#define SIMD_LANES 16
+#define SIMD_WIDTH 16
 #elif defined(SIMD_AVX_2)
 typedef floatx8 floatx;
 typedef intx8 intx;
-#define SIMD_LANES 8
+#define SIMD_WIDTH 8
 #else
 typedef floatx4 floatx;
 typedef intx4 intx;
 typedef floatx4 cmpx;
-#define SIMD_LANES 4
+#define SIMD_WIDTH 4
 #endif
 
 

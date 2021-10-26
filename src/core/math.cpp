@@ -1159,9 +1159,7 @@ bool pointInRectangle(vec2 p, vec2 topLeft, vec2 bottomRight)
 
 vec2 directionToPanoramaUV(vec3 dir)
 {
-	static const float invPI = 0.31830988618379067153776752674503f;
-	static const float inv2PI = 0.15915494309189533576888376337251f;
-	static const vec2 invAtan = vec2(inv2PI, invPI);
+	const vec2 invAtan = vec2(INV_TAU, INV_PI);
 
 	vec2 panoUV = vec2(atan2(-dir.x, -dir.z), acos(dir.y)) * invAtan;
 
@@ -1273,16 +1271,16 @@ bool insideTriangle(vec3 barycentrics)
 		&& barycentrics.z >= 0.f;
 }
 
-void getTangents(vec3 normal, vec3& outTangent, vec3& outBitangent)
-{
-	outTangent = getTangent(normal);
-	outBitangent = cross(normal, outTangent);
-}
-
 vec3 getTangent(vec3 normal)
 {
 	vec3 tangent = (abs(normal.x) >= 0.57735f) ? vec3(normal.y, -normal.x, 0.f) : vec3(0.f, normal.z, -normal.y);
 	return normalize(tangent);
+}
+
+void getTangents(vec3 normal, vec3& outTangent, vec3& outBitangent)
+{
+	outTangent = getTangent(normal);
+	outBitangent = cross(normal, outTangent);
 }
 
 vec4 uniformSampleSphere(vec2 E)

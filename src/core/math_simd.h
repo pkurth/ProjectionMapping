@@ -18,6 +18,8 @@ union vec2x
 	vec2x(simd_t x, simd_t y) : x(x), y(y) {}
 	vec2x(soa_vec2 v, uint32 offset) : x(v.x + offset), y(v.y + offset) {}
 
+	void store(float* xDest, float* yDest) { x.store(xDest); y.store(yDest); }
+
 	static vec2x zero() 
 	{
 		if constexpr (std::is_same_v<simd_t, floatx4>) { return vec2x(floatx4::zero(), floatx4::zero()); }
@@ -50,6 +52,8 @@ union vec3x
 	vec3x(simd_t x, simd_t y, simd_t z) : x(x), y(y), z(z) {}
 	vec3x(vec2x<simd_t> xy, simd_t z) : x(xy.x), y(xy.y), z(z) {}
 	vec3x(soa_vec3 v, uint32 offset) : x(v.x + offset), y(v.y + offset), z(v.z + offset) {}
+
+	void store(float* xDest, float* yDest, float* zDest) { x.store(xDest); y.store(yDest); z.store(zDest); }
 
 	static vec3x zero()
 	{
@@ -89,6 +93,8 @@ union vec4x
 	vec4x(vec3x<simd_t> xyz, simd_t w) : x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
 	vec4x(soa_vec4 v, uint32 offset) : x(v.x + offset), y(v.y + offset), z(v.z + offset), w(v.w + offset) {}
 
+	void store(float* xDest, float* yDest, float* zDest, float* wDest) { x.store(xDest); y.store(yDest); z.store(zDest); w.store(wDest); }
+
 	static vec4x zero()
 	{
 		if constexpr (std::is_same_v<simd_t, floatx4>) { return vec4x(floatx4::zero(), floatx4::zero(), floatx4::zero(), floatx4::zero()); }
@@ -111,13 +117,16 @@ union quatx
 		simd_t cosHalfAngle;
 	};
 	vec4x<simd_t> v4;
+	simd_t data[4];
 
 	quatx() {}
 	quatx(simd_t x, simd_t y, simd_t z, simd_t w) : x(x), y(y), z(z), w(w) {}
 	quatx(vec3x<simd_t> axis, simd_t angle);
 	quatx(soa_quat v, uint32 offset) : x(v.x + offset), y(v.y + offset), z(v.z + offset), w(v.w + offset) {}
 
-	static const quatx identity;
+	void store(float* xDest, float* yDest, float* zDest, float* wDest) { x.store(xDest); y.store(yDest); z.store(zDest); w.store(wDest); }
+
+	static quatx identity() { return quatx<simd_t>(simd_t::zero(), simd_t::zero(), simd_t::zero(), simd_t(1.f)); }
 };
 
 template <typename simd_t>
@@ -175,9 +184,6 @@ union mat4x
 		simd_t m10, simd_t m11, simd_t m12, simd_t m13,
 		simd_t m20, simd_t m21, simd_t m22, simd_t m23,
 		simd_t m30, simd_t m31, simd_t m32, simd_t m33);
-
-	static const mat4 identity;
-	static const mat4 zero;
 };
 
 
@@ -282,9 +288,15 @@ static vec4x<simd_t> ifThen(cmp_t cond, vec4x<simd_t> ifCase, vec4x<simd_t> then
 	return { ifThen(cond, ifCase.x, thenCase.x), ifThen(cond, ifCase.y, thenCase.y), ifThen(cond, ifCase.z, thenCase.z), ifThen(cond, ifCase.w, thenCase.w) };
 }
 
-template <typename simd_t> static vec2x<simd_t> noz(vec2x<simd_t> a) { simd_t sl = squaredLength(a); return ifThen(sl == 0.f, vec2x<simd_t>::zero(), a * rsqrt(sl)); }
-template <typename simd_t> static vec3x<simd_t> noz(vec3x<simd_t> a) { simd_t sl = squaredLength(a); return ifThen(sl == 0.f, vec3x<simd_t>::zero(), a * rsqrt(sl)); }
-template <typename simd_t> static vec4x<simd_t> noz(vec4x<simd_t> a) { simd_t sl = squaredLength(a); return ifThen(sl == 0.f, vec4x<simd_t>::zero(), a * rsqrt(sl)); }
+template <typename simd_t, typename cmp_t>
+static quatx<simd_t> ifThen(cmp_t cond, quatx<simd_t> ifCase, quatx<simd_t> thenCase)
+{
+	return { ifThen(cond, ifCase.x, thenCase.x), ifThen(cond, ifCase.y, thenCase.y), ifThen(cond, ifCase.z, thenCase.z), ifThen(cond, ifCase.w, thenCase.w) };
+}
+
+template <typename simd_t> static vec2x<simd_t> noz(vec2x<simd_t> a) { simd_t sl = squaredLength(a); return ifThen(sl < 1e-8f, vec2x<simd_t>::zero(), a * rsqrt(sl)); }
+template <typename simd_t> static vec3x<simd_t> noz(vec3x<simd_t> a) { simd_t sl = squaredLength(a); return ifThen(sl < 1e-8f, vec3x<simd_t>::zero(), a * rsqrt(sl)); }
+template <typename simd_t> static vec4x<simd_t> noz(vec4x<simd_t> a) { simd_t sl = squaredLength(a); return ifThen(sl < 1e-8f, vec4x<simd_t>::zero(), a * rsqrt(sl)); }
 
 template <typename simd_t> static vec2x<simd_t> normalize(vec2x<simd_t> a) { simd_t l2 = squaredLength(a); return a * rsqrt(l2); }
 template <typename simd_t> static vec3x<simd_t> normalize(vec3x<simd_t> a) { simd_t l2 = squaredLength(a); return a * rsqrt(l2); }
@@ -298,7 +310,7 @@ template <typename simd_t> static vec2x<simd_t> round(vec2x<simd_t> a) { return 
 template <typename simd_t> static vec3x<simd_t> round(vec3x<simd_t> a) { return vec3x(round(a.x), round(a.y), round(a.z)); }
 template <typename simd_t> static vec4x<simd_t> round(vec4x<simd_t> a) { return vec4x(round(a.x), round(a.y), round(a.z), round(a.w)); }
 
-template <typename simd_t> static quatx<simd_t> normalize(quatx<simd_t> a) { quatx result; result.v4 = normalize(a.v4); return result; }
+template <typename simd_t> static quatx<simd_t> normalize(quatx<simd_t> a) { quatx<simd_t> result; result.v4 = normalize(a.v4); return result; }
 template <typename simd_t> static quatx<simd_t> conjugate(quatx<simd_t> a) { return { -a.x, -a.y, -a.z, a.w }; }
 
 template <typename simd_t> static quatx<simd_t> operator+(quatx<simd_t> a, quatx<simd_t> b) { quatx result; result.v4 = a.v4 + b.v4; return result; }
@@ -306,14 +318,14 @@ template <typename simd_t> static quatx<simd_t> operator+(quatx<simd_t> a, quatx
 template <typename simd_t>
 static quatx<simd_t> operator*(quatx<simd_t> a, quatx<simd_t> b)
 {
-	quatx result;
+	quatx<simd_t> result;
 	result.w = fmsub(a.w, b.w, dot(a.v, b.v));
 	result.v = a.v * b.w + b.v * a.w + cross(a.v, b.v);
 	return result;
 }
 
 template <typename simd_t> static quatx<simd_t> operator*(quatx<simd_t> q, simd_t s) { quatx result; result.v4 = q.v4 * s;	return result; }
-template <typename simd_t> static vec3x<simd_t> operator*(quatx<simd_t> q, vec3x<simd_t> v) { quatx p(v.x, v.y, v.z, 0.f); return (q * p * conjugate(q)).v; }
+template <typename simd_t> static vec3x<simd_t> operator*(quatx<simd_t> q, vec3x<simd_t> v) { quatx p(v.x, v.y, v.z, simd_t::zero()); return (q * p * conjugate(q)).v; }
 
 template <typename simd_t> static auto operator==(quatx<simd_t> a, quatx<simd_t> b) { return a.x == b.x & a.y == b.y & a.z == b.z & a.w == b.w; }
 
@@ -361,7 +373,236 @@ static vec4x<simd_t> operator*(const mat4x<simd_t>& a, vec4x<simd_t> b)
 	return result;
 }
 
+template <typename simd_t>
+static mat2x<simd_t> operator*(const mat2x<simd_t>& a, const mat2x<simd_t>& b)
+{
+	mat2x<simd_t> result;
 
+	result.m00 = fmadd(a.m00, b.m00, a.m01 * b.m10);
+	result.m01 = fmadd(a.m00, b.m01, a.m01 * b.m11);
+
+	result.m10 = fmadd(a.m10, b.m00, a.m11 * b.m10);
+	result.m11 = fmadd(a.m10, b.m01, a.m11 * b.m11);
+
+	return result;
+}
+
+template <typename simd_t>
+static mat3x<simd_t> operator*(const mat3x<simd_t>& a, const mat3x<simd_t>& b)
+{
+	mat3x<simd_t> result;
+
+	result.m00 = fmadd(a.m00, b.m00, fmadd(a.m01, b.m10, a.m02 * b.m20));
+	result.m01 = fmadd(a.m00, b.m01, fmadd(a.m01, b.m11, a.m02 * b.m21));
+	result.m02 = fmadd(a.m00, b.m02, fmadd(a.m01, b.m12, a.m02 * b.m22));
+
+	result.m10 = fmadd(a.m10, b.m00, fmadd(a.m11, b.m10, a.m12 * b.m20));
+	result.m11 = fmadd(a.m10, b.m01, fmadd(a.m11, b.m11, a.m12 * b.m21));
+	result.m12 = fmadd(a.m10, b.m02, fmadd(a.m11, b.m12, a.m12 * b.m22));
+
+	result.m20 = fmadd(a.m20, b.m00, fmadd(a.m21, b.m10, a.m22 * b.m20));
+	result.m21 = fmadd(a.m20, b.m01, fmadd(a.m21, b.m11, a.m22 * b.m21));
+	result.m22 = fmadd(a.m20, b.m02, fmadd(a.m21, b.m12, a.m22 * b.m22));
+	
+	return result;
+}
+
+template <typename simd_t>
+static mat4x<simd_t> operator*(const mat4x<simd_t>& a, const mat4x<simd_t>& b)
+{
+	mat4x<simd_t> result;
+
+	result.m00 = fmadd(a.m00, b.m00, fmadd(a.m01, b.m10, fmadd(a.m02, b.m20, a.m03 * b.m30)));
+	result.m01 = fmadd(a.m00, b.m01, fmadd(a.m01, b.m11, fmadd(a.m02, b.m21, a.m03 * b.m31)));
+	result.m02 = fmadd(a.m00, b.m02, fmadd(a.m01, b.m12, fmadd(a.m02, b.m22, a.m03 * b.m32)));
+	result.m03 = fmadd(a.m00, b.m03, fmadd(a.m01, b.m13, fmadd(a.m02, b.m23, a.m03 * b.m33)));
+
+	result.m10 = fmadd(a.m10, b.m00, fmadd(a.m11, b.m10, fmadd(a.m12, b.m20, a.m13 * b.m30)));
+	result.m11 = fmadd(a.m10, b.m01, fmadd(a.m11, b.m11, fmadd(a.m12, b.m21, a.m13 * b.m31)));
+	result.m12 = fmadd(a.m10, b.m02, fmadd(a.m11, b.m12, fmadd(a.m12, b.m22, a.m13 * b.m32)));
+	result.m13 = fmadd(a.m10, b.m03, fmadd(a.m11, b.m13, fmadd(a.m12, b.m23, a.m13 * b.m33)));
+
+	result.m20 = fmadd(a.m20, b.m00, fmadd(a.m21, b.m10, fmadd(a.m22, b.m20, a.m23 * b.m30)));
+	result.m21 = fmadd(a.m20, b.m01, fmadd(a.m21, b.m11, fmadd(a.m22, b.m21, a.m23 * b.m31)));
+	result.m22 = fmadd(a.m20, b.m02, fmadd(a.m21, b.m12, fmadd(a.m22, b.m22, a.m23 * b.m32)));
+	result.m23 = fmadd(a.m20, b.m03, fmadd(a.m21, b.m13, fmadd(a.m22, b.m23, a.m23 * b.m33)));
+
+	result.m30 = fmadd(a.m30, b.m00, fmadd(a.m31, b.m10, fmadd(a.m32, b.m20, a.m33 * b.m30)));
+	result.m31 = fmadd(a.m30, b.m01, fmadd(a.m31, b.m11, fmadd(a.m32, b.m21, a.m33 * b.m31)));
+	result.m32 = fmadd(a.m30, b.m02, fmadd(a.m31, b.m12, fmadd(a.m32, b.m22, a.m33 * b.m32)));
+	result.m33 = fmadd(a.m30, b.m03, fmadd(a.m31, b.m13, fmadd(a.m32, b.m23, a.m33 * b.m33)));
+
+	return result;
+}
+
+template <typename simd_t> static mat2x<simd_t> operator*(const mat2x<simd_t>& a, simd_t b) { mat2x<simd_t> result; for (uint32 i = 0; i < 4; ++i) { result.m[i] = a.m[i] * b; } return result; }
+template <typename simd_t> static mat3x<simd_t> operator*(const mat3x<simd_t>& a, simd_t b) { mat3x<simd_t> result; for (uint32 i = 0; i < 9; ++i) { result.m[i] = a.m[i] * b; } return result; }
+template <typename simd_t> static mat4x<simd_t> operator*(const mat4x<simd_t>& a, simd_t b) { mat4x<simd_t> result; for (uint32 i = 0; i < 16; ++i) { result.m[i] = a.m[i] * b; } return result; }
+
+template <typename simd_t> static mat2x<simd_t> operator*(simd_t b, const mat2x<simd_t>& a) { return a * b; }
+template <typename simd_t> static mat3x<simd_t> operator*(simd_t b, const mat3x<simd_t>& a) { return a * b; }
+template <typename simd_t> static mat4x<simd_t> operator*(simd_t b, const mat4x<simd_t>& a) { return a * b; }
+
+template <typename simd_t> static mat2x<simd_t> operator+(const mat2x<simd_t>& a, const mat2x<simd_t>& b) { mat2x<simd_t> result; for (uint32 i = 0; i < 4; ++i) { result.m[i] = a.m[i] + b.m[i]; } return result; }
+template <typename simd_t> static mat3x<simd_t> operator+(const mat3x<simd_t>& a, const mat3x<simd_t>& b) { mat3x<simd_t> result; for (uint32 i = 0; i < 9; ++i) { result.m[i] = a.m[i] + b.m[i]; } return result; }
+template <typename simd_t> static mat4x<simd_t> operator+(const mat4x<simd_t>& a, const mat4x<simd_t>& b) { mat4x<simd_t> result; for (uint32 i = 0; i < 16; ++i) { result.m[i] = a.m[i] + b.m[i]; } return result; }
+
+template <typename simd_t>
+static mat2x<simd_t> transpose(const mat2x<simd_t>& a)
+{
+	mat2x<simd_t> result;
+	result.m00 = a.m00; result.m01 = a.m10;
+	result.m10 = a.m01; result.m11 = a.m11;
+	return result;
+}
+
+template <typename simd_t>
+static mat3x<simd_t> transpose(const mat3x<simd_t>& a)
+{
+	mat3x<simd_t> result;
+	result.m00 = a.m00; result.m01 = a.m10; result.m02 = a.m20;
+	result.m10 = a.m01; result.m11 = a.m11; result.m12 = a.m21;
+	result.m20 = a.m02; result.m21 = a.m12; result.m22 = a.m22;
+	return result;
+}
+
+template <typename simd_t>
+static mat4x<simd_t> transpose(const mat4x<simd_t>& a)
+{
+	mat4x<simd_t> result;
+	result.m00 = a.m00; result.m01 = a.m10; result.m02 = a.m20; result.m03 = a.m30;
+	result.m10 = a.m01; result.m11 = a.m11; result.m12 = a.m21; result.m13 = a.m31;
+	result.m20 = a.m02; result.m21 = a.m12; result.m22 = a.m22; result.m23 = a.m32;
+	result.m30 = a.m03; result.m31 = a.m13; result.m32 = a.m23; result.m33 = a.m32;
+	return result;
+}
+
+template <typename simd_t>
+static mat3x<simd_t> getSkewMatrix(vec3x<simd_t> r)
+{
+	simd_t zero = simd_t::zero();
+	mat3x<simd_t> result;
+	result.m00 = zero;
+	result.m01 = -r.z;
+	result.m02 = r.y;
+	result.m10 = r.z;
+	result.m11 = zero;
+	result.m12 = -r.x;
+	result.m20 = -r.y;
+	result.m21 = r.x;
+	result.m22 = zero;
+	return result;
+}
+
+template <typename simd_t>
+static vec2x<simd_t> solveLinearSystem(const mat2x<simd_t>& A, vec2x<simd_t> b)
+{
+	vec2x<simd_t> ex(A.m00, A.m10);
+	vec2x<simd_t> ey(A.m01, A.m11);
+	simd_t det = cross(ex, ey);
+	det = ifThen(det != simd_t::zero(), 1.f / det, det);
+
+	vec2x<simd_t> x;
+	x.x = det * cross(b, ey);
+	x.y = det * cross(ex, b);
+	return x;
+}
+
+template <typename simd_t>
+static vec3x<simd_t> solveLinearSystem(const mat3x<simd_t>& A, vec3x<simd_t> b)
+{
+	vec3x<simd_t> ex(A.m00, A.m10, A.m20);
+	vec3x<simd_t> ey(A.m01, A.m11, A.m21);
+	vec3x<simd_t> ez(A.m02, A.m12, A.m22);
+	simd_t det = dot(ex, cross(ey, ez));
+	det = ifThen(det != simd_t::zero(), 1.f / det, det);
+
+	vec3x<simd_t> x;
+	x.x = det * dot(b, cross(ey, ez));
+	x.y = det * dot(ex, cross(b, ez));
+	x.z = det * dot(ex, cross(ey, b));
+	return x;
+}
+
+template <typename simd_t>
+static quatx<simd_t> rotateFromTo(vec3x<simd_t> _from, vec3x<simd_t> _to)
+{
+	vec3x<simd_t> from = normalize(_from);
+	vec3x<simd_t> to = normalize(_to);
+
+	simd_t zero = simd_t::zero();
+	simd_t one = 1.f;
+
+	simd_t d = dot(from, to);
+	auto same = d >= 1.f;
+
+	auto largeRotation = d < (1e-6f - 1.f);
+	quatx<simd_t> q0, q1;
+
+	if (anyTrue(largeRotation))
+	{
+		// Rotate 180° around some axis.
+		vec3x<simd_t> axis = cross(vec3x<simd_t>(one, zero, zero), from);
+		axis = ifThen(squaredLength(axis) == zero, cross(vec3x<simd_t>(zero, one, zero), from), axis);
+		axis = normalize(axis);
+		q0 = normalize(quatx<simd_t>(axis, M_PI));
+	}
+
+	if (anyFalse(largeRotation))
+	{
+		simd_t s = sqrt((one + d) * simd_t(2.f));
+		simd_t invs = one / s;
+
+		vec3x<simd_t> c = cross(from, to);
+
+		q1.x = c.x * invs;
+		q1.y = c.y * invs;
+		q1.z = c.z * invs;
+		q1.w = s * simd_t(0.5f);
+		q1 = normalize(q1);
+	}
+
+	quatx<simd_t> q = ifThen(largeRotation, q0, q1);
+	q = ifThen(same, quatx<simd_t>(zero, zero, zero, one), q);
+	return q;
+}
+
+template <typename simd_t>
+void getAxisRotation(quatx<simd_t> q, vec3x<simd_t>& axis, simd_t& angle)
+{
+	simd_t zero = simd_t::zero();
+	simd_t one = 1.f;
+
+	angle = zero;
+	axis = vec3x<simd_t>(one, zero, zero);
+
+	simd_t sqLength = squaredLength(q.v);
+	auto mask = sqLength > zero;
+	if (anyTrue(mask))
+	{
+		simd_t angleOverride = simd_t(2.f) * acos(q.w);
+		simd_t invLength = one / sqrt(sqLength);
+		vec3x<simd_t> axisOverride = q.v * invLength;
+
+		angle = ifThen(mask, angleOverride, angle);
+		axis = ifThen(mask, axisOverride, axis);
+	}
+}
+
+template <typename simd_t>
+vec3x<simd_t> getTangent(vec3x<simd_t> normal)
+{
+	auto mask = abs(normal.x) > simd_t(0.57735f);
+	vec3x<simd_t> tangent = ifThen(mask, vec3x<simd_t>(normal.y, -normal.x, simd_t::zero()), vec3x<simd_t>(simd_t::zero(), normal.z, -normal.y));
+	return normalize(tangent);
+}
+
+template <typename simd_t>
+void getTangents(vec3x<simd_t> normal, vec3x<simd_t>& outTangent, vec3x<simd_t>& outBitangent)
+{
+	outTangent = getTangent(normal);
+	outBitangent = cross(normal, outTangent);
+}
 
 
 template<typename simd_t>
