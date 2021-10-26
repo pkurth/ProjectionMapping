@@ -15,10 +15,10 @@ It also features a custom written physics engine written completely from scratch
 ## Graphics features
 
 <img align="right" src="assets/samples/raster.png" width="300"/>
-<img align="right" width="100%" />
+<img align="right" width="100%" height="0" />
 
 <img align="right" src="assets/samples/raster2.png" width="300"/>
-<img align="right" width="100%" />
+<img align="right" width="100%" height="0" />
 
 <img align="right" src="assets/samples/raster3.png" width="300"/>
 
@@ -46,7 +46,7 @@ It also features a custom written physics engine written completely from scratch
 
 </p>
 
-<img width="100%" />
+<img width="100%" height="0" />
 
 It has an integrated (albeit pretty simple) path tracer (using hardware-accelerated raytracing), which in the future will be integrated into the real-time pipeline in some form to compute global illumination effects.
 
@@ -56,11 +56,11 @@ It has an integrated (albeit pretty simple) path tracer (using hardware-accelera
 ## Physics features
 
 <a href="https://youtu.be/FqwCIoI-c_A"><img align="right" src="https://img.youtube.com/vi/FqwCIoI-c_A/mqdefault.jpg" width="300" /></a>
-<img align="right" width="100%" />
+<img align="right" width="100%" height="0" />
 <a href="https://youtu.be/YLASi_r13cc"><img align="right" src="https://img.youtube.com/vi/YLASi_r13cc/mqdefault.jpg" width="300" /></a>
-<img align="right" width="100%" />
+<img align="right" width="100%" height="0" />
 <a href="https://youtu.be/3I1dQZXHvrQ"><img align="right" src="https://img.youtube.com/vi/3I1dQZXHvrQ/mqdefault.jpg" width="300" /></a>
-<img align="right" width="100%" />
+<img align="right" width="100%" height="0" />
 <a href="https://youtu.be/j3n3yseyKFU"><img align="right" src="https://img.youtube.com/vi/j3n3yseyKFU/mqdefault.jpg" width="300" /></a>
 
 <p align="left">
