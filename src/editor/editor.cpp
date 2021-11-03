@@ -920,11 +920,10 @@ bool scene_editor::drawSceneHierarchy()
 					{
 						if (ImGui::BeginProperties())
 						{
-							uint32 monitorIndex = p.monitor ? (uint32)(p.monitor - win32_window::allConnectedMonitors.data()) : -1;
+							uint32 monitorIndex = p.window.monitorIndex;
 
 							bool monitorChanged = ImGui::PropertyDropdown("Monitor", [](uint32 index, void* data) -> const char*
 							{
-								if (index == -1) { return "---"; }
 								if (index >= (uint32)win32_window::allConnectedMonitors.size()) { return 0; }
 								return win32_window::allConnectedMonitors[index].description.c_str();
 
@@ -932,7 +931,12 @@ bool scene_editor::drawSceneHierarchy()
 
 							if (monitorChanged)
 							{
-								p.updateMonitor(&win32_window::allConnectedMonitors[monitorIndex]);
+								p.window.moveToMonitor(win32_window::allConnectedMonitors[monitorIndex]);
+							}
+
+							if (p.window.fullscreen && ImGui::PropertyButton("Window", "Leave fullscreen") || !p.window.fullscreen && ImGui::PropertyButton("Window", "Enter fullscreen"))
+							{
+								p.window.toggleFullscreen();
 							}
 
 							ImGui::EndProperties();

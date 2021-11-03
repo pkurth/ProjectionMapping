@@ -63,6 +63,8 @@ struct win32_window
 	bool fullscreen = false;
 	bool visible = false;
 
+	uint32 monitorIndex = -1; // References into allConnectedMonitors.
+
 	static std::vector<struct monitor_info> allConnectedMonitors;
 
 protected:
@@ -107,6 +109,8 @@ struct monitor_info
 	int32 width, height; // In pixels.
 	int32 physicalWidth = -1, physicalHeight = -1; // In millimeters. -1, if no information available.
 	bool probablyProjector = false;
+
+	HMONITOR monitorHandle;
 };
 
 std::vector<monitor_info> getAllDisplayDevices();

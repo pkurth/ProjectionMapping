@@ -13,7 +13,8 @@ struct projector_component
 		uint32 height = 800;
 		window.initialize(TEXT("Projector"), width, height);
 
-		camera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{700.f, 700.f, width * 0.5f, height * 0.5f }, 0.01f);
+		//camera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{700.f, 700.f, width * 0.5f, height * 0.5f }, 0.01f);
+		camera.initializeIngame(vec3(0.f, 0.f, 0.f), quat::identity, deg2rad(60.f), 0.01f);
 
 		static const vec4 colorTable[] =
 		{
@@ -42,20 +43,6 @@ struct projector_component
 		renderer.shutdown();
 	}
 
-	void updateMonitor(monitor_info* monitor)
-	{
-		this->monitor = monitor;
-		if (monitor)
-		{
-			window.moveToMonitor(*monitor);
-			if (!window.fullscreen)
-			{
-				window.toggleFullscreen();
-			}
-		}
-	}
-
-	monitor_info* monitor = 0; // If null, this is a dummy projector.
 	projector_renderer renderer;
 	dx_window window;
 	render_camera camera;

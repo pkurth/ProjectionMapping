@@ -294,17 +294,6 @@ void dx_window::onResize()
 	}
 }
 
-void dx_window::onMove()
-{
-	if (initialized)
-	{
-		RECT windowRect;
-		GetWindowRect(windowHandle, &windowRect);
-		hdrSupport = checkForHDRSupport(dxContext.factory, windowRect, colorDepth);
-		setSwapChainColorSpace(swapchain, colorDepth, hdrSupport);
-	}
-}
-
 void dx_window::onWindowDisplayChange()
 {
 	if (initialized)

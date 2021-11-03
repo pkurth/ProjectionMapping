@@ -69,6 +69,7 @@ void projector_renderer::shutdown()
 	solverIntensityTempTexture = 0;
 
 	depthDiscontinuitiesTexture = 0;
+	depthDilateTempTexture = 0;
 
 	environment = 0;
 }
@@ -103,6 +104,7 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(solverIntensityTempTexture, renderWidth, renderHeight);
 
 		resizeTexture(depthDiscontinuitiesTexture, renderWidth, renderHeight);
+		resizeTexture(depthDilateTempTexture, renderWidth, renderHeight);
 	}
 }
 

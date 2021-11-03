@@ -25,7 +25,6 @@ struct dx_window : win32_window
 	void toggleVSync();
 
 	virtual void onResize();
-	virtual void onMove();
 	virtual void onWindowDisplayChange();
 
 

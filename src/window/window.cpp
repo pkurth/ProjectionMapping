@@ -579,6 +579,33 @@ static std::string convertUniqueIDToFolderFriendlyName(const std::string& unique
 	return result;
 }
 
+static HMONITOR monitorHandleFromName(const std::string& deviceName)
+{
+	struct cb_data
+	{
+		const std::string& deviceName;
+		HMONITOR result;
+	};
+
+	cb_data data = { deviceName, 0 };
+
+	EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMonitor, HDC hDC, LPRECT rc, LPARAM inData)
+	{
+		cb_data& data = *(cb_data*)inData;
+
+		MONITORINFOEXA mi;
+		mi.cbSize = sizeof(mi);
+		if (GetMonitorInfoA(hMonitor, &mi) && data.deviceName.find(mi.szDevice) != std::string::npos)
+		{
+			data.result = hMonitor;
+			return FALSE;
+		}
+		return TRUE;
+	}, (LPARAM)&data);
+
+	return data.result;
+}
+
 std::vector<monitor_info> getAllDisplayDevices()
 {
 	std::vector<monitor_info> result;
@@ -681,6 +708,8 @@ std::vector<monitor_info> getAllDisplayDevices()
 				info.description = info.name + " (" + std::to_string(info.width) + "x" + std::to_string(info.height) + ")";
 				info.probablyProjector = info.physicalWidth == 0 || info.physicalHeight == 0 || info.physicalWidth >= 800 || info.physicalHeight >= 800;
 
+				info.monitorHandle = monitorHandleFromName(monitorDevice.DeviceName);
+
 				result.push_back(info);
 			}
 		}
@@ -770,10 +799,61 @@ static LRESULT CALLBACK windowCallBack(
 				}
 			}
 		} break;
+
+		case WM_MOVE:
+		{
+			if (window && window->open)
+			{
+				HMONITOR monitor = MonitorFromWindow(window->windowHandle, MONITOR_DEFAULTTOPRIMARY);
+
+				bool changedMonitor = false;
+
+				for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
+				{
+					if (win32_window::allConnectedMonitors[i].monitorHandle == monitor)
+					{
+						changedMonitor = window->monitorIndex != i;
+						window->monitorIndex = i;
+						break;
+					}
+				}
+
+				window->onMove();
+
+				if (changedMonitor)
+				{
+					window->onWindowDisplayChange();
+				}
+			}
+		} break;
+
+		case WM_DISPLAYCHANGE:
+		{
+			// For some reason, the windows get messed up, if a new monitor is connected or unconnected. This (crude) fix is to move the window slightly.
+			// Handling this message serves two purposes: First, move all windows a bit, such that they appear correct again.
+			// Second, trigger the code, which makes them determine their monitor index (WM_MOVE).
+
+			if (hwnd == win32_window::mainWindow->windowHandle)
+			{
+				win32_window::allConnectedMonitors = getAllDisplayDevices();
+
+				EnumThreadWindows(GetCurrentThreadId(), [](HWND hwnd, LPARAM lParam)
+				{
+					RECT rect;
+					GetWindowRect(hwnd, &rect);
+					SetWindowPos(hwnd, HWND_TOP, rect.left - 1, rect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);	// Move a bit.
+					SetWindowPos(hwnd, HWND_TOP, rect.left, rect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);		// Move back.
+
+					return TRUE;
+				}, 0);
+			}
+		} break;
+
 		case WM_CLOSE:
 		{
 			DestroyWindow(hwnd);
 		} break;
+
 		case WM_DESTROY:
 		{
 			if (window && window->windowHandle && window->open)
