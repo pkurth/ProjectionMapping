@@ -16,6 +16,7 @@ struct projector_solver
 
 	uint32 numIterationsPerFrame = 1;
 	float referenceDistance = 2.f;
+	float regularizationStrength = 1.f;
 
 	void visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass,
 		const mat4& transform,
@@ -42,11 +43,15 @@ private:
 	dx_gpu_descriptor_handle intensitiesSRVBaseDescriptor;
 	dx_gpu_descriptor_handle intensitiesUAVBaseDescriptor;
 
+	dx_gpu_descriptor_handle tempIntensitiesSRVBaseDescriptor;
+	dx_gpu_descriptor_handle tempIntensitiesUAVBaseDescriptor;
+
 	D3D12_GPU_VIRTUAL_ADDRESS viewProjsGPUAddress;
 	uint32 numProjectors;
 
 	uint32 widths[16];
 	uint32 heights[16];
+	dx_texture* intensityTempTextures[16];
 	dx_texture* intensityTextures[16];
 
 	dx_pushable_descriptor_heap heaps[NUM_BUFFERED_FRAMES];

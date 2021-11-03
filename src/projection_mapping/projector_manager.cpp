@@ -33,6 +33,7 @@ void projector_manager::updateAndRender()
 			ImGui::PropertyCheckbox("Blur depth discontinuities", projector_renderer::blurDepthDiscontinuities);
 
 			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
+			ImGui::PropertySlider("Regularization strength", solver.regularizationStrength);
 
 			ImGui::EndProperties();
 		}

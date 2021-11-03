@@ -6,11 +6,13 @@
 #include "dx/dx_pipeline.h"
 #include "dx/dx_descriptor_allocation.h"
 #include "dx/dx_profiling.h"
+#include "dx/dx_barrier_batcher.h"
 
 #include "projector_rs.hlsli"
 #include "transform.hlsli"
 
 static dx_pipeline solverPipeline;
+static dx_pipeline regularizePipeline;
 static dx_pipeline visualizeIntensitiesPipeline;
 static dx_pipeline projectorSimulationPipeline;
 
@@ -18,6 +20,7 @@ static dx_pipeline projectorSimulationPipeline;
 void projector_solver::initialize()
 {
 	solverPipeline = createReloadablePipeline("projector_solver_cs");
+	regularizePipeline = createReloadablePipeline("projector_regularize_cs");
 
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
@@ -61,7 +64,8 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 
 		widths[i] = p.camera.width;
 		heights[i] = p.camera.height;
-		intensityTextures[i] = p.renderer.solverIntensity.get();
+		intensityTextures[i] = p.renderer.solverIntensityTexture.get();
+		intensityTempTextures[i] = p.renderer.solverIntensityTempTexture.get();
 	}
 
 
@@ -104,14 +108,28 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 	for (uint32 i = 0; i < numProjectors; ++i)
 	{
 		const projector_component& p = projectors[i];
-		heap.push().create2DTextureSRV(p.renderer.solverIntensity);
+		heap.push().create2DTextureSRV(p.renderer.solverIntensityTexture);
 	}
 
 	intensitiesUAVBaseDescriptor = heap.currentGPU;
 	for (uint32 i = 0; i < numProjectors; ++i)
 	{
 		const projector_component& p = projectors[i];
-		heap.push().create2DTextureUAV(p.renderer.solverIntensity);
+		heap.push().create2DTextureUAV(p.renderer.solverIntensityTexture);
+	}
+
+	tempIntensitiesSRVBaseDescriptor = heap.currentGPU;
+	for (uint32 i = 0; i < numProjectors; ++i)
+	{
+		const projector_component& p = projectors[i];
+		heap.push().create2DTextureSRV(p.renderer.solverIntensityTempTexture);
+	}
+
+	tempIntensitiesUAVBaseDescriptor = heap.currentGPU;
+	for (uint32 i = 0; i < numProjectors; ++i)
+	{
+		const projector_component& p = projectors[i];
+		heap.push().create2DTextureUAV(p.renderer.solverIntensityTempTexture);
 	}
 }
 
@@ -121,18 +139,8 @@ void projector_solver::solve()
 
 	dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
-	cl->setPipelineState(*solverPipeline.pipeline);
-	cl->setComputeRootSignature(*solverPipeline.rootSignature);
-
 	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
 
-	cl->setRootComputeSRV(PROJECTOR_SOLVER_RS_VIEWPROJS, viewProjsGPUAddress);
-	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_RENDER_RESULTS, linearRenderResultsBaseDescriptor);
-	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
-	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
-	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_INTENSITIES, intensitiesSRVBaseDescriptor);
-	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
-	cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_OUT_INTENSITIES, intensitiesUAVBaseDescriptor);
 
 	for (uint32 iter = 0; iter < numIterationsPerFrame; ++iter)
 	{
@@ -142,20 +150,59 @@ void projector_solver::solve()
 		{
 			DX_PROFILE_BLOCK(cl, "Single projector");
 
-			projector_solver_cb cb;
-			cb.currentIndex = proj;
-			cb.numProjectors = numProjectors;
-			cb.referenceDistance = referenceDistance;
 
 			uint32 width = widths[proj];
 			uint32 height = heights[proj];
 
-			cl->transitionBarrier(intensityTextures[proj]->resource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-			cl->setCompute32BitConstants(PROJECTOR_SOLVER_RS_CB, cb);
+
+			// Solve intensity.
+
+			cl->setPipelineState(*solverPipeline.pipeline);
+			cl->setComputeRootSignature(*solverPipeline.rootSignature);
+
+			cl->setRootComputeSRV(PROJECTOR_SOLVER_RS_VIEWPROJS, viewProjsGPUAddress);
+			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_RENDER_RESULTS, linearRenderResultsBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_INTENSITIES, intensitiesSRVBaseDescriptor); // Read from regularized intensities.
+			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_OUT_INTENSITIES, tempIntensitiesUAVBaseDescriptor); // Write to temp intensities.
+
+			projector_solver_cb solverCB;
+			solverCB.currentIndex = proj;
+			solverCB.numProjectors = numProjectors;
+			solverCB.referenceDistance = referenceDistance;
+
+			cl->transitionBarrier(intensityTempTextures[proj]->resource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			cl->setCompute32BitConstants(PROJECTOR_SOLVER_RS_CB, solverCB);
 
 			cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
-			cl->uavBarrier(intensityTextures[proj]->resource);
-			cl->transitionBarrier(intensityTextures[proj]->resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+			barrier_batcher(cl)
+				//.uav(intensityTempTextures[proj]->resource)
+				.transition(intensityTempTextures[proj]->resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
+				.transition(intensityTextures[proj]->resource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+
+
+			// Regularize.
+
+			cl->setPipelineState(*regularizePipeline.pipeline);
+			cl->setComputeRootSignature(*regularizePipeline.rootSignature);
+
+			projector_regularize_cb regularizeCB;
+			regularizeCB.currentIndex = proj;
+			regularizeCB.strength = regularizationStrength;
+
+			cl->setCompute32BitConstants(PROJECTOR_REGULARIZE_RS_CB, regularizeCB);
+			cl->setComputeDescriptorTable(PROJECTOR_REGULARIZE_RS_INTENSITIES, tempIntensitiesSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_REGULARIZE_RS_OUT_INTENSITIES, intensitiesUAVBaseDescriptor);
+
+			cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
+
+			barrier_batcher(cl)
+				//.uav(intensityTextures[proj]->resource)
+				.transition(intensityTextures[proj]->resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 		}
 	}
 

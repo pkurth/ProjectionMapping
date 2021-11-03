@@ -40,8 +40,11 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	frameResult = createTexture(0, renderWidth, renderHeight, colorDepthToFormat(colorDepth), false, true, true);
 	SET_NAME(frameResult->resource, "Frame result");
 
-	solverIntensity = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
-	SET_NAME(solverIntensity->resource, "Solver intensity");
+	solverIntensityTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	SET_NAME(solverIntensityTexture->resource, "Solver intensity");
+
+	solverIntensityTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	SET_NAME(solverIntensityTempTexture->resource, "Solver intensity temp");
 
 	depthDiscontinuitiesTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(depthDiscontinuitiesTexture->resource, "Depth discontinuities");
@@ -62,7 +65,9 @@ void projector_renderer::shutdown()
 	hdrPostProcessingTexture = 0;
 	ldrPostProcessingTexture = 0;
 
-	solverIntensity = 0;
+	solverIntensityTexture = 0;
+	solverIntensityTempTexture = 0;
+
 	depthDiscontinuitiesTexture = 0;
 
 	environment = 0;
@@ -94,7 +99,9 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 
 		resizeTexture(frameResult, renderWidth, renderHeight);
 
-		resizeTexture(solverIntensity, renderWidth, renderHeight);
+		resizeTexture(solverIntensityTexture, renderWidth, renderHeight);
+		resizeTexture(solverIntensityTempTexture, renderWidth, renderHeight);
+
 		resizeTexture(depthDiscontinuitiesTexture, renderWidth, renderHeight);
 	}
 }
@@ -254,7 +261,7 @@ void projector_renderer::finalizeImage(dx_command_list* cl)
 
 	if (applySolverIntensity)
 	{
-		present(cl, ldrPostProcessingTexture, solverIntensity, frameResult, sharpen_settings{ 0.f });
+		present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
 	}
 	else
 	{

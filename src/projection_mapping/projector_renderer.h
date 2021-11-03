@@ -55,7 +55,10 @@ private:
 	ref<dx_texture> worldNormalsTexture;
 	ref<dx_texture> reflectanceTexture;
 	ref<dx_texture> depthStencilBuffer;
-	ref<dx_texture> solverIntensity;
+
+	ref<dx_texture> solverIntensityTexture;
+	ref<dx_texture> solverIntensityTempTexture;
+
 
 	ref<dx_texture> depthDiscontinuitiesTexture;
 	ref<dx_texture> depthDilateTempTexture;

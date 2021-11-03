@@ -29,6 +29,14 @@ struct projector_visualization_cb
     float referenceDistance;
 };
 
+struct projector_regularize_cb
+{
+    uint32 currentIndex;
+    float strength;
+};
+
+
+
 #ifdef HLSL
 #define clamp01 saturate
 #endif
@@ -69,6 +77,18 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
 #define PROJECTOR_SOLVER_RS_INTENSITIES         5
 #define PROJECTOR_SOLVER_RS_MASKS               6
 #define PROJECTOR_SOLVER_RS_OUT_INTENSITIES     7
+
+
+
+#define PROJECTOR_REGULARIZE_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=2, b0),"  \
+    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) )"
+
+#define PROJECTOR_REGULARIZE_RS_CB                  0
+#define PROJECTOR_REGULARIZE_RS_INTENSITIES         1
+#define PROJECTOR_REGULARIZE_RS_OUT_INTENSITIES     2
 
 
 
