@@ -4,6 +4,8 @@
 #include <shellapi.h>
 #include <uxtheme.h>
 #include <vssym32.h>
+#include <setupapi.h>
+#include <cfgmgr32.h>
 
 #include <algorithm>
 
@@ -564,43 +566,9 @@ void win32_window::moveToScreenID(int screenID)
 	}
 }
 
-struct monitor_iterator
-{
-	DISPLAY_DEVICEA dispDevice;
-	DEVMODEA devMode;
-	DWORD screenID;
-
-	monitor_iterator();
-
-	bool step(monitor_info& info);
-};
-
-void win32_window::moveToMonitor(const std::string& uniqueID)
-{
-	monitor_iterator it;
-	monitor_info monitor;
-	while (it.step(monitor))
-	{
-		if (monitor.uniqueID == uniqueID)
-		{
-			moveTo(monitor.x, monitor.y);
-			return;
-		}
-	}
-}
-
 void win32_window::moveToMonitor(const monitor_info& monitor)
 {
 	moveTo(monitor.x, monitor.y);
-}
-
-monitor_iterator::monitor_iterator()
-{
-	ZeroMemory(&dispDevice, sizeof(dispDevice));
-	ZeroMemory(&devMode, sizeof(devMode));
-	dispDevice.cb = sizeof(dispDevice);
-	devMode.dmSize = sizeof(devMode);
-	screenID = 0;
 }
 
 static std::string convertUniqueIDToFolderFriendlyName(const std::string& uniqueID)
@@ -611,45 +579,111 @@ static std::string convertUniqueIDToFolderFriendlyName(const std::string& unique
 	return result;
 }
 
-bool monitor_iterator::step(monitor_info& info)
+std::vector<monitor_info> getAllDisplayDevices()
 {
-	bool result = false;
+	std::vector<monitor_info> result;
 
-	if (EnumDisplayDevicesA(NULL, screenID, &dispDevice, 0))
+	DISPLAY_DEVICEA deviceIterator = {};
+	deviceIterator.cb = sizeof(deviceIterator);
+
+	DWORD deviceIndex = 0;
+	while (EnumDisplayDevicesA(0, deviceIndex, &deviceIterator, 0))
 	{
-		char name[sizeof(dispDevice.DeviceName)];
-		strcpy_s(name, dispDevice.DeviceName);
-		if (EnumDisplayDevicesA(name, 0, &dispDevice, EDD_GET_DEVICE_INTERFACE_NAME))
+		++deviceIndex;
+
+		DISPLAY_DEVICEA monitorDevice = {};
+		monitorDevice.cb = sizeof(monitorDevice);
+
+		monitor_info info;
+
+		// Query physical dimensions: https://ofekshilon.com/2014/06/19/reading-specific-monitor-dimensions/
+		if (EnumDisplayDevicesA(deviceIterator.DeviceName, 0, &monitorDevice, 0))
 		{
-			if (EnumDisplaySettingsExA(name, ENUM_CURRENT_SETTINGS, &devMode, NULL))
+			std::string deviceID = monitorDevice.DeviceID;
+			size_t firstSlash = deviceID.find_first_of("\\");
+			deviceID = deviceID.substr(firstSlash + 1);
+			firstSlash = deviceID.find_first_of("\\");
+			deviceID = deviceID.substr(0, firstSlash);
+
+			const GUID GUID_CLASS_MONITOR = { 0x4d36e96e, 0xe325, 0x11ce, 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 };
+
+			HDEVINFO devInfo = SetupDiGetClassDevsEx(
+				&GUID_CLASS_MONITOR,
+				NULL,
+				NULL,
+				DIGCF_PRESENT | DIGCF_PROFILE,
+				NULL,
+				NULL,
+				NULL);
+
+			if (devInfo)
+			{
+				for (DWORD i = 0; GetLastError() != ERROR_NO_MORE_ITEMS; ++i)
+				{
+					SP_DEVINFO_DATA devInfoData = {};
+					devInfoData.cbSize = sizeof(devInfoData);
+
+					if (SetupDiEnumDeviceInfo(devInfo, i, &devInfoData))
+					{
+						char instance[MAX_DEVICE_ID_LEN];
+						SetupDiGetDeviceInstanceIdA(devInfo, &devInfoData, instance, MAX_PATH, NULL);
+
+						std::string sInstance = instance;
+						if (sInstance.find(deviceID) != std::string::npos)
+						{
+							HKEY hEDIDRegKey = SetupDiOpenDevRegKey(devInfo, &devInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+
+							if (hEDIDRegKey && hEDIDRegKey != INVALID_HANDLE_VALUE)
+							{
+								// Get physical monitor size from EDID.
+
+								BYTE EDIDdata[1024];
+								DWORD edidSize = sizeof(EDIDdata);
+
+								bool success = false;
+								if (RegQueryValueEx(hEDIDRegKey, _T("EDID"), NULL, NULL, EDIDdata, &edidSize) == ERROR_SUCCESS)
+								{
+									info.physicalWidth = ((EDIDdata[68] & 0xF0) << 4) + EDIDdata[66];
+									info.physicalHeight = ((EDIDdata[68] & 0x0F) << 8) + EDIDdata[67];
+									success = true;
+								}
+
+								RegCloseKey(hEDIDRegKey);
+
+								if (success)
+								{
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				SetupDiDestroyDeviceInfoList(devInfo);
+			}
+		}
+
+		// Query other info.
+		if (EnumDisplayDevicesA(deviceIterator.DeviceName, 0, &monitorDevice, EDD_GET_DEVICE_INTERFACE_NAME))
+		{
+			DEVMODEA devMode = {};
+			devMode.dmSize = sizeof(devMode);
+
+			if (EnumDisplaySettingsExA(deviceIterator.DeviceName, ENUM_CURRENT_SETTINGS, &devMode, NULL))
 			{
 				info.x = devMode.dmPosition.x;
 				info.y = devMode.dmPosition.y;
 				info.width = devMode.dmPelsWidth;
 				info.height = devMode.dmPelsHeight;
-				info.screenID = screenID;
-				info.uniqueID = convertUniqueIDToFolderFriendlyName(dispDevice.DeviceID);
-				info.name = dispDevice.DeviceString;
+				info.screenID = deviceIndex - 1;
+				info.uniqueID = convertUniqueIDToFolderFriendlyName(monitorDevice.DeviceID);
+				info.name = monitorDevice.DeviceString;
 				info.description = info.name + " (" + std::to_string(info.width) + "x" + std::to_string(info.height) + ")";
-				result = true;
+				info.probablyProjector = info.physicalWidth == 0 || info.physicalHeight == 0 || info.physicalWidth >= 800 || info.physicalHeight >= 800;
+
+				result.push_back(info);
 			}
 		}
-	}
-
-	++screenID;
-
-	return result;
-}
-
-std::vector<monitor_info> getAllDisplayDevices()
-{
-	std::vector<monitor_info> result;
-
-	monitor_iterator it;
-	monitor_info monitor;
-	while (it.step(monitor))
-	{
-		result.push_back(monitor);
 	}
 
 	return result;

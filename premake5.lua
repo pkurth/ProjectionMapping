@@ -205,6 +205,7 @@ project "D3D12ProjectionMapping"
 		"dxguid",
 		"dxcompiler",
 		"uxtheme",
+		"setupapi",
 		"assimp",
 		"yaml-cpp",
 		"DirectXTex_Desktop_2019_Win10",

@@ -48,7 +48,6 @@ struct win32_window
 
 	void moveTo(int x, int y);
 	void moveToScreenID(int screenID);
-	void moveToMonitor(const std::string& uniqueID);
 	void moveToMonitor(const struct monitor_info& monitor);
 
 	void makeActive();
@@ -103,9 +102,11 @@ struct monitor_info
 	std::string description;
 
 	// This can change from run to run!
-	int screenID;
-	int x, y;
-	uint32 width, height;
+	int32 screenID;
+	int32 x, y;
+	int32 width, height; // In pixels.
+	int32 physicalWidth = -1, physicalHeight = -1; // In millimeters. -1, if no information available.
+	bool probablyProjector = false;
 };
 
 std::vector<monitor_info> getAllDisplayDevices();
