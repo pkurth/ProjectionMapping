@@ -84,7 +84,6 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "StaticSampler(s0," \
             "addressU = TEXTURE_ADDRESS_BORDER," \
             "addressV = TEXTURE_ADDRESS_BORDER," \
@@ -98,7 +97,6 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
 #define PROJECTOR_SIMULATION_RS_VIEWPROJS           2
 #define PROJECTOR_SIMULATION_RS_RENDER_RESULTS      3
 #define PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES      4
-#define PROJECTOR_SIMULATION_RS_INTENSITIES         5
 
 
 

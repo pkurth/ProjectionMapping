@@ -5,6 +5,7 @@
 
 #include "dx/dx_pipeline.h"
 #include "dx/dx_descriptor_allocation.h"
+#include "dx/dx_profiling.h"
 
 #include "projector_rs.hlsli"
 #include "transform.hlsli"
@@ -135,8 +136,12 @@ void projector_solver::solve()
 
 	for (uint32 iter = 0; iter < numIterationsPerFrame; ++iter)
 	{
+		DX_PROFILE_BLOCK(cl, "Solver iteration");
+
 		for (uint32 proj = 0; proj < numProjectors; ++proj)
 		{
+			DX_PROFILE_BLOCK(cl, "Single projector");
+
 			projector_solver_cb cb;
 			cb.currentIndex = proj;
 			cb.numProjectors = numProjectors;
@@ -244,9 +249,8 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
 	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.viewProjsGPUAddress);
-	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_RENDER_RESULTS, solver.linearRenderResultsBaseDescriptor);
+	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_RENDER_RESULTS, solver.srgbRenderResultsBaseDescriptor);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES, solver.depthTexturesBaseDescriptor);
-	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_INTENSITIES, solver.intensitiesSRVBaseDescriptor);
 
 
 	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
@@ -256,6 +260,13 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 
 	cl->resetToDynamicDescriptorHeap();
 }
+
+
+
+
+
+
+
 
 void projector_solver::visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass,
 	const mat4& transform,

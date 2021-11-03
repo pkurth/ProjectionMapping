@@ -1,6 +1,7 @@
 #include "normal.hlsli"
 #include "projector_rs.hlsli"
 #include "camera.hlsli"
+#include "color.hlsli"
 
 struct ps_input
 {
@@ -26,7 +27,6 @@ StructuredBuffer<projector_cb> projectors		: register(t0, space0);
 
 Texture2D<float4> renderResults[]				: register(t0, space1);
 Texture2D<float> depthTextures[]				: register(t0, space2);
-Texture2D<float> intensities[]					: register(t0, space3);
 
 SamplerState borderSampler						: register(s0);
 
@@ -60,10 +60,11 @@ ps_output main(ps_input IN)
 			V /= distance;
 			
 			float physicalIntensity = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
-			float softwareIntensity = intensities[projIndex].SampleLevel(borderSampler, uv, 0);
 
-			float3 renderResult = renderResults[projIndex].SampleLevel(borderSampler, uv, 0).rgb;
-			color += renderResult * physicalIntensity * softwareIntensity;
+			float3 renderResult = renderResults[projIndex].SampleLevel(borderSampler, uv, 0).rgb; // Software intensity is baked into this already.
+			renderResult = sRGBToLinear(renderResult);
+
+			color += renderResult * physicalIntensity;
 		}
 	}
 
