@@ -31,6 +31,9 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	depthStencilBuffer = createDepthTexture(renderWidth, renderHeight, depthStencilFormat);
 	SET_NAME(depthStencilBuffer->resource, "Depth buffer");
 
+	realDepthStencilBuffer = createDepthTexture(renderWidth, renderHeight, depthStencilFormat);
+	SET_NAME(realDepthStencilBuffer->resource, "Real depth buffer");
+
 	hdrPostProcessingTexture = createTexture(0, renderWidth, renderHeight, hdrFormat, false, true, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(hdrPostProcessingTexture->resource, "HDR Post processing");
 
@@ -61,6 +64,7 @@ void projector_renderer::shutdown()
 	worldNormalsTexture = 0;
 	reflectanceTexture = 0;
 	depthStencilBuffer = 0;
+	realDepthStencilBuffer = 0;
 
 	hdrPostProcessingTexture = 0;
 	ldrPostProcessingTexture = 0;
@@ -94,6 +98,7 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(worldNormalsTexture, renderWidth, renderHeight);
 		resizeTexture(reflectanceTexture, renderWidth, renderHeight);
 		resizeTexture(depthStencilBuffer, renderWidth, renderHeight);
+		resizeTexture(realDepthStencilBuffer, renderWidth, renderHeight);
 
 		resizeTexture(hdrPostProcessingTexture, renderWidth, renderHeight);
 		resizeTexture(ldrPostProcessingTexture, renderWidth, renderHeight);
@@ -111,6 +116,11 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 void projector_renderer::setProjectorCamera(const render_camera& camera)
 {
 	buildCameraConstantBuffer(camera, 0.f, this->projectorCamera);
+}
+
+void projector_renderer::setRealProjectorCamera(const render_camera& camera)
+{
+	buildCameraConstantBuffer(camera, 0.f, this->realProjectorCamera);
 }
 
 void projector_renderer::setViewerCamera(const render_camera& camera)
@@ -174,8 +184,14 @@ void projector_renderer::endFrame()
 
 
 	cl->clearDepthAndStencil(depthStencilBuffer);
+	cl->clearDepthAndStencil(realDepthStencilBuffer);
 	cl->clearRTV(hdrColorTexture, 0.f, 0.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors. Clear alpha to zero too, to indicate background.
 	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+
+	dx_render_target realDepthOnlyRenderTarget({ }, realDepthStencilBuffer);
+	depthPrePass(cl, realDepthOnlyRenderTarget, opaqueRenderPass,
+		realProjectorCamera.viewProj, realProjectorCamera.prevFrameViewProj, vec2(0.f, 0.f), vec2(0.f, 0.f));
 
 
 	dx_render_target depthOnlyRenderTarget({ }, depthStencilBuffer);

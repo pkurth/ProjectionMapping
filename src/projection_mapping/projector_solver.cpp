@@ -38,6 +38,17 @@ void projector_solver::initialize()
 	}
 }
 
+static void projectorToCB(const render_camera& camera, projector_cb& proj)
+{
+	proj.viewProj = camera.viewProj;
+	proj.invViewProj = camera.invViewProj;
+	proj.position = vec4(camera.position, 1.f);
+	proj.screenDims = vec2((float)camera.width, (float)camera.height);
+	proj.invScreenDims = 1.f / proj.screenDims;
+	proj.projectionParams = camera.getShaderProjectionParams();
+	proj.forward = vec4(camera.rotation * vec3(0.f, 0.f, -1.f), 0.f);
+}
+
 void projector_solver::prepareForFrame(const projector_component* projectors, uint32 numProjectors)
 {
 	this->numProjectors = numProjectors;
@@ -49,21 +60,19 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 	projector_cb* viewProjs = (projector_cb*)alloc.cpuPtr;
 	viewProjsGPUAddress = alloc.gpuPtr;
 
+	alloc = dxContext.allocateDynamicBuffer(numProjectors * sizeof(projector_cb));
+	projector_cb* realViewProjs = (projector_cb*)alloc.cpuPtr;
+	realViewProjsGPUAddress = alloc.gpuPtr;
+
 	for (uint32 i = 0; i < numProjectors; ++i)
 	{
 		const projector_component& p = projectors[i];
 
-		projector_cb& proj = *viewProjs++;
-		proj.viewProj = p.camera.viewProj;
-		proj.invViewProj = p.camera.invViewProj;
-		proj.position = vec4(p.camera.position, 1.f);
-		proj.screenDims = vec2((float)p.camera.width, (float)p.camera.height);
-		proj.invScreenDims = 1.f / proj.screenDims;
-		proj.projectionParams = p.camera.getShaderProjectionParams();
-		proj.forward = vec4(p.camera.rotation * vec3(0.f, 0.f, -1.f), 0.f);
-
-		widths[i] = p.camera.width;
-		heights[i] = p.camera.height;
+		projectorToCB(p.calibratedCamera, *viewProjs++);
+		projectorToCB(p.realCamera, *realViewProjs++);
+		
+		widths[i] = p.calibratedCamera.width;
+		heights[i] = p.calibratedCamera.height;
 		intensityTextures[i] = p.renderer.solverIntensityTexture.get();
 		intensityTempTextures[i] = p.renderer.solverIntensityTempTexture.get();
 	}
@@ -95,6 +104,13 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 	{
 		const projector_component& p = projectors[i];
 		heap.push().createDepthTextureSRV(p.renderer.depthStencilBuffer);
+	}
+
+	realDepthTexturesBaseDescriptor = heap.currentGPU;
+	for (uint32 i = 0; i < numProjectors; ++i)
+	{
+		const projector_component& p = projectors[i];
+		heap.push().createDepthTextureSRV(p.renderer.realDepthStencilBuffer);
 	}
 
 	depthDiscontinuitiesTexturesBaseDescriptor = heap.currentGPU;
@@ -295,9 +311,9 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
-	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.viewProjsGPUAddress);
+	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.realViewProjsGPUAddress);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_RENDER_RESULTS, solver.srgbRenderResultsBaseDescriptor);
-	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES, solver.depthTexturesBaseDescriptor);
+	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES, solver.realDepthTexturesBaseDescriptor);
 
 
 	cl->setVertexBuffer(0, rc.vertexBuffer.positions);

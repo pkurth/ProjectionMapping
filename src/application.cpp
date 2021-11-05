@@ -192,7 +192,7 @@ void application::update(const user_input& input, float dt)
 	// Update projector frusta and set render parameters.
 	for (auto [entityHandle, projector] : scene.view<projector_component>().each())
 	{
-		renderCameraFrustum(projector.camera, projector.frustumColor, &ldrRenderPass, 4.f);
+		renderCameraFrustum(projector.calibratedCamera, projector.frustumColor, &ldrRenderPass, 4.f);
 		projector.renderer.submitRenderPass(&projectorOpaqueRenderPass);
 	}
 
