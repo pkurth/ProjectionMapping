@@ -193,6 +193,7 @@ void application::update(const user_input& input, float dt)
 	for (auto [entityHandle, projector] : scene.view<projector_component>().each())
 	{
 		renderCameraFrustum(projector.calibratedCamera, projector.frustumColor, &ldrRenderPass, 4.f);
+		renderCameraFrustum(projector.realCamera, projector.frustumColor * 0.5f, &ldrRenderPass, 4.f);
 		projector.renderer.submitRenderPass(&projectorOpaqueRenderPass);
 	}
 
