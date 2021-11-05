@@ -926,7 +926,6 @@ bool scene_editor::drawSceneHierarchy()
 							{
 								if (index >= (uint32)win32_window::allConnectedMonitors.size()) { return 0; }
 								return win32_window::allConnectedMonitors[index].description.c_str();
-
 							}, monitorIndex, 0);
 
 							if (monitorChanged)
@@ -934,7 +933,8 @@ bool scene_editor::drawSceneHierarchy()
 								p.window.moveToMonitor(win32_window::allConnectedMonitors[monitorIndex]);
 							}
 
-							if (p.window.fullscreen && ImGui::PropertyButton("Window", "Leave fullscreen") || !p.window.fullscreen && ImGui::PropertyButton("Window", "Enter fullscreen"))
+							bool fullscreen = p.window.fullscreen;
+							if (ImGui::PropertyCheckbox("Fullscreen", fullscreen))
 							{
 								p.window.toggleFullscreen();
 							}
