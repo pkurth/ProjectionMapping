@@ -49,9 +49,8 @@ static dx_pipeline specularAmbientPipeline;
 
 static dx_pipeline hierarchicalLinearDepthPipeline;
 
-static dx_pipeline gaussianBlur5x5Pipeline;
-static dx_pipeline gaussianBlur9x9Pipeline;
-static dx_pipeline gaussianBlur13x13Pipeline;
+static dx_pipeline gaussianBlurFloatPipelines[gaussian_blur_kernel_size_count];
+static dx_pipeline gaussianBlurFloat4Pipelines[gaussian_blur_kernel_size_count];
 
 static dx_pipeline dilationPipeline;
 static dx_pipeline erosionPipeline;
@@ -194,9 +193,13 @@ void loadCommonShaders()
 
 	hierarchicalLinearDepthPipeline = createReloadablePipeline("hierarchical_linear_depth_cs");
 
-	gaussianBlur5x5Pipeline = createReloadablePipeline("gaussian_blur_5x5_cs");
-	gaussianBlur9x9Pipeline = createReloadablePipeline("gaussian_blur_9x9_cs");
-	gaussianBlur13x13Pipeline = createReloadablePipeline("gaussian_blur_13x13_cs");
+	gaussianBlurFloatPipelines[gaussian_blur_5x5] = createReloadablePipeline("gaussian_blur_5x5_float_cs");
+	gaussianBlurFloatPipelines[gaussian_blur_9x9] = createReloadablePipeline("gaussian_blur_9x9_float_cs");
+	gaussianBlurFloatPipelines[gaussian_blur_13x13] = createReloadablePipeline("gaussian_blur_13x13_float_cs");
+
+	gaussianBlurFloat4Pipelines[gaussian_blur_5x5] = createReloadablePipeline("gaussian_blur_5x5_float4_cs");
+	gaussianBlurFloat4Pipelines[gaussian_blur_9x9] = createReloadablePipeline("gaussian_blur_9x9_float4_cs");
+	gaussianBlurFloat4Pipelines[gaussian_blur_13x13] = createReloadablePipeline("gaussian_blur_13x13_float4_cs");
 
 	dilationPipeline = createReloadablePipeline("dilation_cs");
 	erosionPipeline = createReloadablePipeline("erosion_cs");
@@ -1048,11 +1051,12 @@ void gaussianBlur(dx_command_list* cl,
 {
 	PROFILE_ALL(cl, "Gaussian Blur");
 
-	auto& pipeline =
-		(kernel == gaussian_blur_5x5) ? gaussianBlur5x5Pipeline :
-		(kernel == gaussian_blur_9x9) ? gaussianBlur9x9Pipeline :
-		(kernel == gaussian_blur_13x13) ? gaussianBlur13x13Pipeline :
-		gaussianBlur5x5Pipeline; // TODO: Emit error!
+	assert(inputOutput->format == temp->format);
+
+	uint32 numChannels = getNumberOfChannels(inputOutput->format);
+
+	// Maybe we could add more specializations for 2 and 3 channels.
+	dx_pipeline& pipeline = ((numChannels == 1) ? gaussianBlurFloatPipelines : gaussianBlurFloat4Pipelines)[kernel];
 
 	cl->setPipelineState(*pipeline.pipeline);
 	cl->setComputeRootSignature(*pipeline.rootSignature);

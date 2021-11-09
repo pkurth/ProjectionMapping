@@ -15,6 +15,8 @@ enum gaussian_blur_kernel_size
 	gaussian_blur_5x5,
 	gaussian_blur_9x9,
 	gaussian_blur_13x13,
+
+	gaussian_blur_kernel_size_count,
 };
 
 struct ssr_settings
