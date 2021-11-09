@@ -87,7 +87,7 @@ void main(cs_input IN)
 	if (possiblePhysicalIntensity > maxPhysicalIntensityByOtherProjectors)
 	{
 		// We are the best hitting projector.
-		remainingIntensity *= 1.001f;
+		remainingIntensity *= 1.01f;
 	}
 
 
