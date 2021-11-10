@@ -66,7 +66,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	editor.initialize(&scene, renderer);
 
-	if (auto augustusMesh = loadMeshFromFile("assets/augustus/augustus.obj"))
+	if (auto augustusMesh = loadMeshFromFile("assets/augustus/augustus2.obj"))
 	{
 		scene.createEntity("Augustus")
 			.addComponent<transform_component>(vec3(0.f, 0.f, 0.f), quat::identity, 4.f)
@@ -107,11 +107,11 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	// Dummy projectors.
 
-	scene.createEntity("Dummy proj 0")
+	scene.createEntity("Projector")
 		.addComponent<position_rotation_component>(vec3(0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
 		.addComponent<projector_component>();
 
-	scene.createEntity("Dummy proj 1")
+	scene.createEntity("Projector")
 		.addComponent<position_rotation_component>(vec3(-0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
 		.addComponent<projector_component>();
 
