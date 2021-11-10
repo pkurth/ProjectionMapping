@@ -17,6 +17,7 @@ struct projector_solver
 	uint32 numIterationsPerFrame = 1;
 	float referenceDistance = 2.f;
 	float regularizationStrength = 1.f;
+	float depthDiscontinuityMaskStrength = 1.f;
 	bool simulateCalibrationError = false;
 
 	void visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass,

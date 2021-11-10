@@ -21,6 +21,7 @@ struct projector_solver_cb
     uint32 currentIndex;
     uint32 numProjectors;
     float referenceDistance;
+    float maskStrength;
 };
 
 struct projector_visualization_cb
@@ -54,7 +55,7 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
 
 #define PROJECTOR_SOLVER_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=3, b0),"  \
+    "RootConstants(num32BitConstants=4, b0),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
@@ -84,11 +85,15 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
     "RootFlags(0), " \
     "RootConstants(num32BitConstants=2, b0),"  \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) )"
 
 #define PROJECTOR_REGULARIZE_RS_CB                  0
 #define PROJECTOR_REGULARIZE_RS_INTENSITIES         1
-#define PROJECTOR_REGULARIZE_RS_OUT_INTENSITIES     2
+#define PROJECTOR_REGULARIZE_RS_DEPTH_TEXTURES      2
+#define PROJECTOR_REGULARIZE_RS_MASKS               3
+#define PROJECTOR_REGULARIZE_RS_OUT_INTENSITIES     4
 
 
 

@@ -188,6 +188,7 @@ void projector_solver::solve()
 			solverCB.currentIndex = proj;
 			solverCB.numProjectors = numProjectors;
 			solverCB.referenceDistance = referenceDistance;
+			solverCB.maskStrength = depthDiscontinuityMaskStrength;
 
 			cl->transitionBarrier(intensityTempTextures[proj]->resource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			cl->setCompute32BitConstants(PROJECTOR_SOLVER_RS_CB, solverCB);
@@ -212,6 +213,8 @@ void projector_solver::solve()
 
 			cl->setCompute32BitConstants(PROJECTOR_REGULARIZE_RS_CB, regularizeCB);
 			cl->setComputeDescriptorTable(PROJECTOR_REGULARIZE_RS_INTENSITIES, tempIntensitiesSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_REGULARIZE_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_REGULARIZE_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_REGULARIZE_RS_OUT_INTENSITIES, intensitiesUAVBaseDescriptor);
 
 			cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));

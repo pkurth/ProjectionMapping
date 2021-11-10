@@ -83,17 +83,20 @@ void main(cs_input IN)
 	float3 V = normalize(projectors[index].position.xyz - worldPosition);
 	float possiblePhysicalIntensity = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
 
+	float intensity = saturate(remainingIntensity / possiblePhysicalIntensity);
 
 	if (possiblePhysicalIntensity > maxPhysicalIntensityByOtherProjectors)
 	{
 		// We are the best hitting projector.
-		remainingIntensity *= 1.01f;
+		intensity *= 1.001f;
 	}
 
-
-	float intensity = saturate(remainingIntensity / possiblePhysicalIntensity);
-	//float mask = 1.f - masks[index][texCoord];
-	//intensity *= mask;
+	if (cb.maskStrength > 0.f)
+	{
+		float mask = max(0.2f, 1.f - masks[index][texCoord]);
+		float maskedIntensity = intensity * mask;
+		intensity = lerp(intensity, maskedIntensity, cb.maskStrength);
+	}
 
 	outIntensities[index][texCoord] = intensity;
 }

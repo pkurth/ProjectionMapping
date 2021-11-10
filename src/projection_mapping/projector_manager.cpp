@@ -34,6 +34,8 @@ void projector_manager::updateAndRender()
 
 			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
 			ImGui::PropertySlider("Regularization strength", solver.regularizationStrength);
+			ImGui::PropertySlider("Depth discontinuity mask strength", solver.depthDiscontinuityMaskStrength);
+
 			ImGui::PropertyCheckbox("Simulate calibration error", solver.simulateCalibrationError);
 
 			ImGui::EndProperties();
@@ -68,9 +70,9 @@ void projector_manager::updateAndRender()
 				assert(projector.calibratedCamera.type == camera_type_ingame); // For now. If we have a calibrated camera, we need to jitter different stuff.
 
 				random_number_generator rng = { (uint32)entityHandle * 519251 }; // Random, but deterministic.
-				const float maxPositionError = 0.02f;
-				const float maxRotationError = deg2rad(1.f);
-				const float maxFovError = deg2rad(1.f);
+				const float maxPositionError = 0.01f;
+				const float maxRotationError = deg2rad(0.5f);
+				const float maxFovError = deg2rad(0.5f);
 
 				projector.realCamera.position += rng.randomVec3Between(-maxPositionError, maxPositionError);
 				projector.realCamera.rotation = rng.randomRotation(maxRotationError) * projector.realCamera.rotation;
