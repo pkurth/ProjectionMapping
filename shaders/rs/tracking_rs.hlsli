@@ -22,6 +22,7 @@ struct create_correspondences_cb
 	distortion_cb distortion;
 	uint32 width;
 	uint32 height;
+	float depthScale;
 };
 
 
@@ -51,9 +52,11 @@ struct create_correspondences_cb
 	"DENY_HULL_SHADER_ROOT_ACCESS |" \
 	"DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
 	"DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
-	"RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_VERTEX)"
+	"RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_ALL), " \
+	"DescriptorTable(SRV(t0, numDescriptors=2), visibility=SHADER_VISIBILITY_PIXEL), " \
 
-#define CREATE_CORRESPONDENCES_RS_CB				0
+#define CREATE_CORRESPONDENCES_RS_CB						0
+#define CREATE_CORRESPONDENCES_RS_DEPTH_TEXTURE_AND_TABLE	1
 
 
 #endif

@@ -191,8 +191,11 @@ void depth_tracker::update()
 				cb.width = camera.depthSensor.width;
 				cb.height = camera.depthSensor.height;
 				cb.m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) * trsToMat4(transform); // TODO: Global camera position.
+				cb.depthScale = camera.depthScale;
 
 				cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_CB, cb);
+				cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_DEPTH_TEXTURE_AND_TABLE, 0, cameraDepthTexture);
+				cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_DEPTH_TEXTURE_AND_TABLE, 1, cameraUnprojectTableTexture);
 
 				for (auto& submesh : rasterComponent.mesh->submeshes)
 				{
