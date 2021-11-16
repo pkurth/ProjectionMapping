@@ -269,7 +269,7 @@ ref<dx_texture> createTexture(D3D12_RESOURCE_DESC textureDesc, D3D12_SUBRESOURCE
 
 	result->requestedNumMipLevels = textureDesc.MipLevels;
 
-	uint32 maxNumMipLevels = (uint32)log2((float)max(textureDesc.Width, textureDesc.Height)) + 1;
+	uint32 maxNumMipLevels = (uint32)log2((float)max((uint32)textureDesc.Width, textureDesc.Height)) + 1;
 	textureDesc.MipLevels = min(maxNumMipLevels, result->requestedNumMipLevels);
 
 	D3D12_FEATURE_DATA_FORMAT_SUPPORT formatSupport;
@@ -594,7 +594,7 @@ std::wstring dx_texture::getName() const
 	wchar name[128];
 	uint32 size = sizeof(name); 
 	resource->GetPrivateData(WKPDID_D3DDebugObjectNameW, &size, name); 
-	name[min(arraysize(name) - 1, size)] = 0;
+	name[min((uint32)arraysize(name) - 1, size)] = 0;
 
 	return name;
 }
@@ -618,7 +618,7 @@ ref<dx_texture> createPlacedTexture(dx_heap heap, uint64 offset, D3D12_RESOURCE_
 
 	result->requestedNumMipLevels = textureDesc.MipLevels;
 
-	uint32 maxNumMipLevels = (uint32)log2((float)max(textureDesc.Width, textureDesc.Height)) + 1;
+	uint32 maxNumMipLevels = (uint32)log2((float)max((uint32)textureDesc.Width, textureDesc.Height)) + 1;
 	textureDesc.MipLevels = min(maxNumMipLevels, result->requestedNumMipLevels);
 
 	D3D12_FEATURE_DATA_FORMAT_SUPPORT formatSupport;
@@ -806,7 +806,7 @@ void resizeTexture(ref<dx_texture> texture, uint32 newWidth, uint32 newHeight, D
 	wchar name[128];
 	uint32 size = sizeof(name);
 	texture->resource->GetPrivateData(WKPDID_D3DDebugObjectNameW, &size, name);
-	name[min(arraysize(name) - 1, size)] = 0;
+	name[min((uint32)arraysize(name) - 1, size)] = 0;
 
 	bool hasMipUAVs = texture->srvUavAllocation.count > 2;
 
@@ -955,7 +955,7 @@ texture_grave::~texture_grave()
 	{
 		uint32 size = sizeof(name);
 		resource->GetPrivateData(WKPDID_D3DDebugObjectNameW, &size, name);
-		name[min(arraysize(name) - 1, size)] = 0;
+		name[min((uint32)arraysize(name) - 1, size)] = 0;
 
 		dxContext.srvUavAllocator.free(srvUavAllocation);
 		dxContext.rtvAllocator.free(rtvAllocation);

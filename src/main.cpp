@@ -14,6 +14,7 @@
 #include "editor/asset_editor_panel.h"
 
 #include "projection_mapping/projector_manager.h"
+#include "tracking/tracking.h"
 
 
 #define IMGUI_DEFINE_MATH_OPERATORS
@@ -102,6 +103,8 @@ int main(int argc, char** argv)
 	{
 		return EXIT_FAILURE;
 	}
+
+	depth_tracker::initializeCommon();
 
 	initializeJobSystem();
 

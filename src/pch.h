@@ -40,13 +40,10 @@ inline ref<T> make_ref(Args&&... args)
 
 #define arraysize(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-#ifndef min
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#endif
-
-#ifndef max
-#define max(a, b) ((a) > (b) ? (a) : (b))
-#endif
+template <typename T>
+static constexpr auto min(T a, T b) { return a < b ? a : b; }
+template <typename T>
+static constexpr auto max(T a, T b) { return a > b ? a : b; }
 
 #define setBit(mask, bit) mask |= (1 << (bit))
 #define unsetBit(mask, bit) mask ^= (1 << (bit))

@@ -9,8 +9,8 @@ struct projector_component
 {
 	projector_component()
 	{
-		uint32 width = 1280;
-		uint32 height = 800;
+		uint32 width = 1920;
+		uint32 height = 1080;
 		window.initialize(TEXT("Projector"), width, height);
 
 		//calibratedCamera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{700.f, 700.f, width * 0.5f, height * 0.5f }, 0.01f);

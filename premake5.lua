@@ -227,6 +227,10 @@ project "D3D12ProjectionMapping"
 		["Shaders/*"] = { "shaders/**.hlsl" },
 	}
 
+	libdirs {
+		"ext/lib",
+	}
+
 	links {
 		"d3d12",
 		"D3Dcompiler",
@@ -238,6 +242,8 @@ project "D3D12ProjectionMapping"
 		"assimp",
 		"yaml-cpp",
 		"DirectXTex_Desktop_2019_Win10",
+		"k4a.lib",
+		"realsense2.lib",
 	}
 
 	dependson {

@@ -12,6 +12,7 @@
 #include "scene/serialization.h"
 #include "projection_mapping/projector.h"
 #include "rendering/debug_visualization.h"
+#include "tracking/tracking.h"
 
 #include <fontawesome/list.h>
 
@@ -87,6 +88,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 	bool objectDragged = false;
 	objectDragged |= handleUserInput(input, ldrRenderPass, dt);
 	objectDragged |= drawSceneHierarchy();
+	drawHardwareWindow();
 	drawMainMenuBar();
 	drawSettings(dt);
 
@@ -958,6 +960,56 @@ bool scene_editor::drawSceneHierarchy()
 	ImGui::End();
 
 	return objectMovedByWidget;
+}
+
+void scene_editor::drawHardwareWindow()
+{
+	if (ImGui::Begin("Hardware"))
+	{
+		if (ImGui::BeginTree("Monitors/Projectors"))
+		{
+			for (const auto& monitor : win32_window::allConnectedMonitors)
+			{
+				ImGui::PushID(&monitor);
+				if (ImGui::BeginTree(monitor.description.c_str()))
+				{
+					if (ImGui::BeginProperties())
+					{
+						ImGui::PropertyValue("Unique ID", monitor.uniqueID.c_str());
+
+						ImGui::EndProperties();
+					}
+					ImGui::EndTree();
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndTree();
+		}
+
+		if (ImGui::BeginTree("Depth cameras"))
+		{
+			for (const auto& cam : depth_tracker::allConnectedRGBDCameras)
+			{
+				ImGui::PushID(&cam);
+				if (ImGui::BeginTree(cam.description.c_str()))
+				{
+					if (ImGui::BeginProperties())
+					{
+						ImGui::PropertyValue("Type", rgbdCameraTypeNames[cam.type]);
+						ImGui::PropertyValue("Index", cam.deviceIndex);
+						ImGui::PropertyValue("Serial number", cam.serialNumber.c_str());
+
+						ImGui::EndProperties();
+					}
+					ImGui::EndTree();
+				}
+				ImGui::PopID();
+			}
+
+			ImGui::EndTree();
+		}
+	}
+	ImGui::End();
 }
 
 bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldrRenderPass, float dt)

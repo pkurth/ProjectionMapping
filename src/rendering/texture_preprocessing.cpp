@@ -229,15 +229,15 @@ void generateMipMapsOnGPU(dx_command_list* cl, ref<dx_texture>& texture)
 		_BitScanForward(&mipCount, (dstWidth == 1 ? dstHeight : dstWidth) | (dstHeight == 1 ? dstWidth : dstHeight));
 
 		// Maximum number of mips to generate is 4.
-		mipCount = min(4, mipCount + 1);
+		mipCount = min(4u, (uint32)mipCount + 1);
 		// Clamp to total number of mips left over.
 		mipCount = (srcMip + mipCount) >= resourceDesc.MipLevels ?
 			resourceDesc.MipLevels - srcMip - 1 : mipCount;
 
 		// Dimensions should not reduce to 0.
 		// This can happen if the width and height are not the same.
-		dstWidth = max(1, dstWidth);
-		dstHeight = max(1, dstHeight);
+		dstWidth = max(1u, dstWidth);
+		dstHeight = max(1u, dstHeight);
 
 		cb.srcMipLevel = srcMip;
 		cb.numMipLevelsToGenerate = mipCount;
@@ -339,7 +339,7 @@ ref<dx_texture> equirectangularToCubemap(dx_command_list* cl, const ref<dx_textu
 	for (uint32 mipSlice = 0; mipSlice < numMips; )
 	{
 		// Maximum number of mips to generate per pass is 5.
-		uint32 numMips = min(5, cubemapDesc.MipLevels - mipSlice);
+		uint32 numMips = min(5u, cubemapDesc.MipLevels - mipSlice);
 
 		equirectangularToCubemapCB.firstMip = mipSlice;
 		equirectangularToCubemapCB.cubemapSize = max((uint32)cubemapDesc.Width, cubemapDesc.Height) >> mipSlice;
@@ -529,7 +529,7 @@ ref<dx_texture> prefilterEnvironment(dx_command_list* cl, const ref<dx_texture>&
 	for (uint32 mipSlice = 0; mipSlice < prefilteredDesc.MipLevels; )
 	{
 		// Maximum number of mips to generate per pass is 5.
-		uint32 numMips = min(5, prefilteredDesc.MipLevels - mipSlice);
+		uint32 numMips = min(5u, prefilteredDesc.MipLevels - mipSlice);
 
 		prefilterEnvironmentCB.firstMip = mipSlice;
 		prefilterEnvironmentCB.cubemapSize = max((uint32)prefilteredDesc.Width, prefilteredDesc.Height) >> mipSlice;
