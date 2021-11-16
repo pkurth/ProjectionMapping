@@ -1,13 +1,18 @@
 #ifndef TRACKING_RS_HLSLI
 #define TRACKING_RS_HLSLI
 
+#include "camera.hlsli"
 
 struct visualize_depth_cb
 {
 	mat4 vp;
-	mat4 colorCameraVP;
+	mat4 colorCameraV;
+	intrinsics_cb colorCameraIntrinsics;
+	distortion_cb colorCameraDistortion;
 	float depthScale;
-	uint32 width;
+	uint32 depthWidth;
+	uint32 colorWidth;
+	uint32 colorHeight;
 };
 
 
@@ -16,7 +21,7 @@ struct visualize_depth_cb
 	"DENY_HULL_SHADER_ROOT_ACCESS |" \
 	"DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
 	"DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
-	"RootConstants(num32BitConstants=36, b0, visibility=SHADER_VISIBILITY_VERTEX), " \
+	"RootConstants(num32BitConstants=50, b0, visibility=SHADER_VISIBILITY_VERTEX), " \
 	"DescriptorTable(SRV(t0, numDescriptors=2), visibility=SHADER_VISIBILITY_VERTEX), " \
 	"DescriptorTable(SRV(t0, numDescriptors=1, space=1), visibility=SHADER_VISIBILITY_PIXEL), " \
 	"StaticSampler(s0," \

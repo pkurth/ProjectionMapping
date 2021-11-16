@@ -67,8 +67,9 @@ struct rgbd_camera_sensor
 	vec3 position;
 
 	camera_intrinsics intrinsics;
+	camera_distortion distortion;
 
-	vec2* xyTable = 0; // Maps pixel to ray direction (x, y). z = -1.
+	vec2* unprojectTable = 0; // Maps pixel to ray direction (x, y). z = -1.
 };
 
 

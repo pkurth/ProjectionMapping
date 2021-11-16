@@ -17,9 +17,11 @@ static dx_pipeline visualizeDepthPipeline;
 
 struct visualize_depth_material
 {
-	mat4 colorCameraVP;
+	mat4 colorCameraV;
+	camera_intrinsics colorCameraIntrinsics;
+	camera_distortion colorCameraDistortion;
 	ref<dx_texture> depthTexture;
-	ref<dx_texture> xyTable;
+	ref<dx_texture> unprojectTable;
 	ref<dx_texture> colorTexture;
 	float depthScale;
 };
@@ -43,13 +45,17 @@ PIPELINE_RENDER_IMPL(visualize_depth_pipeline)
 {
 	visualize_depth_cb cb;
 	cb.vp = viewProj;
-	cb.colorCameraVP = rc.material.colorCameraVP;
+	cb.colorCameraV = rc.material.colorCameraV;
+	memcpy(&cb.colorCameraIntrinsics, &rc.material.colorCameraIntrinsics, sizeof(camera_intrinsics));
+	memcpy(&cb.colorCameraDistortion, &rc.material.colorCameraDistortion, sizeof(camera_distortion));
 	cb.depthScale = rc.material.depthScale;
-	cb.width = rc.material.depthTexture->height;
+	cb.depthWidth = rc.material.depthTexture->width;
+	cb.colorWidth = rc.material.colorTexture->width;
+	cb.colorHeight = rc.material.colorTexture->height;
 
 	cl->setGraphics32BitConstants(VISUALIZE_DEPTH_RS_CB, cb);
 	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_DEPTH_TEXTURE_AND_TABLE, 0, rc.material.depthTexture);
-	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_DEPTH_TEXTURE_AND_TABLE, 1, rc.material.xyTable);
+	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_DEPTH_TEXTURE_AND_TABLE, 1, rc.material.unprojectTable);
 	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_COLOR_TEXTURE, 0, rc.material.colorTexture);
 	cl->draw(rc.material.depthTexture->width * rc.material.depthTexture->height, 1, 0, 0);
 }
@@ -87,7 +93,7 @@ depth_tracker::depth_tracker()
 		colorUploadBuffer = createUploadBuffer(requiredSize, 1, 0);
 	}
 
-	cameraXYTableTexture = createTexture(camera.depthSensor.xyTable, camera.depthSensor.width, camera.depthSensor.height, DXGI_FORMAT_R32G32_FLOAT);
+	cameraUnprojectTableTexture = createTexture(camera.depthSensor.unprojectTable, camera.depthSensor.width, camera.depthSensor.height, DXGI_FORMAT_R32G32_FLOAT);
 }
 
 void depth_tracker::update()
@@ -132,9 +138,9 @@ void depth_tracker::update()
 void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 {
 	auto& c = camera.colorSensor;
-	mat4 colorCameraVP = createPerspectiveProjectionMatrix((float)c.width, (float)c.height, c.intrinsics.fx, c.intrinsics.fy, c.intrinsics.cx, c.intrinsics.cy, 0.01f, -1.f) 
-		* createViewMatrix(c.position, c.rotation);
-	renderPass->renderObject<visualize_depth_pipeline>(mat4::identity, {}, {}, {}, visualize_depth_material{ colorCameraVP, cameraDepthTexture, cameraXYTableTexture, cameraColorTexture, camera.depthScale });
+	mat4 colorCameraV = createViewMatrix(c.position, c.rotation);
+	renderPass->renderObject<visualize_depth_pipeline>(mat4::identity, {}, {}, {}, 
+		visualize_depth_material{ colorCameraV, c.intrinsics, c.distortion, cameraDepthTexture, cameraUnprojectTableTexture, cameraColorTexture, camera.depthScale });
 }
 
 

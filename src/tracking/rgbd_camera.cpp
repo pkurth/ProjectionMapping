@@ -129,7 +129,7 @@ void rgbd_camera::operator=(rgbd_camera&& o) noexcept
 }
 
 // Use only for depth image.
-static void createXYTable(const k4a_calibration_t& calibration, vec2* xyTable)
+static void createUnprojectTable(const k4a_calibration_t& calibration, vec2* unprojectTable)
 {
     int width = calibration.depth_camera_calibration.resolution_width;
     int height = calibration.depth_camera_calibration.resolution_height;
@@ -151,12 +151,12 @@ static void createXYTable(const k4a_calibration_t& calibration, vec2* xyTable)
                 &calibration, (k4a_float2_t*)&p, 1.f, K4A_CALIBRATION_TYPE_DEPTH, K4A_CALIBRATION_TYPE_DEPTH, (k4a_float3_t*)&ray, &valid);
 
             ray.y = -ray.y;
-            xyTable[idx] = valid ? ray.xy : nanv;
+            unprojectTable[idx] = valid ? ray.xy : nanv;
         }
     }
 }
 
-static void createDefaultXYTable(camera_intrinsics intrinsics, vec2* xyTable, uint32 width, uint32 height)
+static void createDefaultUnprojectTable(camera_intrinsics intrinsics, vec2* unprojectTable, uint32 width, uint32 height)
 {
     vec2 nanv(nanf(""));
 
@@ -164,8 +164,8 @@ static void createDefaultXYTable(camera_intrinsics intrinsics, vec2* xyTable, ui
     {
         for (uint32 x = 0; x < width; ++x, ++idx)
         {
-            xyTable[idx].x = (x - intrinsics.cx) / intrinsics.fx;
-            xyTable[idx].y = -(y - intrinsics.cy) / intrinsics.fy;
+            unprojectTable[idx].x = (x - intrinsics.cx) / intrinsics.fx;
+            unprojectTable[idx].y = -(y - intrinsics.cy) / intrinsics.fy;
         }
     }
 }
@@ -179,6 +179,15 @@ static void getCalibration(const k4a_calibration_camera_t& calib, rgbd_camera_se
     result.intrinsics.fy = calib.intrinsics.parameters.param.fy;
     result.intrinsics.cx = calib.intrinsics.parameters.param.cx;
     result.intrinsics.cy = calib.intrinsics.parameters.param.cy;
+
+    result.distortion.k1 = calib.intrinsics.parameters.param.k1;
+    result.distortion.k2 = calib.intrinsics.parameters.param.k2;
+    result.distortion.k3 = calib.intrinsics.parameters.param.k3;
+    result.distortion.k4 = calib.intrinsics.parameters.param.k4;
+    result.distortion.k5 = calib.intrinsics.parameters.param.k5;
+    result.distortion.k6 = calib.intrinsics.parameters.param.k6;
+    result.distortion.p1 = calib.intrinsics.parameters.param.p1;
+    result.distortion.p2 = calib.intrinsics.parameters.param.p2;
 
     mat3 R;
     memcpy(R.m, calib.extrinsics.rotation, sizeof(float) * 9);  // Matrix is row-major.
@@ -239,13 +248,22 @@ static void getCalibration(const rs2_stream_profile* streamProfile, const rs2_st
     rs2_get_video_stream_intrinsics(streamProfile, &intrinsics, &e);
     checkRealsenseError(e);
 
+    result.width = intrinsics.width;
+    result.height = intrinsics.height;
+
     result.intrinsics.fx = intrinsics.fx;
     result.intrinsics.fy = intrinsics.fy;
     result.intrinsics.cx = intrinsics.ppx;
     result.intrinsics.cy = intrinsics.ppy;
-    result.width = intrinsics.width;
-    result.height = intrinsics.height;
 
+    result.distortion.k1 = intrinsics.coeffs[0];
+    result.distortion.k2 = intrinsics.coeffs[1];
+    result.distortion.k3 = intrinsics.coeffs[4];
+    result.distortion.k4 = 0.f;
+    result.distortion.k5 = 0.f;
+    result.distortion.k6 = 0.f;
+    result.distortion.p1 = intrinsics.coeffs[2];
+    result.distortion.p2 = intrinsics.coeffs[3];
 
     rs2_extrinsics extrinsics;
     rs2_get_extrinsics(streamProfile, depthStreamProfile, &extrinsics, &e);
@@ -276,7 +294,7 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
 {
     k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     config.camera_fps = K4A_FRAMES_PER_SECOND_30;
-    config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+    config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
     config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
     config.color_resolution = getResolution(spec.colorResolution);
     config.synchronized_images_only = config.color_resolution != K4A_COLOR_RESOLUTION_OFF;
@@ -296,8 +314,8 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
         {
             getCalibration(calibration.depth_camera_calibration, depthSensor);
 
-            depthSensor.xyTable = new vec2[depthSensor.width * depthSensor.height];
-            createXYTable(calibration, depthSensor.xyTable);
+            depthSensor.unprojectTable = new vec2[depthSensor.width * depthSensor.height];
+            createUnprojectTable(calibration, depthSensor.unprojectTable);
         }
         if (colorSensor.active)
         {
@@ -362,8 +380,8 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         const rs2_stream_profile* depthStreamProfile = getStreamProfile(profileList, RS2_STREAM_DEPTH);
         getCalibration(depthStreamProfile, depthStreamProfile, depthSensor);
         
-        depthSensor.xyTable = new vec2[depthSensor.width * depthSensor.height];
-        createDefaultXYTable(depthSensor.intrinsics, depthSensor.xyTable, depthSensor.width, depthSensor.height);
+        depthSensor.unprojectTable = new vec2[depthSensor.width * depthSensor.height];
+        createDefaultUnprojectTable(depthSensor.intrinsics, depthSensor.unprojectTable, depthSensor.width, depthSensor.height);
 
         if (colorSensor.active)
         {
@@ -429,10 +447,10 @@ void rgbd_camera::shutdown()
         realsense.device = 0;
     }
 
-    if (depthSensor.xyTable)
+    if (depthSensor.unprojectTable)
     {
-        delete depthSensor.xyTable;
-        depthSensor.xyTable = 0;
+        delete depthSensor.unprojectTable;
+        depthSensor.unprojectTable = 0;
     }
 
     type = rgbd_camera_type_uninitialized;

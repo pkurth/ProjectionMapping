@@ -17,7 +17,7 @@ struct depth_tracker
 
 	rgbd_camera camera;
 	ref<dx_texture> cameraDepthTexture;
-	ref<dx_texture> cameraXYTableTexture;
+	ref<dx_texture> cameraUnprojectTableTexture;
 	ref<dx_texture> cameraColorTexture;
 	ref<dx_buffer> depthUploadBuffer;
 	ref<dx_buffer> colorUploadBuffer;

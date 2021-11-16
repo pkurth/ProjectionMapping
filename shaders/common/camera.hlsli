@@ -131,4 +131,60 @@ static bool cullModelSpaceAABB(camera_frustum_planes planes, float4 min, float4 
 }
 #endif
 
+
+// These structs match the structs in camera.h.
+struct intrinsics_cb
+{
+	float fx;
+	float fy;
+	float cx;
+	float cy;
+};
+
+struct distortion_cb
+{
+	float k1;
+	float k2;
+	float k3;
+	float k4;
+	float k5;
+	float k6;
+	float p1;
+	float p2;
+};
+
+// https://github.com/microsoft/Azure-Kinect-Sensor-SDK/blob/2feb3425259bf803749065bb6d628c6c180f8e77/src/transformation/intrinsic_transformation.c
+// Function transformation_project_internal.
+static vec2 project(vec3 pos, intrinsics_cb intr, distortion_cb dis)
+{
+	pos.xy /= pos.z;
+
+	float xp = -pos.x;
+	float yp = pos.y;
+
+	float xp2 = xp * xp;
+	float yp2 = yp * yp;
+	float xyp = xp * yp;
+	float rs = xp2 + yp2;
+
+	float rss = rs * rs;
+	float rsc = rss * rs;
+	float a = 1.f + dis.k1 * rs + dis.k2 * rss + dis.k3 * rsc;
+	float b = 1.f + dis.k4 * rs + dis.k5 * rss + dis.k6 * rsc;
+	float bi = (b != 0.f) ? (1.f / b) : 1.f;
+	float d = a * bi;
+
+	float xp_d = xp * d;
+	float yp_d = yp * d;
+
+	float rs_2xp2 = rs + 2.f * xp2;
+	float rs_2yp2 = rs + 2.f * yp2;
+
+	xp_d += rs_2xp2 * dis.p2 + 2.f * xyp * dis.p1;
+	yp_d += rs_2yp2 * dis.p1 + 2.f * xyp * dis.p2;
+
+	return vec2(xp_d * intr.fx + intr.cx, yp_d * intr.fy + intr.cy);
+}
+
+
 #endif
