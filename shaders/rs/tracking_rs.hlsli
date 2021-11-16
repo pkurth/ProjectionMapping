@@ -15,6 +15,15 @@ struct visualize_depth_cb
 	uint32 colorHeight;
 };
 
+struct create_correspondences_cb
+{
+	mat4 m;
+	intrinsics_cb intrinsics;
+	distortion_cb distortion;
+	uint32 width;
+	uint32 height;
+};
+
 
 #define VISUALIZE_DEPTH_RS \
 	"RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
@@ -34,5 +43,17 @@ struct visualize_depth_cb
 #define VISUALIZE_DEPTH_RS_CB						0
 #define VISUALIZE_DEPTH_RS_DEPTH_TEXTURE_AND_TABLE	1
 #define VISUALIZE_DEPTH_RS_COLOR_TEXTURE			2
+
+
+
+#define CREATE_CORRESPONDENCES_RS \
+	"RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
+	"DENY_HULL_SHADER_ROOT_ACCESS |" \
+	"DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
+	"DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
+	"RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_VERTEX)"
+
+#define CREATE_CORRESPONDENCES_RS_CB				0
+
 
 #endif

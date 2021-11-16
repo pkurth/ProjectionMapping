@@ -69,9 +69,11 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	if (auto augustusMesh = loadMeshFromFile("assets/augustus/augustus2.obj"))
 	{
-		scene.createEntity("Augustus")
+		auto augustus = scene.createEntity("Augustus")
 			.addComponent<transform_component>(vec3(0.f, 0.f, 0.f), quat::identity, 4.f)
 			.addComponent<raster_component>(augustusMesh);
+
+		tracker->trackObject(augustus);
 	}
 
 	editor.setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");

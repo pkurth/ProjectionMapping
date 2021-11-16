@@ -132,6 +132,7 @@ static bool cullModelSpaceAABB(camera_frustum_planes planes, float4 min, float4 
 #endif
 
 
+#ifdef HLSL
 // These structs match the structs in camera.h.
 struct intrinsics_cb
 {
@@ -152,6 +153,10 @@ struct distortion_cb
 	float p1;
 	float p2;
 };
+#else
+typedef camera_intrinsics intrinsics_cb;
+typedef camera_distortion distortion_cb;
+#endif
 
 // https://github.com/microsoft/Azure-Kinect-Sensor-SDK/blob/2feb3425259bf803749065bb6d628c6c180f8e77/src/transformation/intrinsic_transformation.c
 // Function transformation_project_internal.
