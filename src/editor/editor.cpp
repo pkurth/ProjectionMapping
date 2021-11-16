@@ -988,7 +988,7 @@ void scene_editor::drawHardwareWindow()
 
 		if (ImGui::BeginTree("Depth cameras"))
 		{
-			for (const auto& cam : depth_tracker::allConnectedRGBDCameras)
+			for (const auto& cam : rgbd_camera::allConnectedRGBDCameras)
 			{
 				ImGui::PushID(&cam);
 				if (ImGui::BeginTree(cam.description.c_str()))

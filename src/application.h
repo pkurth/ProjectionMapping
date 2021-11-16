@@ -11,12 +11,12 @@
 #include "rendering/raytracing.h"
 #include "editor/editor.h"
 #include "projection_mapping/projector_manager.h"
-
+#include "tracking/tracking.h"
 
 struct application
 {
 	void loadCustomShaders();
-	void initialize(main_renderer* renderer, projector_manager* projectorManager);
+	void initialize(main_renderer* renderer, projector_manager* projectorManager, depth_tracker* tracker);
 	void update(const user_input& input, float dt);
 
 	void handleFileDrop(const fs::path& filename);
@@ -42,6 +42,7 @@ private:
 
 	main_renderer* renderer;
 	projector_manager* projectorManager;
+	depth_tracker* tracker;
 
 	game_scene scene;
 	scene_editor editor;

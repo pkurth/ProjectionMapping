@@ -8,6 +8,8 @@
 static rs2_context* rsContext;
 rs2_device_list* deviceList;
 
+std::vector<rgbd_camera_info> rgbd_camera::allConnectedRGBDCameras;
+
 static void checkRealsenseError(rs2_error* e)
 {
     if (e)
@@ -18,17 +20,16 @@ static void checkRealsenseError(rs2_error* e)
     }
 }
 
-static void initializeRealsenseContext()
+void rgbd_camera::initializeCommon()
 {
-    if (!rsContext)
-    {
-        rs2_error* e = 0;
+    rs2_error* e = 0;
 
-        rsContext = rs2_create_context(RS2_API_VERSION, &e);
-        checkRealsenseError(e);
-        deviceList = rs2_query_devices(rsContext, &e);
-        checkRealsenseError(e);
-    }
+    rsContext = rs2_create_context(RS2_API_VERSION, &e);
+    checkRealsenseError(e);
+    deviceList = rs2_query_devices(rsContext, &e);
+    checkRealsenseError(e);
+
+    allConnectedRGBDCameras = enumerateRGBDCameras();
 }
 
 std::vector<rgbd_camera_info> enumerateRGBDCameras()
@@ -49,8 +50,6 @@ std::vector<rgbd_camera_info> enumerateRGBDCameras()
             result.push_back(info);
         }
     }
-
-    initializeRealsenseContext();
 
     rs2_error* e = 0;
     uint32 numRealsenseDevices = rs2_get_device_count(deviceList, &e);
@@ -270,8 +269,6 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
 
 bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 {
-    initializeRealsenseContext();
-    
     rs2_error* e = 0;
 
     realsense.device = rs2_create_device(deviceList, 0, &e);
@@ -369,15 +366,6 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 
             rs2_delete_stream_profiles_list(rsColorStreamList);
             rs2_delete_sensor(rsColorSensor);
-        }
-
-        if (rsDepthStreamList)
-        {
-            rs2_delete_stream_profiles_list(rsDepthStreamList);
-        }
-        if (rsColorStreamList)
-        {
-            rs2_delete_stream_profiles_list(rsColorStreamList);
         }
 
         rs2_delete_sensor_list(sensorList);

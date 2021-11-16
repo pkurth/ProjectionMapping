@@ -126,4 +126,8 @@ struct rgbd_camera
 	rgbd_camera_sensor depthSensor;
 
 	float depthScale;
+
+
+	static void initializeCommon();
+	static std::vector<rgbd_camera_info> allConnectedRGBDCameras;
 };

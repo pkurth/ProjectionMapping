@@ -104,7 +104,7 @@ int main(int argc, char** argv)
 		return EXIT_FAILURE;
 	}
 
-	depth_tracker::initializeCommon();
+	rgbd_camera::initializeCommon();
 
 	initializeJobSystem();
 
@@ -120,6 +120,7 @@ int main(int argc, char** argv)
 
 	projector_renderer::initializeCommon();
 	projector_manager projectorManager(app.getScene());
+	depth_tracker tracker;
 
 	initializeTransformationGizmos();
 	initializeRenderUtils();
@@ -130,7 +131,7 @@ int main(int argc, char** argv)
 	main_renderer renderer;
 	renderer.initialize(window.colorDepth, window.clientWidth, window.clientHeight, spec);
 
-	app.initialize(&renderer, &projectorManager);
+	app.initialize(&renderer, &projectorManager, &tracker);
 
 	file_browser fileBrowser;
 	mesh_editor_panel meshEditor;
@@ -232,6 +233,10 @@ int main(int argc, char** argv)
 
 		ImGui::End();
 
+		ImGui::Begin("Depth");
+		ImGui::Image(tracker.cameraDepthTexture, 512, 512);
+		ImGui::End();
+
 		appFocusedLastFrame = ImGui::IsMousePosValid();
 
 		if (input.keyboard['V'].pressEvent && !(input.keyboard[key_ctrl].down || input.keyboard[key_shift].down || input.keyboard[key_alt].down)) { window.toggleVSync(); }
@@ -239,6 +244,7 @@ int main(int argc, char** argv)
 		if (ImGui::IsKeyPressed(key_enter) && ImGui::IsKeyDown(key_alt)) { window.toggleFullscreen(); } // Also allowed if not focused on main window.
 
 
+		tracker.update();
 
 		projectorManager.beginFrame();
 

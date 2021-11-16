@@ -52,10 +52,11 @@ void application::loadCustomShaders()
 	}
 }
 
-void application::initialize(main_renderer* renderer, projector_manager* projectorManager)
+void application::initialize(main_renderer* renderer, projector_manager* projectorManager, depth_tracker* tracker)
 {
 	this->renderer = renderer;
 	this->projectorManager = projectorManager;
+	this->tracker = tracker;
 
 	if (dxContext.featureSupport.raytracing())
 	{
