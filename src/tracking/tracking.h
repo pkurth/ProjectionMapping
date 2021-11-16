@@ -3,6 +3,7 @@
 #include "rgbd_camera.h"
 #include "dx/dx_texture.h"
 #include "dx/dx_buffer.h"
+#include "rendering/render_pass.h"
 
 struct depth_tracker
 {
@@ -12,9 +13,13 @@ struct depth_tracker
 	depth_tracker& operator=(depth_tracker&&) = default;
 
 	void update();
+	void visualizeDepth(ldr_render_pass* renderPass);
 
 	rgbd_camera camera;
 	ref<dx_texture> cameraDepthTexture;
-	ref<dx_buffer> uploadBuffer;
+	ref<dx_texture> cameraXYTableTexture;
+	ref<dx_texture> cameraColorTexture;
+	ref<dx_buffer> depthUploadBuffer;
+	ref<dx_buffer> colorUploadBuffer;
 };
 

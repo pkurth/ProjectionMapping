@@ -366,6 +366,8 @@ void application::update(const user_input& input, float dt)
 			}
 		}
 
+		tracker->visualizeDepth(&ldrRenderPass);
+
 		if (selectedEntity)
 		{
 			if (point_light_component* pl = selectedEntity.getComponentIfExists<point_light_component>())

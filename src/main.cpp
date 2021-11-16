@@ -233,10 +233,6 @@ int main(int argc, char** argv)
 
 		ImGui::End();
 
-		ImGui::Begin("Depth");
-		ImGui::Image(tracker.cameraDepthTexture, 512, 512);
-		ImGui::End();
-
 		appFocusedLastFrame = ImGui::IsMousePosValid();
 
 		if (input.keyboard['V'].pressEvent && !(input.keyboard[key_ctrl].down || input.keyboard[key_shift].down || input.keyboard[key_alt].down)) { window.toggleVSync(); }

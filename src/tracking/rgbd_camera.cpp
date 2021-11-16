@@ -128,6 +128,48 @@ void rgbd_camera::operator=(rgbd_camera&& o) noexcept
     type = o.type;
 }
 
+// Use only for depth image.
+static void createXYTable(const k4a_calibration_t& calibration, vec2* xyTable)
+{
+    int width = calibration.depth_camera_calibration.resolution_width;
+    int height = calibration.depth_camera_calibration.resolution_height;
+
+    vec2 p;
+
+    vec2 nanv(nanf(""));
+
+    for (int y = 0, idx = 0; y < height; ++y)
+    {
+        p.y = (float)y;
+        for (int x = 0; x < width; ++x, ++idx)
+        {
+            p.x = (float)x;
+
+            vec3 ray;
+            int valid;
+            k4a_calibration_2d_to_3d(
+                &calibration, (k4a_float2_t*)&p, 1.f, K4A_CALIBRATION_TYPE_DEPTH, K4A_CALIBRATION_TYPE_DEPTH, (k4a_float3_t*)&ray, &valid);
+
+            ray.y = -ray.y;
+            xyTable[idx] = valid ? ray.xy : nanv;
+        }
+    }
+}
+
+static void createDefaultXYTable(camera_intrinsics intrinsics, vec2* xyTable, uint32 width, uint32 height)
+{
+    vec2 nanv(nanf(""));
+
+    for (uint32 y = 0, idx = 0; y < height; ++y)
+    {
+        for (uint32 x = 0; x < width; ++x, ++idx)
+        {
+            xyTable[idx].x = (x - intrinsics.cx) / intrinsics.fx;
+            xyTable[idx].y = -(y - intrinsics.cy) / intrinsics.fy;
+        }
+    }
+}
+
 static void getCalibration(const k4a_calibration_camera_t& calib, rgbd_camera_sensor& result)
 {
     result.width = calib.resolution_width;
@@ -161,6 +203,7 @@ static void getCalibration(const k4a_calibration_camera_t& calib, rgbd_camera_se
     result.rotation = conjugate(rotation);
     result.position = -(conjugate(rotation) * position);
 }
+
 
 static const rs2_stream_profile* getStreamProfile(rs2_stream_profile_list* streamList, rs2_stream streamType)
 {
@@ -252,6 +295,9 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
         if (depthSensor.active)
         {
             getCalibration(calibration.depth_camera_calibration, depthSensor);
+
+            depthSensor.xyTable = new vec2[depthSensor.width * depthSensor.height];
+            createXYTable(calibration, depthSensor.xyTable);
         }
         if (colorSensor.active)
         {
@@ -296,7 +342,7 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         }
         if (colorSensor.active)
         {
-            rs2_config_enable_stream(realsense.config, RS2_STREAM_COLOR, -1, getWidth(spec.colorResolution), getHeight(spec.colorResolution), RS2_FORMAT_BGRA8, 30, &e); // TODO: Resolution and FPS.
+            rs2_config_enable_stream(realsense.config, RS2_STREAM_COLOR, -1, getWidth(spec.colorResolution), getHeight(spec.colorResolution), RS2_FORMAT_BGRA8, 30, &e);
             checkRealsenseError(e);
         }
 
@@ -306,19 +352,37 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         type = rgbd_camera_type_realsense;
 
 
+        // Get intrinsics and extrinsics.
+        rs2_stream_profile_list* profileList = rs2_pipeline_profile_get_streams(realsense.profile, &e);
+        checkRealsenseError(e);
+
+        int numProfiles = rs2_get_stream_profiles_count(profileList, &e);
+        checkRealsenseError(e);
+
+        const rs2_stream_profile* depthStreamProfile = getStreamProfile(profileList, RS2_STREAM_DEPTH);
+        getCalibration(depthStreamProfile, depthStreamProfile, depthSensor);
+        
+        depthSensor.xyTable = new vec2[depthSensor.width * depthSensor.height];
+        createDefaultXYTable(depthSensor.intrinsics, depthSensor.xyTable, depthSensor.width, depthSensor.height);
+
+        if (colorSensor.active)
+        {
+            const rs2_stream_profile* colorStreamProfile = getStreamProfile(profileList, RS2_STREAM_COLOR);
+            getCalibration(colorStreamProfile, depthStreamProfile, colorSensor);
+        }
+
+        rs2_delete_stream_profiles_list(profileList);
+
+
+
+
+        // Get depth scale.
         rs2_sensor_list* sensorList = rs2_query_sensors(realsense.device, &e);
         checkRealsenseError(e);
         int numSensors = rs2_get_sensors_count(sensorList, &e);
         checkRealsenseError(e);
 
-        rs2_sensor* rsDepthSensor = 0;
-        rs2_sensor* rsColorSensor = 0;
-
-        rs2_stream_profile_list* rsDepthStreamList = 0;
-        rs2_stream_profile_list* rsColorStreamList = 0;
-
-        const rs2_stream_profile* rsDepthStreamProfile = 0;
-        const rs2_stream_profile* rsColorStreamProfile = 0;
+        depthScale = 0.001f;
 
         for (int i = 0; i < numSensors; ++i)
         {
@@ -330,45 +394,14 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 
             if (isDepthSensor)
             {
-                rsDepthSensor = sensor;
-
-                rsDepthStreamList = rs2_get_stream_profiles(rsDepthSensor, &e);
-                checkRealsenseError(e);
-
-                rsDepthStreamProfile = getStreamProfile(rsDepthStreamList, RS2_STREAM_DEPTH);
+                depthScale = rs2_get_depth_scale(sensor, &e);
+                //depthScale = rs2_get_option((const rs2_options*)sensor, RS2_OPTION_DEPTH_UNITS, &e);
+                break;
             }
-            else
-            {
-                rsColorSensor = sensor;
-
-                rsColorStreamList = rs2_get_stream_profiles(rsColorSensor, &e);
-                checkRealsenseError(e);
-
-                rsColorStreamProfile = getStreamProfile(rsColorStreamList, RS2_STREAM_COLOR);
-            }
-        }
-
-        if (rsDepthSensor)
-        {
-            depthScale = rs2_get_depth_scale(rsDepthSensor, &e);
-            //depthScale = rs2_get_option((const rs2_options*)sensor, RS2_OPTION_DEPTH_UNITS, &e);
-            checkRealsenseError(e);
-
-            getCalibration(rsDepthStreamProfile, rsDepthStreamProfile, depthSensor);
-
-            rs2_delete_stream_profiles_list(rsDepthStreamList);
-            rs2_delete_sensor(rsDepthSensor);
-        }
-
-        if (rsColorSensor)
-        {
-            getCalibration(rsColorStreamProfile, rsDepthStreamProfile, colorSensor);
-
-            rs2_delete_stream_profiles_list(rsColorStreamList);
-            rs2_delete_sensor(rsColorSensor);
         }
 
         rs2_delete_sensor_list(sensorList);
+
 
         return true;
     }
@@ -394,6 +427,12 @@ void rgbd_camera::shutdown()
         rs2_delete_pipeline(realsense.pipeline);
         rs2_delete_device(realsense.device);
         realsense.device = 0;
+    }
+
+    if (depthSensor.xyTable)
+    {
+        delete depthSensor.xyTable;
+        depthSensor.xyTable = 0;
     }
 
     type = rgbd_camera_type_uninitialized;

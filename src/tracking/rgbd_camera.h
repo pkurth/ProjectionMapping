@@ -67,6 +67,8 @@ struct rgbd_camera_sensor
 	vec3 position;
 
 	camera_intrinsics intrinsics;
+
+	vec2* xyTable = 0; // Maps pixel to ray direction (x, y). z = -1.
 };
 
 
