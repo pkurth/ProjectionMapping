@@ -162,9 +162,10 @@ typedef camera_distortion distortion_cb;
 // Function transformation_project_internal.
 static vec2 project(vec3 pos, intrinsics_cb intr, distortion_cb dis)
 {
+	pos.yz *= -1.f; // Convert to CV-system.
 	pos.xy /= pos.z;
 
-	float xp = -pos.x;
+	float xp = pos.x;
 	float yp = pos.y;
 
 	float xp2 = xp * xp;

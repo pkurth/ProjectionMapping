@@ -67,13 +67,13 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	editor.initialize(&scene, renderer);
 
-	if (auto augustusMesh = loadMeshFromFile("assets/augustus/augustus2.obj"))
+	if (auto targetObjectMesh = loadMeshFromFile("assets/nike/nike.obj"))
 	{
-		auto augustus = scene.createEntity("Augustus")
-			.addComponent<transform_component>(vec3(0.f, 0.f, 0.f), quat::identity, 4.f)
-			.addComponent<raster_component>(augustusMesh);
+		auto targetObject = scene.createEntity("Target object")
+			.addComponent<transform_component>(vec3(0.f, 0.f, 0.f), quat::identity, 1.f)
+			.addComponent<raster_component>(targetObjectMesh);
 
-		tracker->trackObject(augustus);
+		tracker->trackObject(targetObject);
 	}
 
 	editor.setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");

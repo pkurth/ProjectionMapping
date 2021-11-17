@@ -7,12 +7,15 @@
 #include "rendering/material.h"
 #include "rendering/render_command.h"
 #include "rendering/render_utils.h"
+#include "rendering/render_resources.h"
+#include "core/imgui.h"
 
 #include "tracking_rs.hlsli"
 
 static const DXGI_FORMAT trackingDepthFormat = DXGI_FORMAT_R16_UINT;
 static const DXGI_FORMAT trackingColorFormat = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
 
+static dx_pipeline createCorrespondencesDepthOnlyPipeline;
 static dx_pipeline createCorrespondencesPipeline;
 static dx_pipeline visualizeDepthPipeline;
 
@@ -57,9 +60,9 @@ PIPELINE_RENDER_IMPL(visualize_depth_pipeline)
 	cb.colorHeight = rc.material.colorTexture->height;
 
 	cl->setGraphics32BitConstants(VISUALIZE_DEPTH_RS_CB, cb);
-	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_DEPTH_TEXTURE_AND_TABLE, 0, rc.material.depthTexture);
-	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_DEPTH_TEXTURE_AND_TABLE, 1, rc.material.unprojectTable);
-	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_COLOR_TEXTURE, 0, rc.material.colorTexture);
+	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_TEXTURES, 0, rc.material.depthTexture);
+	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_TEXTURES, 1, rc.material.unprojectTable);
+	cl->setDescriptorHeapSRV(VISUALIZE_DEPTH_RS_TEXTURES, 2, rc.material.colorTexture);
 	cl->draw(rc.material.depthTexture->width * rc.material.depthTexture->height, 1, 0, 0);
 }
 
@@ -82,15 +85,27 @@ depth_tracker::depth_tracker()
 
 	if (!createCorrespondencesPipeline.pipeline)
 	{
-		auto desc = CREATE_GRAPHICS_PIPELINE
-			.renderTargets(DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT) // Color buffer is temporary.
-			.inputLayout(inputLayout_position_uv_normal_tangent)
-			.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+		{
+			auto desc = CREATE_GRAPHICS_PIPELINE
+				.renderTargets(0, 0, DXGI_FORMAT_D32_FLOAT)
+				.inputLayout(inputLayout_position_uv_normal_tangent)
+				.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
 
-		createCorrespondencesPipeline = createReloadablePipeline(desc, { "tracking_create_correspondences_vs", "tracking_create_correspondences_ps" });
+			createCorrespondencesDepthOnlyPipeline = createReloadablePipeline(desc, { "tracking_create_correspondences_vs" }, rs_in_vertex_shader);
+		}
+
+		{
+			auto desc = CREATE_GRAPHICS_PIPELINE
+				.renderTargets(DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT) // Color buffer is temporary.
+				.inputLayout(inputLayout_position_uv_normal_tangent)
+				.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE)
+				.depthSettings(true, false, D3D12_COMPARISON_FUNC_EQUAL);
+
+			createCorrespondencesPipeline = createReloadablePipeline(desc, { "tracking_create_correspondences_vs", "tracking_create_correspondences_ps" });
+		}
 	}
 
-	if (!camera.initializeAzure())
+	if (!camera.initializeRealsense())
 	{
 		return;
 	}
@@ -120,6 +135,22 @@ void depth_tracker::trackObject(scene_entity entity)
 
 void depth_tracker::update()
 {
+	if (ImGui::Begin("Settings"))
+	{
+		if (ImGui::BeginTree("Tracker"))
+		{
+			if (ImGui::BeginProperties())
+			{
+				ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
+				ImGui::PropertySliderAngle("Angle threshold", angleThreshold, 0.f, 90.f);
+				ImGui::EndProperties();
+			}
+
+			ImGui::EndTree();
+		}
+	}
+	ImGui::End();
+
 	rgbd_frame frame;
 	if (camera.getFrame(frame, 0))
 	{
@@ -170,36 +201,73 @@ void depth_tracker::update()
 				cl->clearRTV(renderedColorTexture, 0.f, 0.f, 0.f, 0.f);
 				cl->clearDepth(renderedDepthTexture);
 
-				cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
-				cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
 				cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 
 				auto& rasterComponent = trackedEntity.getComponent<raster_component>();
 				auto& transform = trackedEntity.getComponent<transform_component>();
 
-				dx_render_target renderTarget({ renderedColorTexture }, renderedDepthTexture);
-				cl->setRenderTarget(renderTarget);
-				cl->setViewport(renderTarget.viewport);
+				create_correspondences_vs_cb vscb;
+				vscb.intrinsics = camera.depthSensor.intrinsics;
+				vscb.distortion = camera.depthSensor.distortion;
+				vscb.width = camera.depthSensor.width;
+				vscb.height = camera.depthSensor.height;
+				vscb.m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) * trsToMat4(transform); // TODO: Global camera position.
 
-				cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
-				cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
-				cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
 
-				create_correspondences_cb cb;
-				cb.intrinsics = camera.depthSensor.intrinsics;
-				cb.distortion = camera.depthSensor.distortion;
-				cb.width = camera.depthSensor.width;
-				cb.height = camera.depthSensor.height;
-				cb.m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) * trsToMat4(transform); // TODO: Global camera position.
-				cb.depthScale = camera.depthScale;
-
-				cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_CB, cb);
-				cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_DEPTH_TEXTURE_AND_TABLE, 0, cameraDepthTexture);
-				cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_DEPTH_TEXTURE_AND_TABLE, 1, cameraUnprojectTableTexture);
-
-				for (auto& submesh : rasterComponent.mesh->submeshes)
 				{
-					cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
+					PROFILE_ALL(cl, "Depth pre-pass");
+
+					cl->setPipelineState(*createCorrespondencesDepthOnlyPipeline.pipeline);
+					cl->setGraphicsRootSignature(*createCorrespondencesDepthOnlyPipeline.rootSignature);
+
+					dx_render_target renderTarget({ }, renderedDepthTexture);
+					cl->setRenderTarget(renderTarget);
+					cl->setViewport(renderTarget.viewport);
+
+					cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
+					cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
+					cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
+
+					cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
+
+					for (auto& submesh : rasterComponent.mesh->submeshes)
+					{
+						cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
+					}
+				}
+
+
+				{
+					PROFILE_ALL(cl, "Collect correspondences");
+
+					cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
+					cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
+
+					dx_render_target renderTarget({ renderedColorTexture }, renderedDepthTexture);
+					cl->setRenderTarget(renderTarget);
+					cl->setViewport(renderTarget.viewport);
+
+					cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
+					cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
+					cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
+
+					create_correspondences_ps_cb pscb;
+					pscb.depthScale = camera.depthScale;
+					pscb.squaredPositionThreshold = positionThreshold * positionThreshold;
+					pscb.cosAngleThreshold = cos(angleThreshold);
+
+					cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
+					cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_PS_CB, pscb);
+					cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 0, cameraDepthTexture);
+					cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 1, cameraUnprojectTableTexture);
+					cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 2, render_resources::nullBufferUAV); // TODO
+					cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 3, render_resources::nullBufferUAV);
+
+					for (auto& submesh : rasterComponent.mesh->submeshes)
+					{
+						cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
+					}
 				}
 
 				cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON);

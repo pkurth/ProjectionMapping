@@ -79,10 +79,10 @@ void initializeTransformationGizmos()
 	for (uint32 i = 0; i < 3; ++i)
 	{
 		cylinders[i].positionB *= shaftLength + headLength;
-		cylinders[i].radius *= radius * 1.1f;
+		cylinders[i].radius *= radius;
 
 		tori[i].majorRadius *= shaftLength;
-		tori[i].tubeRadius *= radius * 1.1f;
+		tori[i].tubeRadius *= radius;
 
 		rectangles[i].position *= shaftLength * 0.35f;
 		rectangles[i].radius *= shaftLength * 0.2f;
@@ -485,6 +485,7 @@ void transformation_gizmo::manipulateInternal(trs& transform, const render_camer
 
 	// Scale gizmos based on distance to camera.
 	float scaling = length(transform.position - camera.position) / camera.getMinProjectionExtent() * 0.1f;
+	scaling = max(scaling, 0.2f); // Temporary fix. The ray-torus intersection doesn't like small scales.
 
 	if (allowInput)
 	{

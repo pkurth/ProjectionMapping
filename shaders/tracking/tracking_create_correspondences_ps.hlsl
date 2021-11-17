@@ -1,8 +1,11 @@
 #include "tracking_rs.hlsli"
 
-ConstantBuffer<create_correspondences_cb> cb	: register(b0);
-Texture2D<uint> cameraDepthTexture				: register(t0);
-Texture2D<float2> cameraUnprojectTable			: register(t1);
+ConstantBuffer<create_correspondences_ps_cb> cb		: register(b1);
+Texture2D<uint> cameraDepthTexture					: register(t0);
+Texture2D<float2> cameraUnprojectTable				: register(t1);
+
+RWStructuredBuffer<tracking_correspondence> output	: register(u0);
+RWStructuredBuffer<uint> counter					: register(u1);
 
 struct ps_input
 {
@@ -21,6 +24,13 @@ float4 main(ps_input IN) : SV_TARGET0
 	uint2 xy = (uint2)IN.screenPosition.xy;
 
 	float3 cameraPosition = float3(cameraUnprojectTable[xy], -1.f) * (cameraDepthTexture[xy] * cb.depthScale);
+	float3 offset = cameraPosition - IN.position;
+
+	if (dot(offset, offset) > cb.squaredPositionThreshold)
+	{
+		return float4(0.f, 0.f, 0.f, 0.f);
+	}
+
 
 #if NORMAL_RECONSTRUCTION_ACCURACY == 0
 	float3 cameraNormal = normalize(cross(ddy(cameraPosition), ddx(cameraPosition)));
@@ -45,6 +55,41 @@ float4 main(ps_input IN) : SV_TARGET0
 	float3 ver = (abs(B.z) < abs(T.z)) ? B : T;
 
 	float3 cameraNormal = normalize(cross(ver, hor));
+#endif
+
+	float3 normal = normalize(IN.normal);
+	float cosAngle = dot(normal, cameraNormal);
+
+	if (cosAngle < cb.cosAngleThreshold)
+	{
+		return float4(0.f, 0.f, 0.f, 0.f);
+	}
+
+
+#if 0
+	tracking_correspondence result;
+
+	if (cb.trackingDirection == tracking_direction_camera_to_render)
+	{
+		result.grad0 = float4(
+			cross(cameraPosition, normal),
+			dot(-offset, normal)
+		);
+		result.grad1 = float4(normal, 1.f);
+	}
+	else // if (cb.trackingDirection == tracking_direction_render_to_camera)
+	{
+		result.grad0 = float4(
+			cross(IN.position, cameraNormal),
+			dot(offset, cameraNormal)
+		);
+		result.grad1 = float4(cameraNormal, 1.f);
+	}
+
+	uint index;
+	InterlockedAdd(counter[0], 1, index);
+
+	output[index] = result;
 #endif
 
 	return float4(cameraNormal, 1.f);

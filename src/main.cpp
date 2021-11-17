@@ -240,14 +240,13 @@ int main(int argc, char** argv)
 		if (ImGui::IsKeyPressed(key_enter) && ImGui::IsKeyDown(key_alt)) { window.toggleFullscreen(); } // Also allowed if not focused on main window.
 
 
-		tracker.update();
-
 		projectorManager.beginFrame();
 
 		shadow_map_renderer::beginFrame();
 		renderer.beginFrame(renderWidth, renderHeight);
 		
 		app.update(input, dt);
+		tracker.update();
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();

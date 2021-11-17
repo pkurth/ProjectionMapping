@@ -294,6 +294,11 @@ union vec3
 		vec2 xy;
 		float z;
 	};
+	struct
+	{
+		float x;
+		vec2 yz;
+	};
 	float data[3];
 
 	vec3() {}

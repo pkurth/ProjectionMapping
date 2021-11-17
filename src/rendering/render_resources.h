@@ -33,6 +33,9 @@ struct render_resources
 	static dx_cpu_descriptor_handle nullTextureSRV;
 	static dx_cpu_descriptor_handle nullBufferSRV;
 
+	static dx_cpu_descriptor_handle nullTextureUAV;
+	static dx_cpu_descriptor_handle nullBufferUAV;
+
 	static ref<dx_texture> brdfTex;
 	static ref<dx_texture> whiteTexture;
 	static ref<dx_texture> blackTexture;

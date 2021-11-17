@@ -3,6 +3,7 @@
 ConstantBuffer<visualize_depth_cb> cb	: register(b0);
 Texture2D<uint> depthTexture			: register(t0);
 Texture2D<float2> unprojectTable		: register(t1);
+Texture2D<float4> colorTexture			: register(t2);
 
 struct vs_input
 {
@@ -11,7 +12,7 @@ struct vs_input
 
 struct vs_output
 {
-	float2 uv		: TEXCOORDS;
+	float3 color	: COLOR;
 	float4 position : SV_Position;
 };
 
@@ -26,12 +27,10 @@ vs_output main(vs_input IN)
 
 	float3 colorPos = mul(cb.colorCameraV, float4(pos, 1.f)).xyz;
     float2 colorPixel = project(colorPos, cb.colorCameraIntrinsics, cb.colorCameraDistortion);
-    float2 uv = colorPixel / float2(cb.colorWidth, cb.colorHeight);
-
 
 	vs_output OUT;
 	OUT.position = mul(cb.vp, float4(pos, 1.f));
-	OUT.uv = uv;
+	OUT.color = colorTexture[(int2)colorPixel].rgb;
 
 	return OUT;
 }

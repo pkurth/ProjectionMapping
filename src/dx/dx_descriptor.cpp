@@ -296,7 +296,7 @@ dx_cpu_descriptor_handle& dx_cpu_descriptor_handle::createNullBufferUAV()
 {
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	uavDesc.Format = DXGI_FORMAT_R8_UINT;
 
 	dxContext.device->CreateUnorderedAccessView(0, 0, &uavDesc, cpuHandle);
 

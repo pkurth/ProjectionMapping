@@ -30,5 +30,8 @@ struct depth_tracker
 	ref<dx_texture> renderedDepthTexture;
 
 	scene_entity trackedEntity = {};
+
+	float positionThreshold = 0.1f;
+	float angleThreshold = deg2rad(45.f);
 };
 

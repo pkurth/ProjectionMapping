@@ -1,6 +1,6 @@
 #include "tracking_rs.hlsli"
 
-ConstantBuffer<create_correspondences_cb> cb : register(b0);
+ConstantBuffer<create_correspondences_vs_cb> cb : register(b0);
 
 struct vs_input
 {
@@ -19,6 +19,7 @@ struct vs_output
 	float4 rtPosition		: SV_POSITION;
 };
 
+[RootSignature(CREATE_CORRESPONDENCES_DEPTH_ONLY_RS)]
 vs_output main(vs_input IN)
 {
 	vs_output OUT;
