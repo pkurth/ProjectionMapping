@@ -24,6 +24,8 @@ struct depth_tracker
 	void update();
 	void visualizeDepth(ldr_render_pass* renderPass);
 
+
+private:
 	rgbd_camera camera;
 
 	ref<dx_texture> cameraDepthTexture;

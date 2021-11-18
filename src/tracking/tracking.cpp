@@ -464,6 +464,12 @@ void depth_tracker::update()
 		}
 
 
+		// If entity has been deleted, don't track it anymore.
+		if (trackedEntity && !trackedEntity.registry->valid(trackedEntity.handle))
+		{
+			trackedEntity = {};
+		}
+
 		if (tracking)
 		{
 			PROFILE_ALL(cl, "Process last tracking result");
@@ -508,7 +514,6 @@ void depth_tracker::update()
 		if (trackedEntity)
 		{
 			PROFILE_ALL(cl, "Create correspondences");
-
 
 			cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
