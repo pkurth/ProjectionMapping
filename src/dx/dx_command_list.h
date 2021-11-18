@@ -58,6 +58,7 @@ struct dx_command_list
 	void copyResource(dx_resource from, dx_resource to);
 	void copyTextureRegionToBuffer(const ref<dx_texture>& from, const ref<dx_buffer>& to, uint32 bufferElementOffset, uint32 x, uint32 y, uint32 width, uint32 height);
 	void copyTextureRegionToTexture(const ref<dx_texture>& from, const ref<dx_texture>& to, uint32 sourceX, uint32 sourceY, uint32 destX, uint32 destY, uint32 width, uint32 height);
+	void copyBufferRegionToBuffer(const ref<dx_buffer>& from, const ref<dx_buffer>& to, uint32 sourceElementOffset, uint32 targetElementOffset, uint32 elementCount);
 
 
 	// Pipeline.

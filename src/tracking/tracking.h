@@ -6,6 +6,12 @@
 #include "rendering/render_pass.h"
 #include "scene/scene.h"
 
+enum tracking_direction
+{
+	tracking_direction_camera_to_render,
+	tracking_direction_render_to_camera
+};
+
 struct depth_tracker
 {
 	depth_tracker();
@@ -29,9 +35,20 @@ struct depth_tracker
 	ref<dx_texture> renderedColorTexture; // Temporary.
 	ref<dx_texture> renderedDepthTexture;
 
+	ref<dx_buffer> icpDispatchBuffer;
+	ref<dx_buffer> correspondenceBuffer;
+	ref<dx_buffer> icpDispatchReadbackBuffer; // Temporary.
+
+	ref<dx_buffer> ataBuffer0;
+	ref<dx_buffer> ataBuffer1;
+
+	ref<dx_buffer> ataReadbackBuffer;
+
 	scene_entity trackedEntity = {};
 
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);
+
+	tracking_direction trackingDirection = tracking_direction_camera_to_render;
 };
 

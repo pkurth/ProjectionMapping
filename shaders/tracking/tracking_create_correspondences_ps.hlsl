@@ -5,7 +5,7 @@ Texture2D<uint> cameraDepthTexture					: register(t0);
 Texture2D<float2> cameraUnprojectTable				: register(t1);
 
 RWStructuredBuffer<tracking_correspondence> output	: register(u0);
-RWStructuredBuffer<uint> counter					: register(u1);
+RWStructuredBuffer<tracking_indirect> indirect		: register(u1);
 
 struct ps_input
 {
@@ -18,6 +18,7 @@ struct ps_input
 
 #define NORMAL_RECONSTRUCTION_ACCURACY 2
 
+[earlydepthstencil]
 [RootSignature(CREATE_CORRESPONDENCES_RS)]
 float4 main(ps_input IN) : SV_TARGET0
 {
@@ -28,7 +29,7 @@ float4 main(ps_input IN) : SV_TARGET0
 
 	if (dot(offset, offset) > cb.squaredPositionThreshold)
 	{
-		return float4(0.f, 0.f, 0.f, 0.f);
+		return float4(0.f, 0.f, 0.f, 1.f);
 	}
 
 
@@ -62,11 +63,10 @@ float4 main(ps_input IN) : SV_TARGET0
 
 	if (cosAngle < cb.cosAngleThreshold)
 	{
-		return float4(0.f, 0.f, 0.f, 0.f);
+		//return float4(0.f, 0.f, 0.f, 1.f);
 	}
 
 
-#if 0
 	tracking_correspondence result;
 
 	if (cb.trackingDirection == tracking_direction_camera_to_render)
@@ -87,10 +87,16 @@ float4 main(ps_input IN) : SV_TARGET0
 	}
 
 	uint index;
-	InterlockedAdd(counter[0], 1, index);
+	InterlockedAdd(indirect[0].counter, 1, index);
 
 	output[index] = result;
-#endif
 
-	return float4(cameraNormal, 1.f);
+
+
+	float output = -IN.position.z;
+	output = output == output;
+
+	//return float4(length(cameraNormal).xxx, 1.f);
+	return float4(IN.normal, 1.f);
+	//return float4(1.f.xxx, 1.f);
 }

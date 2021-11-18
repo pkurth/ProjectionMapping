@@ -168,6 +168,7 @@ static vec2 project(vec3 pos, intrinsics_cb intr, distortion_cb dis)
 	float xp = pos.x;
 	float yp = pos.y;
 
+#if 1
 	float xp2 = xp * xp;
 	float yp2 = yp * yp;
 	float xyp = xp * yp;
@@ -177,7 +178,7 @@ static vec2 project(vec3 pos, intrinsics_cb intr, distortion_cb dis)
 	float rsc = rss * rs;
 	float a = 1.f + dis.k1 * rs + dis.k2 * rss + dis.k3 * rsc;
 	float b = 1.f + dis.k4 * rs + dis.k5 * rss + dis.k6 * rsc;
-	float bi = (b != 0.f) ? (1.f / b) : 1.f;
+	float bi = (abs(b) > 1e-5f) ? (1.f / b) : 1.f;
 	float d = a * bi;
 
 	float xp_d = xp * d;
@@ -188,8 +189,50 @@ static vec2 project(vec3 pos, intrinsics_cb intr, distortion_cb dis)
 
 	xp_d += rs_2xp2 * dis.p2 + 2.f * xyp * dis.p1;
 	yp_d += rs_2yp2 * dis.p1 + 2.f * xyp * dis.p2;
+#else
+	float xp_d = xp;
+	float yp_d = yp;
+#endif
 
 	return vec2(xp_d * intr.fx + intr.cx, yp_d * intr.fy + intr.cy);
+}
+
+// Result of this can be passed to a standard projection matrix.
+static vec4 distort(vec3 pos, distortion_cb dis)
+{
+	pos.yz *= -1.f; // Convert to CV-system.
+	pos.xy /= pos.z;
+
+	float xp = pos.x;
+	float yp = pos.y;
+
+#if 1
+	float xp2 = xp * xp;
+	float yp2 = yp * yp;
+	float xyp = xp * yp;
+	float rs = xp2 + yp2;
+
+	float rss = rs * rs;
+	float rsc = rss * rs;
+	float a = 1.f + dis.k1 * rs + dis.k2 * rss + dis.k3 * rsc;
+	float b = 1.f + dis.k4 * rs + dis.k5 * rss + dis.k6 * rsc;
+	float bi = (abs(b) > 1e-5f) ? (1.f / b) : 1.f;
+	float d = a * bi;
+
+	float xp_d = xp * d;
+	float yp_d = yp * d;
+
+	float rs_2xp2 = rs + 2.f * xp2;
+	float rs_2yp2 = rs + 2.f * yp2;
+
+	xp_d += rs_2xp2 * dis.p2 + 2.f * xyp * dis.p1;
+	yp_d += rs_2yp2 * dis.p1 + 2.f * xyp * dis.p2;
+#else
+	float xp_d = xp;
+	float yp_d = yp;
+#endif
+
+	return vec4(xp_d * pos.z, -yp_d * pos.z, -pos.z, 1.f);
 }
 
 

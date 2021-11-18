@@ -115,6 +115,12 @@ void dx_command_list::copyTextureRegionToTexture(const ref<dx_texture>& from, co
 	commandList->CopyTextureRegion(&destLocation, destX, destY, 0, &srcLocation, &srcBox);
 }
 
+void dx_command_list::copyBufferRegionToBuffer(const ref<dx_buffer>& from, const ref<dx_buffer>& to, uint32 sourceElementOffset, uint32 targetElementOffset, uint32 elementCount)
+{
+	assert(from->elementSize == to->elementSize);
+	commandList->CopyBufferRegion(to->resource.Get(), targetElementOffset * to->elementSize, from->resource.Get(), sourceElementOffset * from->elementSize, from->elementSize * elementCount);
+}
+
 void dx_command_list::setPipelineState(dx_pipeline_state pipelineState)
 {
 	commandList->SetPipelineState(pipelineState.Get());

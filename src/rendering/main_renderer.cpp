@@ -154,7 +154,7 @@ void main_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 	if (objectIDsTexture && windowHovered)
 	{
 		uint32* id = (uint32*)mapBuffer(hoveredObjectIDReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
-		hoveredObjectID = *id;
+		hoveredObjectID = id[dxContext.bufferedFrameID];
 		unmapBuffer(hoveredObjectIDReadbackBuffer, false);
 	}
 	else

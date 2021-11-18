@@ -26,14 +26,8 @@ vs_output main(vs_input IN)
 
 	OUT.position = mul(cb.m, float4(IN.position, 1.f)).xyz;
 
-	float2 pixel = project(OUT.position, cb.intrinsics, cb.distortion);
-	float2 screenUV = pixel / float2(cb.width, cb.height);
-	screenUV.y = 1.f - screenUV.y;
-
-	float2 xy = screenUV * 2.f - 1.f;
-	OUT.rtPosition.z = -OUT.position.z - 0.001f;
-	OUT.rtPosition.w = -OUT.position.z;
-	OUT.rtPosition.xy = xy * OUT.rtPosition.w; // Because the hardware will divide by this, we pre-multiply to counteract this.
+	float4 distorted = distort(OUT.position, cb.distortion);
+	OUT.rtPosition = mul(cb.p, distorted);
 
 	OUT.normal = mul(cb.m, float4(IN.normal, 0.f)).xyz;
 	OUT.uv = IN.uv;
