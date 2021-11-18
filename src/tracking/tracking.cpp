@@ -25,6 +25,12 @@ static dx_pipeline visualizeDepthPipeline;
 
 
 
+static const char* trackingDirectionNames[] =
+{
+	"Camera to render",
+	"Render to camera",
+};
+
 struct visualize_depth_material
 {
 	mat4 colorCameraV;
@@ -392,12 +398,18 @@ void depth_tracker::update()
 				ImGui::PropertyCheckbox("Tracking", tracking);
 				ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 				ImGui::PropertySliderAngle("Angle threshold", angleThreshold, 0.f, 90.f);
+				ImGui::PropertySlider("Smoothing (lower is smoother)", smoothing);
+
+				ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
 
 				ImGui::PropertyValue("Current error", result.error, "%.8f");
 				ImGui::PropertyValue("Iterations", result.numIterations);
-				ImGui::PropertyValue("Translation", result.translation);
-				ImGui::PropertyValue("Rotation", result.rotation);
+				ImGui::PropertyValue("Current delta translation", result.translation);
+				ImGui::PropertyValue("Current delta rotation", result.rotation);
 				ImGui::EndProperties();
+
+				uint32 width = min((uint32)ImGui::GetContentRegionAvail().x, renderedColorTexture->width);
+				ImGui::Image(renderedColorTexture, width, renderedColorTexture->height * width / renderedColorTexture->width);
 			}
 
 			ImGui::EndTree();
@@ -405,62 +417,17 @@ void depth_tracker::update()
 	}
 	ImGui::End();
 
-	rgbd_frame frame;
-	if (camera.getFrame(frame, 0))
+
+	dx_command_list* cl = dxContext.getFreeRenderCommandList();
+
 	{
-		dx_command_list* cl = dxContext.getFreeRenderCommandList();
+		PROFILE_ALL(cl, "Tracking");
 
-		static uint32 read = 0;
 
+		// Upload new frame if available.
+		rgbd_frame frame;
+		if (camera.getFrame(frame, 0))
 		{
-			PROFILE_ALL(cl, "Tracking");
-
-			if (tracking)
-			{
-				bool correspondencesValid;
-
-				{
-					tracking_indirect* mapped = (tracking_indirect*)mapBuffer(icpDispatchReadbackBuffer, true, map_range{ read, 1 });
-					tracking_indirect indirect = mapped[read];
-					unmapBuffer(icpDispatchReadbackBuffer, false);
-
-					//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
-					correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
-				}
-
-				if (correspondencesValid)
-				{
-					tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(ataReadbackBuffer, true, map_range{ read, 1 });
-					tracking_ata ata = mapped[read].ata;
-					tracking_atb atb = mapped[read].atb;
-					unmapBuffer(ataReadbackBuffer, false);
-
-
-					result = solve(ata, atb);
-
-					//std::cout << ata << '\n';
-					//std::cout << "------\n";
-					//std::cout << atb << '\n';
-					//std::cout << "------\n";
-					//std::cout << result.rotation << " " << result.translation << '\n';
-					//std::cout << "------\n";
-					//std::cout << "------\n";
-
-					result.rotation = conjugate(result.rotation);
-					result.translation = -(result.rotation * result.translation);
-
-					if (trackedEntity)
-					{
-						transform_component& transform = trackedEntity.getComponent<transform_component>();
-						quat newRotation = result.rotation * transform.rotation;
-						vec3 newPosition = result.rotation * transform.position + result.translation;
-
-						transform.rotation = slerp(transform.rotation, newRotation, 0.1f);
-						transform.position = lerp(transform.position, newPosition, 0.1f);
-					}
-				}
-			}
-
 			if (camera.depthSensor.active)
 			{
 				PROFILE_ALL(cl, "Upload depth image");
@@ -493,191 +460,228 @@ void depth_tracker::update()
 				cl->transitionBarrier(cameraColorTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
 			}
 
-			if (trackedEntity)
+			camera.releaseFrame(frame);
+		}
+
+
+		if (tracking)
+		{
+			PROFILE_ALL(cl, "Process last tracking result");
+
+			tracking_indirect* mappedIndirect = (tracking_indirect*)mapBuffer(icpDispatchReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
+			tracking_indirect indirect = mappedIndirect[dxContext.bufferedFrameID];
+			unmapBuffer(icpDispatchReadbackBuffer, false);
+
+			//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
+			bool correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
+
+
+			if (correspondencesValid)
 			{
-				PROFILE_ALL(cl, "Create correspondences");
+				tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(ataReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
+				tracking_ata ata = mapped[dxContext.bufferedFrameID].ata;
+				tracking_atb atb = mapped[dxContext.bufferedFrameID].atb;
+				unmapBuffer(ataReadbackBuffer, false);
 
+				result = solve(ata, atb);
 
-				cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
-				cl->clearRTV(renderedColorTexture, 0.f, 0.f, 0.f, 1.f);
-				cl->clearDepth(renderedDepthTexture);
-
-				cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-
-				auto& rasterComponent = trackedEntity.getComponent<raster_component>();
-				auto& transform = trackedEntity.getComponent<transform_component>();
-
-				auto& i = camera.depthSensor.intrinsics;
-				create_correspondences_vs_cb vscb;
-				vscb.distortion = camera.depthSensor.distortion;
-				vscb.m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) * trsToMat4(transform); // TODO: Global camera position.
-				vscb.p = createPerspectiveProjectionMatrix((float)camera.depthSensor.width, (float)camera.depthSensor.height, i.fx, i.fy, i.cx, i.cy, 0.1f, -1.f);
-
-
+				if (trackingDirection == tracking_direction_camera_to_render)
 				{
-					PROFILE_ALL(cl, "Depth pre-pass");
-
-					cl->setPipelineState(*createCorrespondencesDepthOnlyPipeline.pipeline);
-					cl->setGraphicsRootSignature(*createCorrespondencesDepthOnlyPipeline.rootSignature);
-
-					dx_render_target renderTarget({ }, renderedDepthTexture);
-					cl->setRenderTarget(renderTarget);
-					cl->setViewport(renderTarget.viewport);
-
-					cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
-					cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
-					cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
-
-					cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
-
-					for (auto& submesh : rasterComponent.mesh->submeshes)
-					{
-						cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
-					}
+					result.rotation = conjugate(result.rotation);
+					result.translation = -(result.rotation * result.translation);
 				}
 
-
+				if (trackedEntity)
 				{
-					PROFILE_ALL(cl, "Collect correspondences");
+					transform_component& transform = trackedEntity.getComponent<transform_component>();
+					quat newRotation = result.rotation * transform.rotation;
+					vec3 newPosition = result.rotation * transform.position + result.translation;
 
-					cl->clearUAV(icpDispatchBuffer);
-
-					cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
-					cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
-
-					dx_render_target renderTarget({ renderedColorTexture }, renderedDepthTexture);
-					cl->setRenderTarget(renderTarget);
-					cl->setViewport(renderTarget.viewport);
-
-					cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
-					cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
-					cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
-
-					create_correspondences_ps_cb pscb;
-					pscb.depthScale = camera.depthScale;
-					pscb.squaredPositionThreshold = positionThreshold * positionThreshold;
-					pscb.cosAngleThreshold = cos(angleThreshold);
-					pscb.trackingDirection = trackingDirection;
-
-					cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
-					cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_PS_CB, pscb);
-					cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 0, cameraDepthTexture);
-					cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 1, cameraUnprojectTableTexture);
-					cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 2, correspondenceBuffer);
-					cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 3, icpDispatchBuffer);
-
-					for (auto& submesh : rasterComponent.mesh->submeshes)
-					{
-						cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
-					}
-
-					barrier_batcher(cl)
-						.uav(icpDispatchBuffer)
-						.transition(correspondenceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
-						.transition(renderedColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON);
+					transform.rotation = slerp(transform.rotation, newRotation, smoothing);
+					transform.position = lerp(transform.position, newPosition, smoothing);
 				}
+			}
+		}
 
+
+
+		if (trackedEntity)
+		{
+			PROFILE_ALL(cl, "Create correspondences");
+
+
+			cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+			cl->clearRTV(renderedColorTexture, 0.f, 0.f, 0.f, 1.f);
+			cl->clearDepth(renderedDepthTexture);
+
+			cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+
+			auto& rasterComponent = trackedEntity.getComponent<raster_component>();
+			auto& transform = trackedEntity.getComponent<transform_component>();
+
+			auto& i = camera.depthSensor.intrinsics;
+			create_correspondences_vs_cb vscb;
+			vscb.distortion = camera.depthSensor.distortion;
+			vscb.m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) * trsToMat4(transform); // TODO: Global camera position.
+			vscb.p = createPerspectiveProjectionMatrix((float)camera.depthSensor.width, (float)camera.depthSensor.height, i.fx, i.fy, i.cx, i.cy, 0.1f, -1.f);
+
+
+			{
+				PROFILE_ALL(cl, "Depth pre-pass");
+
+				cl->setPipelineState(*createCorrespondencesDepthOnlyPipeline.pipeline);
+				cl->setGraphicsRootSignature(*createCorrespondencesDepthOnlyPipeline.rootSignature);
+
+				dx_render_target renderTarget({ }, renderedDepthTexture);
+				cl->setRenderTarget(renderTarget);
+				cl->setViewport(renderTarget.viewport);
+
+				cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
+				cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
+				cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
+
+				cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
+
+				for (auto& submesh : rasterComponent.mesh->submeshes)
 				{
-					PROFILE_ALL(cl, "Prepare dispatch");
-					
-					cl->setPipelineState(*prepareDispatchPipeline.pipeline);
-					cl->setComputeRootSignature(*prepareDispatchPipeline.rootSignature);
-
-					cl->setRootComputeUAV(PREPARE_DISPATCH_RS_BUFFER, icpDispatchBuffer);
-					cl->dispatch(1);
-
-					barrier_batcher(cl)
-						//.uav(icpDispatchBuffer)
-						.transition(icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+					cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
 				}
-
-				{
-					PROFILE_ALL(cl, "ICP");
-
-					{
-						PROFILE_ALL(cl, "Initial");
-
-						cl->setPipelineState(*icpPipeline.pipeline);
-						cl->setComputeRootSignature(*icpPipeline.rootSignature);
-
-						cl->setRootComputeSRV(ICP_RS_COUNTER, icpDispatchBuffer);
-						cl->setRootComputeSRV(ICP_RS_CORRESPONDENCES, correspondenceBuffer);
-						cl->setRootComputeUAV(ICP_RS_OUTPUT, ataBuffer0);
-
-						cl->dispatchIndirect(1, icpDispatchBuffer, 0);
-
-						barrier_batcher(cl)
-							//.uav(ataBuffer0)
-							.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-						cl->uavBarrier(ataBuffer0);
-					}
-
-
-					{
-						PROFILE_ALL(cl, "Reduce");
-
-						cl->setPipelineState(*icpReducePipeline.pipeline);
-						cl->setComputeRootSignature(*icpReducePipeline.rootSignature);
-
-						cl->setRootComputeSRV(ICP_REDUCE_RS_COUNTER, icpDispatchBuffer);
-
-						{
-							PROFILE_ALL(cl, "Reduce 0");
-
-							cl->setCompute32BitConstants(ICP_REDUCE_RS_CB, tracking_icp_reduce_cb{ 0 });
-							cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, ataBuffer0);
-							cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, ataBuffer1);
-
-							cl->dispatchIndirect(1, icpDispatchBuffer, sizeof(D3D12_DISPATCH_ARGUMENTS) * 1);
-
-							barrier_batcher(cl)
-								//.uav(ataBuffer1)
-								.transition(ataBuffer1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
-								.transition(ataBuffer0, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-						}
-
-						{
-							PROFILE_ALL(cl, "Reduce 1");
-
-							cl->setCompute32BitConstants(ICP_REDUCE_RS_CB, tracking_icp_reduce_cb{ 1 });
-							cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, ataBuffer1);
-							cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, ataBuffer0);
-
-							cl->dispatchIndirect(1, icpDispatchBuffer, sizeof(D3D12_DISPATCH_ARGUMENTS) * 2);
-
-							barrier_batcher(cl)
-								.uav(ataBuffer0)
-								.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE) // This is next copied to the CPU.
-								.transition(ataBuffer1, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-						}
-					}
-
-
-					barrier_batcher(cl)
-						.transition(icpDispatchBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-						.transition(correspondenceBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-				}
-
-
-				cl->copyBufferRegionToBuffer(ataBuffer0, ataReadbackBuffer, 0, read, 1);
-				cl->transitionBarrier(ataBuffer0, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-
-				// For debug.
-				cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-				cl->copyBufferRegionToBuffer(icpDispatchBuffer, icpDispatchReadbackBuffer, 0, read, 1);
-				cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
 
+
+			{
+				PROFILE_ALL(cl, "Collect correspondences");
+
+				cl->clearUAV(icpDispatchBuffer);
+
+				cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
+				cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
+
+				dx_render_target renderTarget({ renderedColorTexture }, renderedDepthTexture);
+				cl->setRenderTarget(renderTarget);
+				cl->setViewport(renderTarget.viewport);
+
+				cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
+				cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
+				cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
+
+				create_correspondences_ps_cb pscb;
+				pscb.depthScale = camera.depthScale;
+				pscb.squaredPositionThreshold = positionThreshold * positionThreshold;
+				pscb.cosAngleThreshold = cos(angleThreshold);
+				pscb.trackingDirection = trackingDirection;
+
+				cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
+				cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_PS_CB, pscb);
+				cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 0, cameraDepthTexture);
+				cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 1, cameraUnprojectTableTexture);
+				cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 2, correspondenceBuffer);
+				cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 3, icpDispatchBuffer);
+
+				for (auto& submesh : rasterComponent.mesh->submeshes)
+				{
+					cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
+				}
+
+				barrier_batcher(cl)
+					.uav(icpDispatchBuffer)
+					.transition(correspondenceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
+					.transition(renderedColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON);
+			}
+
+			{
+				PROFILE_ALL(cl, "Prepare dispatch");
+
+				cl->setPipelineState(*prepareDispatchPipeline.pipeline);
+				cl->setComputeRootSignature(*prepareDispatchPipeline.rootSignature);
+
+				cl->setRootComputeUAV(PREPARE_DISPATCH_RS_BUFFER, icpDispatchBuffer);
+				cl->dispatch(1);
+
+				barrier_batcher(cl)
+					//.uav(icpDispatchBuffer)
+					.transition(icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+			}
+
+			{
+				PROFILE_ALL(cl, "ICP");
+
+				{
+					PROFILE_ALL(cl, "Initial");
+
+					cl->setPipelineState(*icpPipeline.pipeline);
+					cl->setComputeRootSignature(*icpPipeline.rootSignature);
+
+					cl->setRootComputeSRV(ICP_RS_COUNTER, icpDispatchBuffer);
+					cl->setRootComputeSRV(ICP_RS_CORRESPONDENCES, correspondenceBuffer);
+					cl->setRootComputeUAV(ICP_RS_OUTPUT, ataBuffer0);
+
+					cl->dispatchIndirect(1, icpDispatchBuffer, 0);
+
+					barrier_batcher(cl)
+						//.uav(ataBuffer0)
+						.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+					cl->uavBarrier(ataBuffer0);
+				}
+
+
+				{
+					PROFILE_ALL(cl, "Reduce");
+
+					cl->setPipelineState(*icpReducePipeline.pipeline);
+					cl->setComputeRootSignature(*icpReducePipeline.rootSignature);
+
+					cl->setRootComputeSRV(ICP_REDUCE_RS_COUNTER, icpDispatchBuffer);
+
+					{
+						PROFILE_ALL(cl, "Reduce 0");
+
+						cl->setCompute32BitConstants(ICP_REDUCE_RS_CB, tracking_icp_reduce_cb{ 0 });
+						cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, ataBuffer0);
+						cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, ataBuffer1);
+
+						cl->dispatchIndirect(1, icpDispatchBuffer, sizeof(D3D12_DISPATCH_ARGUMENTS) * 1);
+
+						barrier_batcher(cl)
+							//.uav(ataBuffer1)
+							.transition(ataBuffer1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
+							.transition(ataBuffer0, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+					}
+
+					{
+						PROFILE_ALL(cl, "Reduce 1");
+
+						cl->setCompute32BitConstants(ICP_REDUCE_RS_CB, tracking_icp_reduce_cb{ 1 });
+						cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, ataBuffer1);
+						cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, ataBuffer0);
+
+						cl->dispatchIndirect(1, icpDispatchBuffer, sizeof(D3D12_DISPATCH_ARGUMENTS) * 2);
+
+						barrier_batcher(cl)
+							.uav(ataBuffer0)
+							.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE) // This is next copied to the CPU.
+							.transition(ataBuffer1, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+					}
+				}
+
+
+				barrier_batcher(cl)
+					.transition(icpDispatchBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+					.transition(correspondenceBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			}
+
+
+			cl->copyBufferRegionToBuffer(ataBuffer0, ataReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
+			cl->transitionBarrier(ataBuffer0, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+			cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+			cl->copyBufferRegionToBuffer(icpDispatchBuffer, icpDispatchReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
+			cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 		}
-		dxContext.executeCommandList(cl);
-
-		camera.releaseFrame(frame);
-
-		read = 1 - read;
 	}
+	dxContext.executeCommandList(cl);
 }
 
 void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)

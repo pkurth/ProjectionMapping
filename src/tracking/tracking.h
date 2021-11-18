@@ -37,7 +37,7 @@ struct depth_tracker
 
 	ref<dx_buffer> icpDispatchBuffer;
 	ref<dx_buffer> correspondenceBuffer;
-	ref<dx_buffer> icpDispatchReadbackBuffer; // Temporary.
+	ref<dx_buffer> icpDispatchReadbackBuffer;
 
 	ref<dx_buffer> ataBuffer0;
 	ref<dx_buffer> ataBuffer1;
@@ -48,6 +48,8 @@ struct depth_tracker
 
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);
+
+	float smoothing = 0.05f;
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;
 	bool tracking = false;
