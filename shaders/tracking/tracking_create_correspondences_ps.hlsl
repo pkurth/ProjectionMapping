@@ -63,7 +63,7 @@ float4 main(ps_input IN) : SV_TARGET0
 
 	if (cosAngle < cb.cosAngleThreshold)
 	{
-		//return float4(0.f, 0.f, 0.f, 1.f);
+		return float4(0.f, 0.f, 0.f, 1.f);
 	}
 
 

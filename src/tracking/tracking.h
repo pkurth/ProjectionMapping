@@ -50,5 +50,6 @@ struct depth_tracker
 	float angleThreshold = deg2rad(45.f);
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;
+	bool tracking = false;
 };
 

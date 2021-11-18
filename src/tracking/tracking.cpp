@@ -163,6 +163,7 @@ void depth_tracker::trackObject(scene_entity entity)
 	trackedEntity = entity;
 }
 
+#if 0
 union mat6
 {
 	struct
@@ -178,11 +179,6 @@ union mat6
 	float m[36];
 };
 
-struct vec6
-{
-	float data[6];
-};
-
 inline std::ostream& operator<<(std::ostream& s, const mat6& m)
 {
 	s << "[" << m.m00 << ", " << m.m01 << ", " << m.m02 << ", " << m.m03 << ", " << m.m04 << ", " << m.m05 << "]\n";
@@ -191,12 +187,6 @@ inline std::ostream& operator<<(std::ostream& s, const mat6& m)
 	s << "[" << m.m30 << ", " << m.m31 << ", " << m.m32 << ", " << m.m33 << ", " << m.m34 << ", " << m.m35 << "]\n";
 	s << "[" << m.m40 << ", " << m.m41 << ", " << m.m42 << ", " << m.m43 << ", " << m.m44 << ", " << m.m45 << "]\n";
 	s << "[" << m.m50 << ", " << m.m51 << ", " << m.m52 << ", " << m.m53 << ", " << m.m54 << ", " << m.m55 << "]";
-	return s;
-}
-
-inline std::ostream& operator<<(std::ostream& s, vec6 v)
-{
-	s << "[" << v.data[0] << ", " << v.data[1] << ", " << v.data[2] << ", " << v.data[3] << ", " << v.data[4] << ", " << v.data[5] << "]";
 	return s;
 }
 
@@ -233,24 +223,180 @@ static mat6 triangleATAToMat6(const tracking_ata& ata)
 
 	return result;
 }
+#endif
 
-static vec6 atbToVec6(const tracking_atb& atb)
+struct vec6
+{
+	float m[6];
+
+	vec6() {}
+	vec6(tracking_atb v)
+	{
+		memcpy(m, v.m, sizeof(float) * 6);
+	}
+};
+
+static vec6 operator*(const tracking_ata& m, const vec6& v)
 {
 	vec6 result;
-	memcpy(result.data, atb.m, sizeof(float) * 6);
+	result.m[0] = m.m[ata_m00] * v.m[0] + m.m[ata_m01] * v.m[1] + m.m[ata_m02] * v.m[2] + m.m[ata_m03] * v.m[3] + m.m[ata_m04] * v.m[4] + m.m[ata_m05] * v.m[5];
+	result.m[1] = m.m[ata_m01] * v.m[0] + m.m[ata_m11] * v.m[1] + m.m[ata_m12] * v.m[2] + m.m[ata_m13] * v.m[3] + m.m[ata_m14] * v.m[4] + m.m[ata_m15] * v.m[5];
+	result.m[2] = m.m[ata_m02] * v.m[0] + m.m[ata_m12] * v.m[1] + m.m[ata_m22] * v.m[2] + m.m[ata_m23] * v.m[3] + m.m[ata_m24] * v.m[4] + m.m[ata_m25] * v.m[5];
+	result.m[3] = m.m[ata_m03] * v.m[0] + m.m[ata_m13] * v.m[1] + m.m[ata_m23] * v.m[2] + m.m[ata_m33] * v.m[3] + m.m[ata_m34] * v.m[4] + m.m[ata_m35] * v.m[5];
+	result.m[4] = m.m[ata_m04] * v.m[0] + m.m[ata_m14] * v.m[1] + m.m[ata_m24] * v.m[2] + m.m[ata_m34] * v.m[3] + m.m[ata_m44] * v.m[4] + m.m[ata_m45] * v.m[5];
+	result.m[5] = m.m[ata_m05] * v.m[0] + m.m[ata_m15] * v.m[1] + m.m[ata_m25] * v.m[2] + m.m[ata_m35] * v.m[3] + m.m[ata_m45] * v.m[4] + m.m[ata_m55] * v.m[5];
 	return result;
+}
+
+static vec6 operator+(const vec6& a, const vec6& b)
+{
+	vec6 result;
+	for (uint32 i = 0; i < 6; ++i)
+	{
+		result.m[i] = a.m[i] + b.m[i];
+	}
+	return result;
+}
+
+static vec6 operator-(const vec6& a, const vec6& b)
+{
+	vec6 result;
+	for (uint32 i = 0; i < 6; ++i)
+	{
+		result.m[i] = a.m[i] - b.m[i];
+	}
+	return result;
+}
+
+static vec6 operator*(const vec6& a, float b)
+{
+	vec6 result;
+	for (uint32 i = 0; i < 6; ++i)
+	{
+		result.m[i] = a.m[i] * b;
+	}
+	return result;
+}
+
+static float dot(const vec6& a, const vec6& b)
+{
+	float result = 0.f;
+	for (uint32 i = 0; i < 6; ++i)
+	{
+		result += a.m[i] * b.m[i];
+	}
+	return result;
+}
+
+inline std::ostream& operator<<(std::ostream& s, const tracking_ata& m)
+{
+	s << "[" << m.m[ata_m00] << ", " << m.m[ata_m01] << ", " << m.m[ata_m02] << ", " << m.m[ata_m03] << ", " << m.m[ata_m04] << ", " << m.m[ata_m05] << "]\n";
+	s << "[" << m.m[ata_m01] << ", " << m.m[ata_m11] << ", " << m.m[ata_m12] << ", " << m.m[ata_m13] << ", " << m.m[ata_m14] << ", " << m.m[ata_m15] << "]\n";
+	s << "[" << m.m[ata_m02] << ", " << m.m[ata_m12] << ", " << m.m[ata_m22] << ", " << m.m[ata_m23] << ", " << m.m[ata_m24] << ", " << m.m[ata_m25] << "]\n";
+	s << "[" << m.m[ata_m03] << ", " << m.m[ata_m13] << ", " << m.m[ata_m23] << ", " << m.m[ata_m33] << ", " << m.m[ata_m34] << ", " << m.m[ata_m35] << "]\n";
+	s << "[" << m.m[ata_m04] << ", " << m.m[ata_m14] << ", " << m.m[ata_m24] << ", " << m.m[ata_m34] << ", " << m.m[ata_m44] << ", " << m.m[ata_m45] << "]\n";
+	s << "[" << m.m[ata_m05] << ", " << m.m[ata_m15] << ", " << m.m[ata_m25] << ", " << m.m[ata_m35] << ", " << m.m[ata_m45] << ", " << m.m[ata_m55] << "]";
+	return s;
+}
+
+inline std::ostream& operator<<(std::ostream& s, tracking_atb v)
+{
+	s << "[" << v.m[0] << ", " << v.m[1] << ", " << v.m[2] << ", " << v.m[3] << ", " << v.m[4] << ", " << v.m[5] << "]";
+	return s;
+}
+
+inline std::ostream& operator<<(std::ostream& s, vec6 v)
+{
+	s << "[" << v.m[0] << ", " << v.m[1] << ", " << v.m[2] << ", " << v.m[3] << ", " << v.m[4] << ", " << v.m[5] << "]";
+	return s;
+}
+
+struct tracking_result
+{
+	quat rotation;
+	vec3 translation;
+	float error;
+	uint32 numIterations;
+};
+
+static tracking_result solve(const tracking_ata& A, const tracking_atb& b, uint32 maxNumIterations = 20)
+{
+	vec6 x;
+	memset(&x, 0, sizeof(x));
+
+	vec6 r = b - A * x;
+	vec6 p = r;
+
+	float rdotr = dot(r, r);
+
+	uint32 k;
+	for (k = 0; k < maxNumIterations; ++k)
+	{
+		vec6 Ap = A * p;
+		float alpha = rdotr / dot(p, Ap);
+		x = x + p * alpha;
+		r = r - Ap * alpha;
+
+		float oldrdotr = rdotr;
+		rdotr = dot(r, r);
+		if (rdotr < 1e-5f)
+		{
+			break;
+		}
+
+		float beta = rdotr / oldrdotr;
+		p = r + p * beta;
+	}
+
+
+	float alpha = x.m[0];
+	float beta = x.m[1];
+	float gamma = x.m[2];
+
+	float sinAlpha = sin(alpha);
+	float cosAlpha = cos(alpha);
+	float sinBeta = sin(beta);
+	float cosBeta = cos(beta);
+	float sinGamma = sin(gamma);
+	float cosGamma = cos(gamma);
+
+	mat3 R;
+	R.m00 = cosGamma * cosBeta;
+	R.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
+	R.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
+	R.m10 = sinGamma * cosBeta;
+	R.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
+	R.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
+	R.m20 = -sinBeta;
+	R.m21 = cosBeta * sinAlpha;
+	R.m22 = cosBeta * cosAlpha;
+
+	vec3 t;
+	t.x = x.m[3];
+	t.y = x.m[4];
+	t.z = x.m[5];
+
+	return { mat3ToQuaternion(R), t, rdotr, k };
 }
 
 void depth_tracker::update()
 {
+	static tracking_result result = {};
+
 	if (ImGui::Begin("Settings"))
 	{
 		if (ImGui::BeginTree("Tracker"))
 		{
 			if (ImGui::BeginProperties())
 			{
+				ImGui::PropertyCheckbox("Tracking", tracking);
 				ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 				ImGui::PropertySliderAngle("Angle threshold", angleThreshold, 0.f, 90.f);
+
+				ImGui::PropertyValue("Current error", result.error, "%.8f");
+				ImGui::PropertyValue("Iterations", result.numIterations);
+				ImGui::PropertyValue("Translation", result.translation);
+				ImGui::PropertyValue("Rotation", result.rotation);
 				ImGui::EndProperties();
 			}
 
@@ -269,6 +415,7 @@ void depth_tracker::update()
 		{
 			PROFILE_ALL(cl, "Tracking");
 
+			if (tracking)
 			{
 				bool correspondencesValid;
 
@@ -281,28 +428,37 @@ void depth_tracker::update()
 					correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
 				}
 
-				mat6 ata;
-				vec6 atb;
-
 				if (correspondencesValid)
 				{
 					tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(ataReadbackBuffer, true, map_range{ read, 1 });
-					ata = triangleATAToMat6(mapped[read].ata);
-					atb = atbToVec6(mapped[read].atb);
+					tracking_ata ata = mapped[read].ata;
+					tracking_atb atb = mapped[read].atb;
 					unmapBuffer(ataReadbackBuffer, false);
-				}
-				else
-				{
-					memset(&ata, 0, sizeof(ata));
-					memset(&atb, 0, sizeof(atb));
-				}
 
-				std::cout << ata << '\n';
-				std::cout << "------\n";
-				std::cout << atb << '\n';
-				std::cout << "------\n";
-				std::cout << "------\n";
-				std::cout << "------\n";
+
+					result = solve(ata, atb);
+
+					//std::cout << ata << '\n';
+					//std::cout << "------\n";
+					//std::cout << atb << '\n';
+					//std::cout << "------\n";
+					//std::cout << result.rotation << " " << result.translation << '\n';
+					//std::cout << "------\n";
+					//std::cout << "------\n";
+
+					result.rotation = conjugate(result.rotation);
+					result.translation = -(result.rotation * result.translation);
+
+					if (trackedEntity)
+					{
+						transform_component& transform = trackedEntity.getComponent<transform_component>();
+						quat newRotation = result.rotation * transform.rotation;
+						vec3 newPosition = result.rotation * transform.position + result.translation;
+
+						transform.rotation = slerp(transform.rotation, newRotation, 0.1f);
+						transform.position = lerp(transform.position, newPosition, 0.1f);
+					}
+				}
 			}
 
 			if (camera.depthSensor.active)

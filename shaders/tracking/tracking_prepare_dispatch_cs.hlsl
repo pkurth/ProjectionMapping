@@ -33,7 +33,7 @@ void main(cs_input IN)
 	tracking_indirect indirect = indirectBuffer[0];
 	uint counter = indirect.counter;
 
-	indirect.initialICP = createArguments(counter, 1000);
+	indirect.initialICP = createArguments(counter, 5000);
 	indirect.reduce0 = createArguments(indirect.initialICP.ThreadGroupCountX, 2);
 	indirect.reduce1 = createArguments(indirect.reduce0.ThreadGroupCountX, 2);
 
