@@ -5,11 +5,18 @@
 #include "dx/dx_buffer.h"
 #include "rendering/render_pass.h"
 #include "scene/scene.h"
+#include "editor/editor.h"
 
 enum tracking_direction
 {
 	tracking_direction_camera_to_render,
 	tracking_direction_render_to_camera
+};
+
+enum tracking_rotation_representation
+{
+	tracking_rotation_representation_euler,
+	tracking_rotation_representation_lie,
 };
 
 struct depth_tracker
@@ -21,7 +28,7 @@ struct depth_tracker
 
 	void trackObject(scene_entity entity);
 
-	void update();
+	void update(scene_editor* editor);
 	void visualizeDepth(ldr_render_pass* renderPass);
 
 
@@ -34,7 +41,7 @@ private:
 	ref<dx_buffer> depthUploadBuffer;
 	ref<dx_buffer> colorUploadBuffer;
 
-	ref<dx_texture> renderedColorTexture; // Temporary.
+	ref<dx_texture> renderedColorTexture; // For debug window only.
 	ref<dx_texture> renderedDepthTexture;
 
 	ref<dx_buffer> icpDispatchBuffer;
@@ -54,6 +61,8 @@ private:
 	float smoothing = 0.05f;
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;
+	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_euler;
+
 	bool tracking = false;
 };
 

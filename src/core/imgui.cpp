@@ -380,14 +380,14 @@ namespace ImGui
 		return changed;
 	}
 
-	bool DisableableButton(const char* label, bool enabled)
+	bool DisableableButton(const char* label, bool enabled, ImVec2 size)
 	{
 		if (!enabled)
 		{
 			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.2f);
 		}
-		bool result = ImGui::Button(label);
+		bool result = ImGui::Button(label, size);
 		if (!enabled)
 		{
 			ImGui::PopItemFlag();
@@ -485,6 +485,14 @@ namespace ImGui
 	{
 		pre(label);
 		bool result = ImGui::Checkbox("", &v);
+		post();
+		return result;
+	}
+
+	bool PropertyDisableableCheckbox(const char* label, bool& v, bool enabled)
+	{
+		pre(label);
+		bool result = ImGui::DisableableCheckbox("", v, enabled);
 		post();
 		return result;
 	}
@@ -646,6 +654,18 @@ namespace ImGui
 		pre(label);
 		bool result = ImGui::Button(buttonText, size);
 		if (hoverText && ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip(hoverText);
+		}
+		post();
+		return result;
+	}
+	
+	bool PropertyDisableableButton(const char* label, const char* buttonText, bool enabled, const char* hoverText, ImVec2 size)
+	{
+		pre(label);
+		bool result = ImGui::DisableableButton(buttonText, enabled, size);
+		if (hoverText && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 		{
 			ImGui::SetTooltip(hoverText);
 		}

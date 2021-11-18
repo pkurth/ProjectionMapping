@@ -31,6 +31,12 @@ static const char* trackingDirectionNames[] =
 	"Render to camera",
 };
 
+static const char* rotationRepresentationNames[] =
+{
+	"Euler",
+	"Lie",
+};
+
 struct visualize_depth_material
 {
 	mat4 colorCameraV;
@@ -106,7 +112,7 @@ depth_tracker::depth_tracker()
 
 		{
 			auto desc = CREATE_GRAPHICS_PIPELINE
-				.renderTargets(DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D16_UNORM) // Color buffer is temporary.
+				.renderTargets(DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D16_UNORM) // Color buffer is for debug window only.
 				.inputLayout(inputLayout_position_uv_normal_tangent)
 				.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE)
 				.depthSettings(true, false, D3D12_COMPARISON_FUNC_EQUAL);
@@ -168,68 +174,6 @@ void depth_tracker::trackObject(scene_entity entity)
 {
 	trackedEntity = entity;
 }
-
-#if 0
-union mat6
-{
-	struct
-	{
-		float
-			m00, m10, m20, m30, m40, m50,
-			m01, m11, m21, m31, m41, m51,
-			m02, m12, m22, m32, m42, m52,
-			m03, m13, m23, m33, m43, m53,
-			m04, m14, m24, m34, m44, m54,
-			m05, m15, m25, m35, m45, m55;
-	};
-	float m[36];
-};
-
-inline std::ostream& operator<<(std::ostream& s, const mat6& m)
-{
-	s << "[" << m.m00 << ", " << m.m01 << ", " << m.m02 << ", " << m.m03 << ", " << m.m04 << ", " << m.m05 << "]\n";
-	s << "[" << m.m10 << ", " << m.m11 << ", " << m.m12 << ", " << m.m13 << ", " << m.m14 << ", " << m.m15 << "]\n";
-	s << "[" << m.m20 << ", " << m.m21 << ", " << m.m22 << ", " << m.m23 << ", " << m.m24 << ", " << m.m25 << "]\n";
-	s << "[" << m.m30 << ", " << m.m31 << ", " << m.m32 << ", " << m.m33 << ", " << m.m34 << ", " << m.m35 << "]\n";
-	s << "[" << m.m40 << ", " << m.m41 << ", " << m.m42 << ", " << m.m43 << ", " << m.m44 << ", " << m.m45 << "]\n";
-	s << "[" << m.m50 << ", " << m.m51 << ", " << m.m52 << ", " << m.m53 << ", " << m.m54 << ", " << m.m55 << "]";
-	return s;
-}
-
-static mat6 triangleATAToMat6(const tracking_ata& ata)
-{
-	mat6 result;
-
-	result.m00 = ata.m[ata_m00];
-	result.m01 = result.m10 = ata.m[ata_m01];
-	result.m02 = result.m20 = ata.m[ata_m02];
-	result.m03 = result.m30 = ata.m[ata_m03];
-	result.m04 = result.m40 = ata.m[ata_m04];
-	result.m05 = result.m50 = ata.m[ata_m05];
-
-	result.m11 = ata.m[ata_m11];
-	result.m12 = result.m21 = ata.m[ata_m12];
-	result.m13 = result.m31 = ata.m[ata_m13];
-	result.m14 = result.m41 = ata.m[ata_m14];
-	result.m15 = result.m51 = ata.m[ata_m15];
-
-	result.m22 = ata.m[ata_m22];
-	result.m23 = result.m32 = ata.m[ata_m23];
-	result.m24 = result.m42 = ata.m[ata_m24];
-	result.m25 = result.m52 = ata.m[ata_m25];
-
-	result.m33 = ata.m[ata_m33];
-	result.m34 = result.m43 = ata.m[ata_m34];
-	result.m35 = result.m53 = ata.m[ata_m35];
-
-	result.m44 = ata.m[ata_m44];
-	result.m45 = result.m54 = ata.m[ata_m45];
-
-	result.m55 = ata.m[ata_m55];
-
-	return result;
-}
-#endif
 
 struct vec6
 {
@@ -325,7 +269,7 @@ struct tracking_result
 	uint32 numIterations;
 };
 
-static tracking_result solve(const tracking_ata& A, const tracking_atb& b, uint32 maxNumIterations = 20)
+static tracking_result solve(const tracking_ata& A, const tracking_atb& b, tracking_rotation_representation rotationRepresentation, uint32 maxNumIterations = 20)
 {
 	vec6 x;
 	memset(&x, 0, sizeof(x));
@@ -354,70 +298,73 @@ static tracking_result solve(const tracking_ata& A, const tracking_atb& b, uint3
 		p = r + p * beta;
 	}
 
-
-	float alpha = x.m[0];
-	float beta = x.m[1];
-	float gamma = x.m[2];
-
-	float sinAlpha = sin(alpha);
-	float cosAlpha = cos(alpha);
-	float sinBeta = sin(beta);
-	float cosBeta = cos(beta);
-	float sinGamma = sin(gamma);
-	float cosGamma = cos(gamma);
-
 	mat3 R;
-	R.m00 = cosGamma * cosBeta;
-	R.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
-	R.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
-	R.m10 = sinGamma * cosBeta;
-	R.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
-	R.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
-	R.m20 = -sinBeta;
-	R.m21 = cosBeta * sinAlpha;
-	R.m22 = cosBeta * cosAlpha;
-
 	vec3 t;
-	t.x = x.m[3];
-	t.y = x.m[4];
-	t.z = x.m[5];
+
+	if (rotationRepresentation == tracking_rotation_representation_euler)
+	{
+		float alpha = x.m[0];
+		float beta = x.m[1];
+		float gamma = x.m[2];
+
+		float sinAlpha = sin(alpha);
+		float cosAlpha = cos(alpha);
+		float sinBeta = sin(beta);
+		float cosBeta = cos(beta);
+		float sinGamma = sin(gamma);
+		float cosGamma = cos(gamma);
+
+		R.m00 = cosGamma * cosBeta;
+		R.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
+		R.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
+		R.m10 = sinGamma * cosBeta;
+		R.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
+		R.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
+		R.m20 = -sinBeta;
+		R.m21 = cosBeta * sinAlpha;
+		R.m22 = cosBeta * cosAlpha;
+
+		t.x = x.m[3];
+		t.y = x.m[4];
+		t.z = x.m[5];
+	}
+	else
+	{
+		assert(rotationRepresentation == tracking_rotation_representation_lie);
+
+		vec3 u(x.m[3], x.m[4], x.m[5]);
+		vec3 w(x.m[0], x.m[1], x.m[2]);
+
+		float theta_2 = dot(w, w);
+
+		float a, b, c;
+		if (theta_2 < 1e-6f)
+		{
+			// Use Tailor expansion.
+			a = 1.f + theta_2 * (-1.f / 6.f + theta_2 * (1.f / 120.f - theta_2 / 5040.f));
+			b = 0.5f + theta_2 * (-1.f / 24.f + theta_2 * (1.f / 720.f - theta_2 / 40320.f));
+			c = 1.f / 6.f + theta_2 * (-1.f / 120.f + theta_2 * (1.f / 5040.f - theta_2 / 362880.f));
+		}
+		else
+		{
+			float theta = sqrt(theta_2);
+			a = sin(theta) / theta;
+			b = (1.f - cos(theta)) / theta_2;
+			c = (1.f - a) / theta_2;
+		}
+
+		mat3 w_x = getSkewMatrix(w);
+		mat3 w_x_2 = w_x * w_x;
+
+		R = mat3::identity + a * w_x + b * w_x_2;
+		t = (mat3::identity + b * w_x + c * w_x_2) * u;
+	}
 
 	return { mat3ToQuaternion(R), t, rdotr, k };
 }
 
-void depth_tracker::update()
+void depth_tracker::update(scene_editor* editor)
 {
-	static tracking_result result = {};
-
-	if (ImGui::Begin("Settings"))
-	{
-		if (ImGui::BeginTree("Tracker"))
-		{
-			if (ImGui::BeginProperties())
-			{
-				ImGui::PropertyCheckbox("Tracking", tracking);
-				ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
-				ImGui::PropertySliderAngle("Angle threshold", angleThreshold, 0.f, 90.f);
-				ImGui::PropertySlider("Smoothing (lower is smoother)", smoothing);
-
-				ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
-
-				ImGui::PropertyValue("Current error", result.error, "%.8f");
-				ImGui::PropertyValue("Iterations", result.numIterations);
-				ImGui::PropertyValue("Current delta translation", result.translation);
-				ImGui::PropertyValue("Current delta rotation", result.rotation);
-				ImGui::EndProperties();
-
-				uint32 width = min((uint32)ImGui::GetContentRegionAvail().x, renderedColorTexture->width);
-				ImGui::Image(renderedColorTexture, width, renderedColorTexture->height * width / renderedColorTexture->width);
-			}
-
-			ImGui::EndTree();
-		}
-	}
-	ImGui::End();
-
-
 	dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
 	{
@@ -470,6 +417,14 @@ void depth_tracker::update()
 			trackedEntity = {};
 		}
 
+		if (!trackedEntity)
+		{
+			tracking = false;
+		}
+
+
+		tracking_result result = {};
+
 		if (tracking)
 		{
 			PROFILE_ALL(cl, "Process last tracking result");
@@ -489,7 +444,7 @@ void depth_tracker::update()
 				tracking_atb atb = mapped[dxContext.bufferedFrameID].atb;
 				unmapBuffer(ataReadbackBuffer, false);
 
-				result = solve(ata, atb);
+				result = solve(ata, atb, rotationRepresentation);
 
 				if (trackingDirection == tracking_direction_camera_to_render)
 				{
@@ -509,6 +464,45 @@ void depth_tracker::update()
 			}
 		}
 
+
+		if (ImGui::Begin("Settings"))
+		{
+			if (ImGui::BeginTree("Tracker"))
+			{
+				if (ImGui::BeginProperties())
+				{
+					bool valid = trackedEntity;
+					if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
+					{
+						editor->setSelectedEntity(trackedEntity);
+					}
+					ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
+					ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
+					ImGui::PropertySliderAngle("Angle threshold", angleThreshold, 0.f, 90.f);
+					ImGui::PropertySlider("Smoothing (lower is smoother)", smoothing);
+
+					ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
+					ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
+
+					if (tracking)
+					{
+						ImGui::Separator();
+						ImGui::PropertyValue("Current error", result.error, "%.8f");
+						ImGui::PropertyValue("CG iterations", result.numIterations);
+						ImGui::PropertyValue("Current delta translation", result.translation);
+						ImGui::PropertyValue("Current delta rotation", result.rotation);
+					}
+
+					ImGui::EndProperties();
+
+					uint32 width = min((uint32)ImGui::GetContentRegionAvail().x, renderedColorTexture->width);
+					ImGui::Image(renderedColorTexture, width, renderedColorTexture->height * width / renderedColorTexture->width);
+				}
+
+				ImGui::EndTree();
+			}
+		}
+		ImGui::End();
 
 
 		if (trackedEntity)

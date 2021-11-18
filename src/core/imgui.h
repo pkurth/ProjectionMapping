@@ -59,7 +59,7 @@ namespace ImGui
 	bool Dropdown(const char* label, const char** names, uint32 count, uint32& current);
 	bool Dropdown(const char* label, const char* (*name_func)(uint32, void*), uint32& current, void* data = 0);
 
-	bool DisableableButton(const char* label, bool enabled);
+	bool DisableableButton(const char* label, bool enabled, ImVec2 size = ImVec2(0, 0));
 	bool DisableableCheckbox(const char* label, bool& v, bool enabled);
 
 	bool SelectableWrapped(const char* label, int width, bool selected = false, ImGuiSelectableFlags flags = 0);
@@ -90,6 +90,7 @@ namespace ImGui
 	inline void PropertyValue(const char* label, quat v, const char* format = "%.3f, %.3f, %.3f, %.3f") { ImGui::PropertyValue(label, format, v.x, v.y, v.z, v.w); }
 
 	bool PropertyCheckbox(const char* label, bool& v);
+	bool PropertyDisableableCheckbox(const char* label, bool& v, bool enabled);
 
 	bool PropertySlider(const char* label, float& f, float minValue = 0.f, float maxValue = 1.f, const char* format = "%.3f");
 	bool PropertySlider(const char* label, vec2& f, float minValue = 0.f, float maxValue = 1.f, const char* format = "%.3f");
@@ -114,6 +115,7 @@ namespace ImGui
 	bool PropertyColor(const char* label, vec4& f);
 
 	bool PropertyButton(const char* label, const char* buttonText, const char* hoverText = 0, ImVec2 size = ImVec2(0, 0));
+	bool PropertyDisableableButton(const char* label, const char* buttonText, bool enabled, const char* hoverText = 0, ImVec2 size = ImVec2(0, 0));
 
 
 

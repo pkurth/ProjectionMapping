@@ -14,6 +14,7 @@ struct scene_editor
 
 	scene_entity selectedEntity;
 
+	void setSelectedEntity(scene_entity entity);
 	void setEnvironment(const fs::path& filename);
 
 private:
@@ -26,7 +27,6 @@ private:
 
 	void updateSelectedEntityUIRotation();
 
-	void setSelectedEntity(scene_entity entity);
 	void setSelectedEntityNoUndo(scene_entity entity);
 
 	void serializeToFile();

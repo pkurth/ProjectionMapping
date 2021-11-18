@@ -22,6 +22,7 @@ struct application
 	void handleFileDrop(const fs::path& filename);
 
 	game_scene& getScene() { return scene; }
+	scene_editor& getEditor() { return editor; }
 
 private:
 

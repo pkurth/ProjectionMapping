@@ -25,8 +25,10 @@ struct create_correspondences_vs_cb
 	distortion_cb distortion;
 };
 
+#ifdef HLSL
 #define tracking_direction_camera_to_render 0
 #define tracking_direction_render_to_camera 1
+#endif
 
 struct create_correspondences_ps_cb
 {
