@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "rgbd_camera.h"
 
-#include <azure-kinect/k4a.hpp>
+#include <azure-kinect/k4a.h>
 #include <realsense/rs.h>
 #include <realsense/h/rs_pipeline.h>
 
@@ -36,18 +36,33 @@ std::vector<rgbd_camera_info> enumerateRGBDCameras()
 {
     std::vector<rgbd_camera_info> result;
 
-    uint32 numAzureDevices = k4a::device::get_installed_count();
+    uint32 numAzureDevices = k4a_device_get_installed_count();
     for (uint32 i = 0; i < numAzureDevices; ++i)
     {
-        k4a::device dev = k4a::device::open(i);
-        if (dev.is_valid())
+        k4a_device_t device;
+        k4a_device_open(i, &device);
+        if (device)
         {
+            std::string serialnum = "";
+            size_t bufferSize = 0;
+
+            if (k4a_device_get_serialnum(device, &serialnum[0], &bufferSize) == K4A_BUFFER_RESULT_TOO_SMALL && bufferSize > 1)
+            {
+                serialnum.resize(bufferSize);
+                if (k4a_device_get_serialnum(device, &serialnum[0], &bufferSize) == K4A_BUFFER_RESULT_SUCCEEDED && serialnum[bufferSize - 1] == 0)
+                {
+                    serialnum.resize(bufferSize - 1);
+                }
+            }
+
             rgbd_camera_info info;
             info.deviceIndex = i;
             info.type = rgbd_camera_type_azure;
-            info.serialNumber = dev.get_serialnum();
+            info.serialNumber = serialnum;
             info.description = "Azure camera (" + info.serialNumber + ")";
             result.push_back(info);
+
+            k4a_device_close(device);
         }
     }
 
