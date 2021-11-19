@@ -167,7 +167,7 @@ depth_tracker::depth_tracker()
 	uint32 maxNumReduceThreadGroups = bucketize(maxNumICPThreadGroups, TRACKING_ICP_BLOCK_SIZE);
 	ataBuffer1 = createBuffer(sizeof(tracking_ata_atb), maxNumReduceThreadGroups, 0, true, false, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	ataReadbackBuffer = createReadbackBuffer(sizeof(tracking_ata_atb), NUM_BUFFERED_FRAMES);
+	ataReadbackBuffer = createReadbackBuffer(sizeof(tracking_ata_atb), NUM_BUFFERED_FRAMES * 2);
 }
 
 void depth_tracker::trackObject(scene_entity entity)
@@ -423,11 +423,11 @@ void depth_tracker::update(scene_editor* editor)
 		}
 
 
-		tracking_result result = {};
+		tracking_result result = {}; // This is declared here, so that we can show it in the editor.
 
 		if (tracking)
 		{
-			PROFILE_ALL(cl, "Process last tracking result");
+			CPU_PROFILE_BLOCK("Process last tracking result");
 
 			tracking_indirect* mappedIndirect = (tracking_indirect*)mapBuffer(icpDispatchReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
 			tracking_indirect indirect = mappedIndirect[dxContext.bufferedFrameID];
@@ -439,9 +439,14 @@ void depth_tracker::update(scene_editor* editor)
 
 			if (correspondencesValid)
 			{
-				tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(ataReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
-				tracking_ata ata = mapped[dxContext.bufferedFrameID].ata;
-				tracking_atb atb = mapped[dxContext.bufferedFrameID].atb;
+				// Due to the flip-flop reduction (below), we have to figure out in which buffer the final result has been written.
+				uint32 ataBufferIndex = 0;
+				if (indirect.reduce1.ThreadGroupCountX == 0) { ataBufferIndex = 1; }
+				if (indirect.reduce0.ThreadGroupCountX == 0) { ataBufferIndex = 0; }
+
+				tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(ataReadbackBuffer, true, map_range{ 2 * dxContext.bufferedFrameID, 2 });
+				tracking_ata ata = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].ata;
+				tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
 				unmapBuffer(ataReadbackBuffer, false);
 
 				result = solve(ata, atb, rotationRepresentation);
@@ -660,24 +665,23 @@ void depth_tracker::update(scene_editor* editor)
 
 						barrier_batcher(cl)
 							.uav(ataBuffer0)
-							.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE) // This is next copied to the CPU.
-							.transition(ataBuffer1, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+							.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);	// This is next copied to the CPU.
 					}
 				}
-
-
-				barrier_batcher(cl)
-					.transition(icpDispatchBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-					.transition(correspondenceBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
 
 
-			cl->copyBufferRegionToBuffer(ataBuffer0, ataReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
-			cl->transitionBarrier(ataBuffer0, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			cl->copyBufferRegionToBuffer(ataBuffer0, ataReadbackBuffer, 0, 2 * dxContext.bufferedFrameID + 0, 1);
+			cl->copyBufferRegionToBuffer(ataBuffer1, ataReadbackBuffer, 0, 2 * dxContext.bufferedFrameID + 1, 1);
 
-			cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+			barrier_batcher(cl)
+				.transition(correspondenceBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+				.transition(ataBuffer0, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+				.transition(ataBuffer1, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
 			cl->copyBufferRegionToBuffer(icpDispatchBuffer, icpDispatchReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
-			cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+			cl->transitionBarrier(icpDispatchBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 		}
 	}
 	dxContext.executeCommandList(cl);
