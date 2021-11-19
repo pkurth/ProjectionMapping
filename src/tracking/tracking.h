@@ -62,7 +62,7 @@ private:
 	uint32 minNumCorrespondences = 5000;
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;
-	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_euler;
+	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
 
 	bool tracking = false;
 };

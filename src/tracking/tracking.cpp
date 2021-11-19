@@ -134,7 +134,7 @@ depth_tracker::depth_tracker()
 		icpReducePipeline = createReloadablePipeline("tracking_icp_reduce_cs");
 	}
 
-	if (!camera.initializeRealsense())
+	if (!camera.initializeAzure())
 	{
 		return;
 	}
@@ -334,25 +334,30 @@ static vec6 lieLog(rotation_translation Rt)
 	return vec6(w.x, w.y, w.z, u.x, u.y, u.z);
 }
 
+static rotation_translation smoothDeltaTransform(vec6 delta, float t)
+{
+	return lieExp(delta * t);
+}
+
 static rotation_translation smoothDeltaTransform(rotation_translation delta, float t)
 {
 	// https://www.geometrictools.com/Documentation/InterpolationRigidMotions.pdf
 	return lieExp(lieLog(delta) * t);
 }
 
-struct tracking_stats
+struct solver_stats
 {
 	float error;
 	uint32 numCGIterations;
 };
 
-struct tracking_result
+struct solver_result
 {
-	rotation_translation delta;
-	tracking_stats stats;
+	vec6 x;
+	solver_stats stats;
 };
 
-static tracking_result solve(const tracking_ata& A, const tracking_atb& b, tracking_rotation_representation rotationRepresentation, uint32 maxNumIterations = 20)
+static solver_result solve(const tracking_ata& A, const tracking_atb& b, tracking_rotation_representation rotationRepresentation, uint32 maxNumIterations = 20)
 {
 	vec6 x;
 	memset(&x, 0, sizeof(x));
@@ -381,43 +386,44 @@ static tracking_result solve(const tracking_ata& A, const tracking_atb& b, track
 		p = r + p * beta;
 	}
 
+	return { x, solver_stats{ rdotr, k } };
+}
+
+static rotation_translation eulerUpdate(vec6 x, float smoothing)
+{
+	float alpha = x.m[0];
+	float beta = x.m[1];
+	float gamma = x.m[2];
+
+	float sinAlpha = sin(alpha);
+	float cosAlpha = cos(alpha);
+	float sinBeta = sin(beta);
+	float cosBeta = cos(beta);
+	float sinGamma = sin(gamma);
+	float cosGamma = cos(gamma);
+
 	rotation_translation rt;
 
-	if (rotationRepresentation == tracking_rotation_representation_euler)
-	{
-		float alpha = x.m[0];
-		float beta = x.m[1];
-		float gamma = x.m[2];
+	rt.rotation.m00 = cosGamma * cosBeta;
+	rt.rotation.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
+	rt.rotation.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
+	rt.rotation.m10 = sinGamma * cosBeta;
+	rt.rotation.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
+	rt.rotation.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
+	rt.rotation.m20 = -sinBeta;
+	rt.rotation.m21 = cosBeta * sinAlpha;
+	rt.rotation.m22 = cosBeta * cosAlpha;
 
-		float sinAlpha = sin(alpha);
-		float cosAlpha = cos(alpha);
-		float sinBeta = sin(beta);
-		float cosBeta = cos(beta);
-		float sinGamma = sin(gamma);
-		float cosGamma = cos(gamma);
+	rt.translation.x = x.m[3];
+	rt.translation.y = x.m[4];
+	rt.translation.z = x.m[5];
 
-		rt.rotation.m00 = cosGamma * cosBeta;
-		rt.rotation.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
-		rt.rotation.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
-		rt.rotation.m10 = sinGamma * cosBeta;
-		rt.rotation.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
-		rt.rotation.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
-		rt.rotation.m20 = -sinBeta;
-		rt.rotation.m21 = cosBeta * sinAlpha;
-		rt.rotation.m22 = cosBeta * cosAlpha;
+	return smoothDeltaTransform(rt, 1.f - smoothing);
+}
 
-		rt.translation.x = x.m[3];
-		rt.translation.y = x.m[4];
-		rt.translation.z = x.m[5];
-	}
-	else
-	{
-		assert(rotationRepresentation == tracking_rotation_representation_lie);
-
-		rt = lieExp(x);
-	}
-
-	return { rt, tracking_stats{ rdotr, k } };
+static rotation_translation lieUpdate(vec6 x, float smoothing)
+{
+	return smoothDeltaTransform(x, 1.f - smoothing);
 }
 
 void depth_tracker::update(scene_editor* editor)
@@ -480,7 +486,7 @@ void depth_tracker::update(scene_editor* editor)
 		}
 
 
-		tracking_stats stats = {}; // This is declared here, so that we can show it in the editor.
+		solver_stats stats = {}; // This is declared here, so that we can show it in the editor.
 		uint32 numCorrespondences = 0;
 
 		if (tracking)
@@ -507,16 +513,23 @@ void depth_tracker::update(scene_editor* editor)
 				tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
 				unmapBuffer(ataReadbackBuffer, false);
 
-				tracking_result result = solve(ata, atb, rotationRepresentation);
+				solver_result result = solve(ata, atb, rotationRepresentation);
 				stats = result.stats;
 
-				if (smoothing != 0.f)
+				rotation_translation delta;
+				if (rotationRepresentation == tracking_rotation_representation_euler)
 				{
-					result.delta = smoothDeltaTransform(result.delta, 1.f - smoothing);
+					delta = eulerUpdate(result.x, smoothing);
+				}
+				else
+				{
+					assert(rotationRepresentation == tracking_rotation_representation_lie);
+					delta = lieUpdate(result.x, smoothing);
 				}
 
-				quat rotation = mat3ToQuaternion(result.delta.rotation);
-				vec3 translation = result.delta.translation;
+
+				quat rotation = mat3ToQuaternion(delta.rotation);
+				vec3 translation = delta.translation;
 
 				if (trackingDirection == tracking_direction_camera_to_render)
 				{
