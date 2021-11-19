@@ -357,7 +357,7 @@ struct solver_result
 	solver_stats stats;
 };
 
-static solver_result solve(const tracking_ata& A, const tracking_atb& b, tracking_rotation_representation rotationRepresentation, uint32 maxNumIterations = 20)
+static solver_result solve(const tracking_ata& A, const tracking_atb& b, uint32 maxNumIterations = 20)
 {
 	vec6 x;
 	memset(&x, 0, sizeof(x));
@@ -513,7 +513,7 @@ void depth_tracker::update(scene_editor* editor)
 				tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
 				unmapBuffer(ataReadbackBuffer, false);
 
-				solver_result result = solve(ata, atb, rotationRepresentation);
+				solver_result result = solve(ata, atb);
 				stats = result.stats;
 
 				rotation_translation delta;
