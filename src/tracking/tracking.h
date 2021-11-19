@@ -58,7 +58,8 @@ private:
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);
 
-	float smoothing = 0.05f;
+	float smoothing = 0.7f;
+	uint32 minNumCorrespondences = 5000;
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;
 	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_euler;

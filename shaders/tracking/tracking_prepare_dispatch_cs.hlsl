@@ -1,7 +1,8 @@
 #include "cs.hlsli"
 #include "tracking_rs.hlsli"
 
-RWStructuredBuffer<tracking_indirect> indirectBuffer : register(u0);
+ConstantBuffer<tracking_prepare_dispatch_cb> cb			: register(b0);
+RWStructuredBuffer<tracking_indirect> indirectBuffer	: register(u0);
 
 static uint bucketize(uint problemSize, uint bucketSize)
 {
@@ -33,7 +34,7 @@ void main(cs_input IN)
 	tracking_indirect indirect = indirectBuffer[0];
 	uint counter = indirect.counter;
 
-	indirect.initialICP = createArguments(counter, 5000);
+	indirect.initialICP = createArguments(counter, cb.minNumCorrespondences);
 	indirect.reduce0 = createArguments(indirect.initialICP.ThreadGroupCountX, 2);
 	indirect.reduce1 = createArguments(indirect.reduce0.ThreadGroupCountX, 2);
 

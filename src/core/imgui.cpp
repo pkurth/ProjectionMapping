@@ -587,6 +587,16 @@ namespace ImGui
 		return ImGui::InputInternal(ImGuiDataType_Float, 4, label, f.data, format);
 	}
 
+	bool PropertyInput(const char* label, int32& f, const char* format)
+	{
+		return ImGui::InputInternal(ImGuiDataType_S32, 1, label, &f, format);
+	}
+
+	bool PropertyInput(const char* label, uint32& f, const char* format)
+	{
+		return ImGui::InputInternal(ImGuiDataType_U32, 1, label, &f, format);
+	}
+
 	bool PropertyDropdown(const char* label, const char** names, uint32 count, uint32& current)
 	{
 		pre(label);

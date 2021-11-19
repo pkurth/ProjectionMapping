@@ -132,12 +132,19 @@ struct tracking_ata_atb
 #define CREATE_CORRESPONDENCES_RS_SRV_UAV	2
 
 
+struct tracking_prepare_dispatch_cb
+{
+	uint32 minNumCorrespondences;
+};
+
 
 #define PREPARE_DISPATCH_RS \
 	"RootFlags(0)," \
+	"RootConstants(num32BitConstants=1, b0), " \
 	"UAV(u0)"
 
-#define PREPARE_DISPATCH_RS_BUFFER			0
+#define PREPARE_DISPATCH_RS_CB				0
+#define PREPARE_DISPATCH_RS_BUFFER			1
 	
 
 

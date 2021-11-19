@@ -184,6 +184,10 @@ struct vec6
 	{
 		memcpy(m, v.m, sizeof(float) * 6);
 	}
+	vec6(float a, float b, float c, float d, float e, float f)
+	{
+		m[0] = a; m[1] = b; m[2] = c; m[3] = d; m[4] = e; m[5] = f;
+	}
 };
 
 static vec6 operator*(const tracking_ata& m, const vec6& v)
@@ -261,12 +265,91 @@ inline std::ostream& operator<<(std::ostream& s, vec6 v)
 	return s;
 }
 
+struct rotation_translation
+{
+	mat3 rotation;
+	vec3 translation;
+};
+
+static rotation_translation lieExp(vec6 lie)
+{
+	vec3 u(lie.m[3], lie.m[4], lie.m[5]);
+	vec3 w(lie.m[0], lie.m[1], lie.m[2]);
+
+	float theta_2 = dot(w, w);
+
+	float a, b, c;
+	if (theta_2 < 1e-6f)
+	{
+		// Use Tailor expansion.
+		a = 1.f + theta_2 * (-1.f / 6.f + theta_2 * (1.f / 120.f - theta_2 / 5040.f));
+		b = 0.5f + theta_2 * (-1.f / 24.f + theta_2 * (1.f / 720.f - theta_2 / 40320.f));
+		c = 1.f / 6.f + theta_2 * (-1.f / 120.f + theta_2 * (1.f / 5040.f - theta_2 / 362880.f));
+	}
+	else
+	{
+		float theta = sqrt(theta_2);
+		a = sin(theta) / theta;
+		b = (1.f - cos(theta)) / theta_2;
+		c = (1.f - a) / theta_2;
+	}
+
+	mat3 w_x = getSkewMatrix(w);
+	mat3 w_x_2 = w_x * w_x;
+
+	mat3 R = mat3::identity + a * w_x + b * w_x_2;
+	vec3 t = (mat3::identity + b * w_x + c * w_x_2) * u;
+
+	return { R, t };
+}
+
+static vec6 lieLog(rotation_translation Rt)
+{
+	float theta = acos(0.5f * (trace(Rt.rotation) - 1.f));
+	float theta_2 = theta * theta;
+
+	float a, b;
+	if (theta_2 < 1e-6f)
+	{
+		a = 1.f + theta_2 * (-1.f / 6.f + theta_2 * (1.f / 120.f - theta_2 / 5040.f));
+		b = 0.5f + theta_2 * (-1.f / 24.f + theta_2 * (1.f / 720.f - theta_2 / 40320.f));
+	}
+	else
+	{
+		a = sin(theta) / theta;
+		b = (1.f - cos(theta)) / theta_2;
+	}
+	
+	mat3 w_x = (0.5f / a) * (Rt.rotation - transpose(Rt.rotation));
+	vec3 w(w_x.m21, w_x.m02, w_x.m10);
+	mat3 w_x_2 = w_x * w_x;
+	mat3 V_inv = mat3::identity - 0.5f * w_x;
+	if (theta_2 > 0.f)
+	{
+		V_inv += 1.f / theta_2 * (1.f - 0.5f * a / b) * w_x_2;
+	}
+
+	vec3 u = V_inv * Rt.translation;
+
+	return vec6(w.x, w.y, w.z, u.x, u.y, u.z);
+}
+
+static rotation_translation smoothDeltaTransform(rotation_translation delta, float t)
+{
+	// https://www.geometrictools.com/Documentation/InterpolationRigidMotions.pdf
+	return lieExp(lieLog(delta) * t);
+}
+
+struct tracking_stats
+{
+	float error;
+	uint32 numCGIterations;
+};
+
 struct tracking_result
 {
-	quat rotation;
-	vec3 translation;
-	float error;
-	uint32 numIterations;
+	rotation_translation delta;
+	tracking_stats stats;
 };
 
 static tracking_result solve(const tracking_ata& A, const tracking_atb& b, tracking_rotation_representation rotationRepresentation, uint32 maxNumIterations = 20)
@@ -298,8 +381,7 @@ static tracking_result solve(const tracking_ata& A, const tracking_atb& b, track
 		p = r + p * beta;
 	}
 
-	mat3 R;
-	vec3 t;
+	rotation_translation rt;
 
 	if (rotationRepresentation == tracking_rotation_representation_euler)
 	{
@@ -314,53 +396,28 @@ static tracking_result solve(const tracking_ata& A, const tracking_atb& b, track
 		float sinGamma = sin(gamma);
 		float cosGamma = cos(gamma);
 
-		R.m00 = cosGamma * cosBeta;
-		R.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
-		R.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
-		R.m10 = sinGamma * cosBeta;
-		R.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
-		R.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
-		R.m20 = -sinBeta;
-		R.m21 = cosBeta * sinAlpha;
-		R.m22 = cosBeta * cosAlpha;
+		rt.rotation.m00 = cosGamma * cosBeta;
+		rt.rotation.m01 = -sinGamma * cosAlpha + cosGamma * sinBeta * sinAlpha;
+		rt.rotation.m02 = sinGamma * sinAlpha + cosGamma * sinBeta * cosAlpha;
+		rt.rotation.m10 = sinGamma * cosBeta;
+		rt.rotation.m11 = cosGamma * cosAlpha + sinGamma * sinBeta * sinAlpha;
+		rt.rotation.m12 = -cosGamma * sinAlpha + sinGamma * sinBeta * cosAlpha;
+		rt.rotation.m20 = -sinBeta;
+		rt.rotation.m21 = cosBeta * sinAlpha;
+		rt.rotation.m22 = cosBeta * cosAlpha;
 
-		t.x = x.m[3];
-		t.y = x.m[4];
-		t.z = x.m[5];
+		rt.translation.x = x.m[3];
+		rt.translation.y = x.m[4];
+		rt.translation.z = x.m[5];
 	}
 	else
 	{
 		assert(rotationRepresentation == tracking_rotation_representation_lie);
 
-		vec3 u(x.m[3], x.m[4], x.m[5]);
-		vec3 w(x.m[0], x.m[1], x.m[2]);
-
-		float theta_2 = dot(w, w);
-
-		float a, b, c;
-		if (theta_2 < 1e-6f)
-		{
-			// Use Tailor expansion.
-			a = 1.f + theta_2 * (-1.f / 6.f + theta_2 * (1.f / 120.f - theta_2 / 5040.f));
-			b = 0.5f + theta_2 * (-1.f / 24.f + theta_2 * (1.f / 720.f - theta_2 / 40320.f));
-			c = 1.f / 6.f + theta_2 * (-1.f / 120.f + theta_2 * (1.f / 5040.f - theta_2 / 362880.f));
-		}
-		else
-		{
-			float theta = sqrt(theta_2);
-			a = sin(theta) / theta;
-			b = (1.f - cos(theta)) / theta_2;
-			c = (1.f - a) / theta_2;
-		}
-
-		mat3 w_x = getSkewMatrix(w);
-		mat3 w_x_2 = w_x * w_x;
-
-		R = mat3::identity + a * w_x + b * w_x_2;
-		t = (mat3::identity + b * w_x + c * w_x_2) * u;
+		rt = lieExp(x);
 	}
 
-	return { mat3ToQuaternion(R), t, rdotr, k };
+	return { rt, tracking_stats{ rdotr, k } };
 }
 
 void depth_tracker::update(scene_editor* editor)
@@ -423,7 +480,8 @@ void depth_tracker::update(scene_editor* editor)
 		}
 
 
-		tracking_result result = {}; // This is declared here, so that we can show it in the editor.
+		tracking_stats stats = {}; // This is declared here, so that we can show it in the editor.
+		uint32 numCorrespondences = 0;
 
 		if (tracking)
 		{
@@ -435,7 +493,7 @@ void depth_tracker::update(scene_editor* editor)
 
 			//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
 			bool correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
-
+			numCorrespondences = indirect.counter;
 
 			if (correspondencesValid)
 			{
@@ -449,22 +507,28 @@ void depth_tracker::update(scene_editor* editor)
 				tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
 				unmapBuffer(ataReadbackBuffer, false);
 
-				result = solve(ata, atb, rotationRepresentation);
+				tracking_result result = solve(ata, atb, rotationRepresentation);
+				stats = result.stats;
+
+				if (smoothing != 0.f)
+				{
+					result.delta = smoothDeltaTransform(result.delta, 1.f - smoothing);
+				}
+
+				quat rotation = mat3ToQuaternion(result.delta.rotation);
+				vec3 translation = result.delta.translation;
 
 				if (trackingDirection == tracking_direction_camera_to_render)
 				{
-					result.rotation = conjugate(result.rotation);
-					result.translation = -(result.rotation * result.translation);
+					rotation = conjugate(rotation);
+					translation = -(rotation * translation);
 				}
 
 				if (trackedEntity)
 				{
 					transform_component& transform = trackedEntity.getComponent<transform_component>();
-					quat newRotation = result.rotation * transform.rotation;
-					vec3 newPosition = result.rotation * transform.position + result.translation;
-
-					transform.rotation = slerp(transform.rotation, newRotation, smoothing);
-					transform.position = lerp(transform.position, newPosition, smoothing);
+					transform.rotation = rotation * transform.rotation;
+					transform.position = rotation * transform.position + translation;
 				}
 			}
 		}
@@ -483,8 +547,9 @@ void depth_tracker::update(scene_editor* editor)
 					}
 					ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
 					ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
-					ImGui::PropertySliderAngle("Angle threshold", angleThreshold, 0.f, 90.f);
-					ImGui::PropertySlider("Smoothing (lower is smoother)", smoothing);
+					ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
+					ImGui::PropertySlider("Smoothing (higher is smoother)", smoothing);
+					ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
 
 					ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
 					ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
@@ -492,10 +557,9 @@ void depth_tracker::update(scene_editor* editor)
 					if (tracking)
 					{
 						ImGui::Separator();
-						ImGui::PropertyValue("Current error", result.error, "%.8f");
-						ImGui::PropertyValue("CG iterations", result.numIterations);
-						ImGui::PropertyValue("Current delta translation", result.translation);
-						ImGui::PropertyValue("Current delta rotation", result.rotation);
+						ImGui::PropertyValue("Number of correspondences", numCorrespondences);
+						ImGui::PropertyValue("Current error", stats.error, "%.8f");
+						ImGui::PropertyValue("CG iterations", stats.numCGIterations);
 					}
 
 					ImGui::EndProperties();
@@ -601,6 +665,7 @@ void depth_tracker::update(scene_editor* editor)
 				cl->setPipelineState(*prepareDispatchPipeline.pipeline);
 				cl->setComputeRootSignature(*prepareDispatchPipeline.rootSignature);
 
+				cl->setCompute32BitConstants(PREPARE_DISPATCH_RS_CB, minNumCorrespondences);
 				cl->setRootComputeUAV(PREPARE_DISPATCH_RS_BUFFER, icpDispatchBuffer);
 				cl->dispatch(1);
 
