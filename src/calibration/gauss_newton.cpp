@@ -48,8 +48,10 @@ void testGaussNewton()
 		createResidual(3.74f, 0.3317f),
 	};
 
+	gauss_newton_settings settings;
+
 	gn_param_set params = { 0.9f, 0.2f };
-	gaussNewton(params, residuals, arraysize(residuals));
+	gaussNewton(settings, params, residuals, arraysize(residuals));
 
 	int a = 0;
 }

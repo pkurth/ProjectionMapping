@@ -50,8 +50,10 @@ void testLevenbergMarquardt()
 		residuals[i] = createResidual(groundTruth, i * 0.1f);
 	}
 
+	levenberg_marquardt_settings settings;
+
 	sine_param_set params = { 0.f, 1.f, 1.f };
-	levenbergMarquardt(params, residuals, arraysize(residuals));
+	levenbergMarquardt(settings, params, residuals, arraysize(residuals));
 
 	int a = 0;
 }
