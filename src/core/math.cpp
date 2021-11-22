@@ -246,6 +246,25 @@ mat4 transpose(const mat4& a)
 	return result;
 }
 
+mat2 invert(const mat2& m)
+{
+	float det = determinant(m);
+	if (det == 0.f)
+	{
+		return mat2();
+	}
+
+	mat2 inv;
+	inv.m00 = m.m11;
+	inv.m01 = -m.m01;
+	inv.m10 = -m.m10;
+	inv.m11 = m.m00;
+
+	inv *= 1.f / det;
+
+	return inv;
+}
+
 mat3 invert(const mat3& m)
 {
 	mat3 inv;

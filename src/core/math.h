@@ -751,6 +751,7 @@ mat2 transpose(const mat2& a);
 mat3 transpose(const mat3& a);
 mat4 transpose(const mat4& a);
 
+mat2 invert(const mat2& m);
 mat3 invert(const mat3& m);
 mat4 invert(const mat4& m);
 trs invert(const trs& t);
