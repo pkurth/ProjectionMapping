@@ -65,6 +65,8 @@ PIPELINE_SETUP_IMPL(visualize_depth_pipeline)
 
 PIPELINE_RENDER_IMPL(visualize_depth_pipeline)
 {
+	DX_PROFILE_BLOCK(cl, "Render depth camera image");
+
 	visualize_depth_cb cb;
 	cb.vp = viewProj;
 	cb.colorCameraV = rc.material.colorCameraV;
@@ -90,6 +92,12 @@ PIPELINE_RENDER_IMPL(visualize_depth_pipeline)
 
 depth_tracker::depth_tracker()
 {
+	if (!camera.initializeAs(rgbd_camera_type_realsense))
+	{
+		return;
+	}
+
+
 	if (!visualizeDepthPipeline.pipeline)
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
@@ -132,11 +140,6 @@ depth_tracker::depth_tracker()
 	if (!icpReducePipeline.pipeline)
 	{
 		icpReducePipeline = createReloadablePipeline("tracking_icp_reduce_cs");
-	}
-
-	if (!camera.initializeAzure())
-	{
-		return;
 	}
 
 	cameraDepthTexture = createTexture(0, camera.depthSensor.width, camera.depthSensor.height, trackingDepthFormat, false, false, false, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -571,7 +574,7 @@ void depth_tracker::update(scene_editor* editor)
 					{
 						ImGui::Separator();
 						ImGui::PropertyValue("Number of correspondences", numCorrespondences);
-						ImGui::PropertyValue("Current error", stats.error, "%.8f");
+						//ImGui::PropertyValue("Current error", stats.error, "%.8f");
 						ImGui::PropertyValue("CG iterations", stats.numCGIterations);
 					}
 
@@ -700,12 +703,11 @@ void depth_tracker::update(scene_editor* editor)
 					cl->setRootComputeSRV(ICP_RS_CORRESPONDENCES, correspondenceBuffer);
 					cl->setRootComputeUAV(ICP_RS_OUTPUT, ataBuffer0);
 
-					cl->dispatchIndirect(1, icpDispatchBuffer, 0);
+					cl->dispatchIndirect(1, icpDispatchBuffer, offsetof(tracking_indirect, initialICP));
 
 					barrier_batcher(cl)
 						//.uav(ataBuffer0)
 						.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-					cl->uavBarrier(ataBuffer0);
 				}
 
 
@@ -724,7 +726,7 @@ void depth_tracker::update(scene_editor* editor)
 						cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, ataBuffer0);
 						cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, ataBuffer1);
 
-						cl->dispatchIndirect(1, icpDispatchBuffer, sizeof(D3D12_DISPATCH_ARGUMENTS) * 1);
+						cl->dispatchIndirect(1, icpDispatchBuffer, offsetof(tracking_indirect, reduce0));
 
 						barrier_batcher(cl)
 							//.uav(ataBuffer1)
@@ -739,10 +741,10 @@ void depth_tracker::update(scene_editor* editor)
 						cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, ataBuffer1);
 						cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, ataBuffer0);
 
-						cl->dispatchIndirect(1, icpDispatchBuffer, sizeof(D3D12_DISPATCH_ARGUMENTS) * 2);
+						cl->dispatchIndirect(1, icpDispatchBuffer, offsetof(tracking_indirect, reduce1));
 
 						barrier_batcher(cl)
-							.uav(ataBuffer0)
+							//.uav(ataBuffer0)
 							.transition(ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);	// This is next copied to the CPU.
 					}
 				}
