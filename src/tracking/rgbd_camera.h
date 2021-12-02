@@ -84,7 +84,7 @@ struct rgbd_camera_sensor
 		rgbd_frame frame;
 		if (cam.getFrame(frame, 0))
 		{
-			// Process frame here.
+			// Process frame here (copy to texture etc).
 
 			cam.releaseFrame(frame);
 		}
@@ -114,6 +114,7 @@ struct rgbd_camera
 	void operator=(const rgbd_camera&) = delete;
 	void operator=(rgbd_camera&& o) noexcept;
 
+	bool initializeAs(rgbd_camera_type type, uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
 	bool initializeAzure(uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
 	bool initializeRealsense(uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
 	void shutdown();

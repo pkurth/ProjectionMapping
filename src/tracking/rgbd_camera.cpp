@@ -544,6 +544,19 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
     return false;
 }
 
+bool rgbd_camera::initializeAs(rgbd_camera_type type, uint32 deviceIndex, rgbd_camera_spec spec)
+{
+    switch (type)
+    {
+        case rgbd_camera_type_azure:
+            return initializeAzure(deviceIndex, spec);
+        case rgbd_camera_type_realsense:
+            return initializeRealsense(deviceIndex, spec);
+        default:
+            return false;
+    }
+}
+
 void rgbd_camera::releaseFrame(rgbd_frame& frame)
 {
     if (type == rgbd_camera_type_azure)
