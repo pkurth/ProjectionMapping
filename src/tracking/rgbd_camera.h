@@ -23,8 +23,6 @@ struct rgbd_camera_info
 	std::string description;
 };
 
-std::vector<rgbd_camera_info> enumerateRGBDCameras();
-
 enum camera_resolution
 {
 	camera_resolution_off,
@@ -48,13 +46,14 @@ struct rgbd_frame
 	uint16* depth = 0;
 	color_bgra* color = 0;
 
-
-	// Internal. Do not use.
+private:
 	struct _k4a_image_t* azureDepthHandle = 0;
 	struct _k4a_image_t* azureColorHandle = 0;
 
 	struct rs2_frame* realsenseDepthHandle = 0;
 	struct rs2_frame* realsenseColorHandle = 0;
+
+	friend struct rgbd_camera;
 };
 
 struct rgbd_camera_sensor
@@ -133,5 +132,7 @@ struct rgbd_camera
 
 
 	static void initializeCommon();
+	static std::vector<rgbd_camera_info>& enumerate();
+
 	static std::vector<rgbd_camera_info> allConnectedRGBDCameras;
 };
