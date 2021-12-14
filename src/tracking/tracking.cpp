@@ -586,7 +586,9 @@ void depth_tracker::update(scene_editor* editor)
 					cl->setPipelineState(*createCorrespondencesDepthOnlyPipeline.pipeline);
 					cl->setGraphicsRootSignature(*createCorrespondencesDepthOnlyPipeline.rootSignature);
 
-					dx_render_target renderTarget({ }, renderedDepthTexture);
+					auto renderTarget = dx_render_target(renderedDepthTexture->width, renderedDepthTexture->height)
+						.depthAttachment(renderedDepthTexture);
+
 					cl->setRenderTarget(renderTarget);
 					cl->setViewport(renderTarget.viewport);
 
@@ -611,7 +613,10 @@ void depth_tracker::update(scene_editor* editor)
 					cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
 					cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
 
-					dx_render_target renderTarget({ renderedColorTexture }, renderedDepthTexture);
+					auto renderTarget = dx_render_target(renderedDepthTexture->width, renderedDepthTexture->height)
+						.colorAttachment(renderedColorTexture)
+						.depthAttachment(renderedDepthTexture);
+
 					cl->setRenderTarget(renderTarget);
 					cl->setViewport(renderTarget.viewport);
 

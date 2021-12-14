@@ -3,6 +3,7 @@
 #include "dx/dx.h"
 #include "dx/dx_texture.h"
 #include "dx/dx_command_list.h"
+#include "render_utils.h"
 
 #include <unordered_map>
 
@@ -33,8 +34,8 @@ struct render_resources
 	static dx_cpu_descriptor_handle nullTextureSRV;
 	static dx_cpu_descriptor_handle nullBufferSRV;
 
-	static dx_cpu_descriptor_handle nullTextureUAV;
-	static dx_cpu_descriptor_handle nullBufferUAV;
+	static dx_rtv_descriptor_handle nullScreenVelocitiesRTV;
+	static dx_rtv_descriptor_handle nullObjectIDsRTV;
 
 	static ref<dx_texture> brdfTex;
 	static ref<dx_texture> whiteTexture;
@@ -44,8 +45,6 @@ struct render_resources
 
 	static ref<dx_texture> shadowMap;
 	static ref<dx_texture> staticShadowMapCache;
-
-	static constexpr DXGI_FORMAT shadowDepthFormat = DXGI_FORMAT_D16_UNORM;
 
 private:
 	struct temporary_render_resources

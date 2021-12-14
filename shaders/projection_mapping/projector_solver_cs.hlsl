@@ -6,13 +6,13 @@
 ConstantBuffer<projector_solver_cb> cb		: register(b0, space0);
 StructuredBuffer<projector_cb> projectors	: register(t0, space0);
 
-Texture2D<float4> renderResults[]			: register(t0, space1);
-Texture2D<float2> worldNormals[]			: register(t0, space2);
-Texture2D<float> depthTextures[]			: register(t0, space3);
-Texture2D<float> intensities[]				: register(t0, space4);
-Texture2D<float> masks[]					: register(t0, space5);
+Texture2D<float4> renderResults[32]			: register(t0, space1);
+Texture2D<float2> worldNormals[32]			: register(t0, space2);
+Texture2D<float> depthTextures[32]			: register(t0, space3);
+Texture2D<float> intensities[32]			: register(t0, space4);
+Texture2D<float> masks[32]					: register(t0, space5);
 
-RWTexture2D<float> outIntensities[]			: register(u0, space0);
+RWTexture2D<float> outIntensities[32]		: register(u0, space0);
 
 SamplerState borderSampler					: register(s0);
 

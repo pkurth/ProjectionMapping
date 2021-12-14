@@ -41,16 +41,25 @@ struct bloom_settings
 
 struct hbao_settings
 {
-	float radius = 3.f;
-	uint32 maxNumSteps = 5;
-	uint32 numSampleDirections = 4;
-	float bias = 0.01f;
+	float radius = 0.5f; // In meters.
+	uint32 numRays = 4;
+	uint32 maxNumStepsPerRay = 10;
 	float strength = 1.f;
 };
 
 struct sharpen_settings
 {
 	float strength = 0.5f;
+};
+
+struct sss_settings
+{
+	uint32 numSteps = 16;
+    float rayDistance = 0.5f; // In meters.
+    float thickness = 0.05f; // In meters.
+	float maxDistanceFromCamera = 30.f; // In meters.
+	float distanceFadeoutRange = 2.f; // In meters.
+	float borderFadeout = 0.1f; // In UV-space.
 };
 
 struct tonemap_settings
@@ -224,6 +233,7 @@ void specularAmbient(dx_command_list* cl,
 	ref<dx_texture> worldNormalsTexture,		// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> reflectanceTexture,			// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> environment,				// NON_PIXEL_SHADER_RESOURCE. Can be null.
+	ref<dx_texture> ao,							// NON_PIXEL_SHADER_RESOURCE. Can be null.
 	ref<dx_texture> output,						// UNORDERED_ACCESS
 	dx_dynamic_constant_buffer cameraCBV);
 
@@ -247,11 +257,26 @@ void bloom(dx_command_list* cl,
 	ref<dx_texture> bloomTempTexture,			// UNORDERED_ACCESS
 	bloom_settings settings);
 
-void hbao(dx_command_list* cl,
+void ambientOcclusion(dx_command_list* cl,
 	ref<dx_texture> linearDepth,				// NON_PIXEL_SHADER_RESOURCE
-	ref<dx_texture> worldNormals,				// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> screenVelocitiesTexture,	// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> aoCalculationTexture,		// UNORDERED_ACCESS
+	ref<dx_texture> aoBlurTempTexture,			// UNORDERED_ACCESS
+	ref<dx_texture> history,					// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> output,						// UNORDERED_ACCESS
 	hbao_settings settings,
+	dx_dynamic_constant_buffer cameraCBV);
+
+void screenSpaceShadows(dx_command_list* cl,
+	ref<dx_texture> linearDepth,				// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> screenVelocitiesTexture,	// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> sssCalculationTexture,		// UNORDERED_ACCESS
+	ref<dx_texture> sssBlurTempTexture,			// UNORDERED_ACCESS
+	ref<dx_texture> history,					// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> output,						// UNORDERED_ACCESS
+	vec3 sunDirection,
+	sss_settings settings,
+	const mat4& view,
 	dx_dynamic_constant_buffer cameraCBV);
 
 void tonemap(dx_command_list* cl,
@@ -267,3 +292,9 @@ void present(dx_command_list* cl,
 	ref<dx_texture> ldrInput,					// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> output,						// UNORDERED_ACCESS
 	sharpen_settings sharpenSettings);
+
+void visualizeSunShadowCascades(dx_command_list* cl,
+	ref<dx_texture> depthBuffer,				// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> output,						// UNORDERED_ACCESS
+	dx_dynamic_constant_buffer sunCBV,
+	const mat4& invViewProj, vec3 cameraPosition, vec3 cameraForward);
