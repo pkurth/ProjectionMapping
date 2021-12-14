@@ -367,6 +367,36 @@ dx_gpu_descriptor_handle dx_gpu_descriptor_handle::operator++(int)
 	return result;
 }
 
+dx_double_descriptor_handle dx_double_descriptor_handle::operator+(uint32 i)
+{
+	return { 
+		dx_cpu_descriptor_handle::operator+(i),
+		dx_gpu_descriptor_handle::operator+(i),
+	};
+}
+
+dx_double_descriptor_handle& dx_double_descriptor_handle::operator+=(uint32 i)
+{
+	dx_cpu_descriptor_handle::operator+=(i);
+	dx_gpu_descriptor_handle::operator+=(i);
+	return *this;
+}
+
+dx_double_descriptor_handle& dx_double_descriptor_handle::operator++()
+{
+	dx_cpu_descriptor_handle::operator++();
+	dx_gpu_descriptor_handle::operator++();
+	return *this;
+}
+
+dx_double_descriptor_handle dx_double_descriptor_handle::operator++(int)
+{
+	dx_double_descriptor_handle result = *this;
+	dx_cpu_descriptor_handle::operator++();
+	dx_gpu_descriptor_handle::operator++();
+	return result;
+}
+
 dx_rtv_descriptor_handle& dx_rtv_descriptor_handle::create2DTextureRTV(const ref<dx_texture>& texture, uint32 arraySlice, uint32 mipSlice)
 {
 	assert(texture->supportsRTV);

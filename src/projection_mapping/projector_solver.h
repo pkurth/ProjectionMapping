@@ -35,19 +35,27 @@ struct projector_solver
 		uint32 objectID = -1);
 
 private:
-	dx_gpu_descriptor_handle linearRenderResultsBaseDescriptor;
-	dx_gpu_descriptor_handle srgbRenderResultsBaseDescriptor;
+	union
+	{
+		struct
+		{
+			dx_double_descriptor_handle linearRenderResultsBaseDescriptor;
+			dx_double_descriptor_handle srgbRenderResultsBaseDescriptor;
+			   
+			dx_double_descriptor_handle worldNormalsBaseDescriptor;
+			dx_double_descriptor_handle depthTexturesBaseDescriptor;
+			dx_double_descriptor_handle realDepthTexturesBaseDescriptor; // For simulation.
+			dx_double_descriptor_handle depthDiscontinuitiesTexturesBaseDescriptor;
+			   
+			dx_double_descriptor_handle intensitiesSRVBaseDescriptor;
+			dx_double_descriptor_handle intensitiesUAVBaseDescriptor;
+			   
+			dx_double_descriptor_handle tempIntensitiesSRVBaseDescriptor;
+			dx_double_descriptor_handle tempIntensitiesUAVBaseDescriptor;
+		};
 
-	dx_gpu_descriptor_handle worldNormalsBaseDescriptor;
-	dx_gpu_descriptor_handle depthTexturesBaseDescriptor;
-	dx_gpu_descriptor_handle realDepthTexturesBaseDescriptor; // For simulation.
-	dx_gpu_descriptor_handle depthDiscontinuitiesTexturesBaseDescriptor;
-
-	dx_gpu_descriptor_handle intensitiesSRVBaseDescriptor;
-	dx_gpu_descriptor_handle intensitiesUAVBaseDescriptor;
-
-	dx_gpu_descriptor_handle tempIntensitiesSRVBaseDescriptor;
-	dx_gpu_descriptor_handle tempIntensitiesUAVBaseDescriptor;
+		dx_double_descriptor_handle descriptors[10];
+	};
 
 	D3D12_GPU_VIRTUAL_ADDRESS viewProjsGPUAddress;
 	D3D12_GPU_VIRTUAL_ADDRESS realViewProjsGPUAddress; // For simulation.
