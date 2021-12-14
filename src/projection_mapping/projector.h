@@ -34,6 +34,18 @@ struct projector_component
 		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
 	}
 
+	projector_component(const render_camera& camera)
+	{
+		calibratedCamera = camera;
+		realCamera = calibratedCamera;
+
+		window.initialize(TEXT("Projector"), camera.width, camera.height);
+
+		frustumColor = vec4(1.f, 0.f, 0.f, 1.f);
+
+		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
+	}
+
 	projector_component(projector_component&&) = default;
 	projector_component& operator=(const projector_component&) = delete;
 	projector_component& operator=(projector_component&& ) = default;

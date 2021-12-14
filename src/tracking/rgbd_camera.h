@@ -23,8 +23,6 @@ struct rgbd_camera_info
 	std::string description;
 };
 
-std::vector<rgbd_camera_info> enumerateRGBDCameras();
-
 enum camera_resolution
 {
 	camera_resolution_off,
@@ -48,13 +46,14 @@ struct rgbd_frame
 	uint16* depth = 0;
 	color_bgra* color = 0;
 
-
-	// Internal. Do not use.
+private:
 	struct _k4a_image_t* azureDepthHandle = 0;
 	struct _k4a_image_t* azureColorHandle = 0;
 
 	struct rs2_frame* realsenseDepthHandle = 0;
 	struct rs2_frame* realsenseColorHandle = 0;
+
+	friend struct rgbd_camera;
 };
 
 struct rgbd_camera_sensor
@@ -84,7 +83,7 @@ struct rgbd_camera_sensor
 		rgbd_frame frame;
 		if (cam.getFrame(frame, 0))
 		{
-			// Process frame here.
+			// Process frame here (copy to texture etc).
 
 			cam.releaseFrame(frame);
 		}
@@ -114,6 +113,7 @@ struct rgbd_camera
 	void operator=(const rgbd_camera&) = delete;
 	void operator=(rgbd_camera&& o) noexcept;
 
+	bool initializeAs(rgbd_camera_type type, uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
 	bool initializeAzure(uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
 	bool initializeRealsense(uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
 	void shutdown();
@@ -132,5 +132,7 @@ struct rgbd_camera
 
 
 	static void initializeCommon();
+	static std::vector<rgbd_camera_info>& enumerate();
+
 	static std::vector<rgbd_camera_info> allConnectedRGBDCameras;
 };

@@ -6,18 +6,32 @@
 #include <realsense/h/rs_pipeline.h>
 
 static rs2_context* rsContext;
-rs2_device_list* deviceList;
 
 std::vector<rgbd_camera_info> rgbd_camera::allConnectedRGBDCameras;
 
-static void checkRealsenseError(rs2_error* e)
+static void printRealsenseError(rs2_error* e)
+{
+    std::cerr << "Error was raised when calling " << rs2_get_failed_function(e) << "(" << rs2_get_failed_args(e) << ").\n";
+    std::cerr << "    " << rs2_get_error_message(e) << '\n';
+}
+
+static void assertRealsenseSuccess(rs2_error* e)
 {
     if (e)
     {
-        std::cerr << "Error was raised when calling " << rs2_get_failed_function(e) << "(" << rs2_get_failed_args(e) << ").\n";
-        std::cerr << "    " << rs2_get_error_message(e) << '\n';
+        printRealsenseError(e);
         exit(EXIT_FAILURE);
     }
+}
+
+static bool checkRealsenseSuccess(rs2_error* e)
+{
+    if (e)
+    {
+        printRealsenseError(e);
+        return false;
+    }
+    return true;
 }
 
 void rgbd_camera::initializeCommon()
@@ -25,16 +39,14 @@ void rgbd_camera::initializeCommon()
     rs2_error* e = 0;
 
     rsContext = rs2_create_context(RS2_API_VERSION, &e);
-    checkRealsenseError(e);
-    deviceList = rs2_query_devices(rsContext, &e);
-    checkRealsenseError(e);
+    assertRealsenseSuccess(e);
 
-    allConnectedRGBDCameras = enumerateRGBDCameras();
+    enumerate();
 }
 
-std::vector<rgbd_camera_info> enumerateRGBDCameras()
+std::vector<rgbd_camera_info>& rgbd_camera::enumerate()
 {
-    std::vector<rgbd_camera_info> result;
+    allConnectedRGBDCameras.clear();
 
     uint32 numAzureDevices = k4a_device_get_installed_count();
     for (uint32 i = 0; i < numAzureDevices; ++i)
@@ -60,35 +72,39 @@ std::vector<rgbd_camera_info> enumerateRGBDCameras()
             info.type = rgbd_camera_type_azure;
             info.serialNumber = serialnum;
             info.description = "Azure camera (" + info.serialNumber + ")";
-            result.push_back(info);
+            allConnectedRGBDCameras.push_back(info);
 
             k4a_device_close(device);
         }
     }
 
     rs2_error* e = 0;
+
+    rs2_device_list* deviceList = rs2_query_devices(rsContext, &e);
+    assertRealsenseSuccess(e);
+
     uint32 numRealsenseDevices = rs2_get_device_count(deviceList, &e);
-    checkRealsenseError(e);
+    assertRealsenseSuccess(e);
 
     for (uint32 i = 0; i < numRealsenseDevices; ++i)
     {
         rs2_device* dev = rs2_create_device(deviceList, 0, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
         if (dev)
         {
             rgbd_camera_info info;
             info.deviceIndex = i;
             info.type = rgbd_camera_type_realsense;
             info.serialNumber = rs2_get_device_info(dev, RS2_CAMERA_INFO_SERIAL_NUMBER, &e);
-            checkRealsenseError(e);
+            assertRealsenseSuccess(e);
             info.description = "Realsense camera (" + info.serialNumber + ")";
-            result.push_back(info);
+            allConnectedRGBDCameras.push_back(info);
 
             rs2_delete_device(dev);
         }
     }
 
-    return result;
+    return allConnectedRGBDCameras;
 }
 
 static k4a_color_resolution_t getResolution(camera_resolution res)
@@ -234,7 +250,7 @@ static const rs2_stream_profile* getStreamProfile(rs2_stream_profile_list* strea
     rs2_error* e = 0;
 
     int numStreams = rs2_get_stream_profiles_count(streamList, &e);
-    checkRealsenseError(e);
+    assertRealsenseSuccess(e);
 
     for (int s = 0; s < numStreams; ++s)
     {
@@ -244,7 +260,7 @@ static const rs2_stream_profile* getStreamProfile(rs2_stream_profile_list* strea
         rs2_format format;
         int index, uniqueID, framerate;
         rs2_get_stream_profile_data(streamProfile, &stream, &format, &index, &uniqueID, &framerate, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         if (stream == streamType)
         {
@@ -261,7 +277,7 @@ static void getCalibration(const rs2_stream_profile* streamProfile, const rs2_st
 
     rs2_intrinsics intrinsics;
     rs2_get_video_stream_intrinsics(streamProfile, &intrinsics, &e);
-    checkRealsenseError(e);
+    assertRealsenseSuccess(e);
 
     result.width = intrinsics.width;
     result.height = intrinsics.height;
@@ -350,20 +366,24 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 {
     rs2_error* e = 0;
 
+    rs2_device_list* deviceList = rs2_query_devices(rsContext, &e);
     realsense.device = rs2_create_device(deviceList, 0, &e);
-    checkRealsenseError(e);
+    if (!checkRealsenseSuccess(e))
+    {
+        return false;
+    }
 
     if (realsense.device)
     {
         realsense.pipeline = rs2_create_pipeline(rsContext, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
         realsense.config = rs2_create_config(&e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         const char* serial = rs2_get_device_info(realsense.device, RS2_CAMERA_INFO_SERIAL_NUMBER, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
         rs2_config_enable_device(realsense.config, serial, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         depthSensor.active = true;
         colorSensor.active = spec.colorResolution != camera_resolution_off;
@@ -371,26 +391,26 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         if (depthSensor.active)
         {
             rs2_config_enable_stream(realsense.config, RS2_STREAM_DEPTH, -1, 640, 480, RS2_FORMAT_Z16, 30, &e);
-            checkRealsenseError(e);
+            assertRealsenseSuccess(e);
         }
         if (colorSensor.active)
         {
             rs2_config_enable_stream(realsense.config, RS2_STREAM_COLOR, -1, getWidth(spec.colorResolution), getHeight(spec.colorResolution), RS2_FORMAT_BGRA8, 30, &e);
-            checkRealsenseError(e);
+            assertRealsenseSuccess(e);
         }
 
         realsense.profile = rs2_pipeline_start_with_config(realsense.pipeline, realsense.config, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         type = rgbd_camera_type_realsense;
 
 
         // Get intrinsics and extrinsics.
         rs2_stream_profile_list* profileList = rs2_pipeline_profile_get_streams(realsense.profile, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         int numProfiles = rs2_get_stream_profiles_count(profileList, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         const rs2_stream_profile* depthStreamProfile = getStreamProfile(profileList, RS2_STREAM_DEPTH);
         getCalibration(depthStreamProfile, depthStreamProfile, depthSensor);
@@ -411,19 +431,19 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 
         // Get depth scale.
         rs2_sensor_list* sensorList = rs2_query_sensors(realsense.device, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
         int numSensors = rs2_get_sensors_count(sensorList, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         depthScale = 0.001f;
 
         for (int i = 0; i < numSensors; ++i)
         {
             rs2_sensor* sensor = rs2_create_sensor(sensorList, i, &e);
-            checkRealsenseError(e);
+            assertRealsenseSuccess(e);
 
             bool isDepthSensor = rs2_is_sensor_extendable_to(sensor, RS2_EXTENSION_DEPTH_SENSOR, &e);
-            checkRealsenseError(e);
+            assertRealsenseSuccess(e);
 
             if (isDepthSensor)
             {
@@ -442,6 +462,19 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
     return false;
 }
 
+bool rgbd_camera::initializeAs(rgbd_camera_type type, uint32 deviceIndex, rgbd_camera_spec spec)
+{
+    switch (type)
+    {
+        case rgbd_camera_type_azure:
+            return initializeAzure(deviceIndex, spec);
+        case rgbd_camera_type_realsense:
+            return initializeRealsense(deviceIndex, spec);
+        default:
+            return false;
+    }
+}
+
 void rgbd_camera::shutdown()
 {
     if (type == rgbd_camera_type_azure && azure.deviceHandle)
@@ -453,7 +486,7 @@ void rgbd_camera::shutdown()
     {
         rs2_error* e = 0;
         rs2_pipeline_stop(realsense.pipeline, &e);
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         rs2_delete_pipeline_profile(realsense.profile);
         rs2_delete_config(realsense.config);
@@ -510,17 +543,17 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
         {
             newFrames = rs2_pipeline_try_wait_for_frames(realsense.pipeline, &frames, timeOutInMilliseconds, &e);
         }
-        checkRealsenseError(e);
+        assertRealsenseSuccess(e);
 
         if (newFrames)
         {
             int numFrames = rs2_embedded_frames_count(frames, &e);
-            checkRealsenseError(e);
+            assertRealsenseSuccess(e);
 
             for (int i = 0; i < numFrames; ++i)
             {
                 rs2_frame* frame = rs2_extract_frame(frames, i, &e);
-                checkRealsenseError(e);
+                assertRealsenseSuccess(e);
 
                 if (rs2_is_frame_extendable_to(frame, RS2_EXTENSION_DEPTH_FRAME, &e))
                 {
@@ -532,7 +565,7 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
                     result.realsenseColorHandle = frame;
                     result.color = (color_bgra*)rs2_get_frame_data(frame, &e);
                 }
-                checkRealsenseError(e);
+                assertRealsenseSuccess(e);
             }
 
             rs2_release_frame(frames);

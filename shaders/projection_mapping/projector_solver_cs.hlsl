@@ -91,6 +91,11 @@ void main(cs_input IN)
 		intensity *= 1.001f;
 	}
 
+	/*if (possiblePhysicalIntensity < 0.3f)
+	{
+		intensity = 0.f;
+	}*/
+
 	if (cb.maskStrength > 0.f)
 	{
 		float mask = max(0.2f, 1.f - masks[index][texCoord]);

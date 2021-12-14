@@ -69,8 +69,12 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	if (auto targetObjectMesh = loadMeshFromFile("assets/nike/nike.obj"))
 	{
+		mat4 tracking(0.220782f, -0.454254f, -0.863081f, 0.000000f, 0.934979f, 0.350455f, 0.054724f, 0.000000f, 0.277612f, -0.819045f, 0.502093f, 0.000000f, -0.123806f, -0.086533f, -0.444866f, 1.000000f);
+		tracking = transpose(tracking);
+		trs transform = mat4ToTRS(tracking);
+
 		auto targetObject = scene.createEntity("Target object")
-			.addComponent<transform_component>(vec3(0.f, 0.f, 0.f), quat::identity, 1.f)
+			.addComponent<transform_component>(transform)
 			.addComponent<raster_component>(targetObjectMesh);
 
 		tracker->trackObject(targetObject);
@@ -110,13 +114,39 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	// Dummy projectors.
 
-	scene.createEntity("Projector")
-		.addComponent<position_rotation_component>(vec3(0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
-		.addComponent<projector_component>();
+#if 0
+	uint32 numProjectors = 0;
+	float projectorRadius = 2.3f;
+	for (uint32 i = 0; i < numProjectors; ++i)
+	{
+		float angle = M_TAU / numProjectors * i;
+		vec3 position(cos(angle) * projectorRadius, 1.f, sin(angle) * projectorRadius);
+		vec3 target(0.f, 1.f, 0.f);
+		quat rotation = lookAtQuaternion(normalize(target - position), vec3(0.f, 1.f, 0.f));
+
+		scene.createEntity("Projector")
+			.addComponent<position_rotation_component>(position, rotation)
+			.addComponent<projector_component>();
+	}
+#else
+	//scene.createEntity("Projector")
+	//	.addComponent<position_rotation_component>(vec3(0.25f, 0.1f, 0.46f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
+	//	.addComponent<projector_component>();
+	//
+	//scene.createEntity("Projector")
+	//	.addComponent<position_rotation_component>(vec3(-0.17f, 0.1f, 0.43f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
+	//	.addComponent<projector_component>();
+
+	vec3 pos(-0.261083f, 0.367653f, 0.485125f);
+	quat rotation = mat3ToQuaternion(transpose(mat3(0.277600f, -0.844187f, 0.458570f, 0.954835f, 0.295094f, -0.034776f, -0.105964f, 0.447513f, 0.887977f)));
+
+	render_camera projCamera;
+	projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 3925.022461f, 3934.054443f, 765.430969f, 1298.199829f }, 0.01f);
 
 	scene.createEntity("Projector")
-		.addComponent<position_rotation_component>(vec3(-0.5f, 1.f, 2.1f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
-		.addComponent<projector_component>();
+		.addComponent<position_rotation_component>(pos, rotation)
+		.addComponent<projector_component>(projCamera);
+#endif
 
 
 
