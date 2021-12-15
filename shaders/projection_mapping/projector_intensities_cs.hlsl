@@ -2,12 +2,6 @@
 #include "projector_rs.hlsli"
 #include "camera.hlsli"
 
-struct projector_intensity_cb
-{
-	uint32 index;
-	uint32 numProjectors;
-};
-
 ConstantBuffer<projector_intensity_cb> cb	: register(b0, space0);
 StructuredBuffer<projector_cb> projectors	: register(t0, space0);
 
@@ -17,10 +11,11 @@ Texture2D<float> depthTextures[32]			: register(t0, space2);
 RWTexture2D<float> outIntensities[32]		: register(u0, space0);
 
 SamplerState borderSampler					: register(s0);
-
+SamplerState depthSampler					: register(s1);
 
 
 [numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
+[RootSignature(PROJECTOR_INTENSITIES_RS)]
 void main(cs_input IN)
 {
 	uint index = cb.index;
@@ -44,8 +39,11 @@ void main(cs_input IN)
 
 	float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 
-	float confidences[32];
-	uint numConfidences = 0;
+	//float confidences[32];
+	//uint numConfidences = 0;
+
+	float confidenceSum = 0.f;
+	float maxConfidence = 0.f;
 
 	uint numProjectors = cb.numProjectors;
 	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
@@ -55,16 +53,18 @@ void main(cs_input IN)
 			float4 projected = mul(projectors[projIndex].viewProj, float4(P, 1.f));
 			projected.xyz /= projected.w;
 
-			float2 otherUV = projected.xy * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+			float2 projUV = projected.xy * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
 			float testDepth = projected.z;
 
-			float otherDepth = depthTextures[projIndex].SampleLevel(borderSampler, otherUV, 0);
-			if (testDepth <= otherDepth + 0.00001f)
+			float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
+			if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
 			{
-				float conf = confidenceTextures[projIndex].SampleLevel(borderSampler, otherUV, 0);
+				float conf = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0);
 				if (conf > 0.f)
 				{
-					confidences[numConfidences++] = conf;
+					//confidences[numConfidences++] = conf;
+					confidenceSum += conf;
+					maxConfidence = max(maxConfidence, conf);
 				}
 			}
 		}
@@ -72,5 +72,15 @@ void main(cs_input IN)
 
 	float ownConfidence = confidenceTextures[index][texCoord];
 
-	outIntensities[index][texCoord] = 1.f / (numConfidences + 1.f);
+	if (ownConfidence > maxConfidence)
+	{
+		outIntensities[index][texCoord] = 1.f / ownConfidence;
+	}
+	else
+	{
+		//float remaining = 
+		outIntensities[index][texCoord] = 0.f;
+	}
+
+	//outIntensities[index][texCoord] = ownConfidence / (ownConfidence + confidenceSum);
 }

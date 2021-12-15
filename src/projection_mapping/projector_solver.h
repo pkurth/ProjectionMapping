@@ -20,13 +20,6 @@ struct projector_solver
 	float depthDiscontinuityMaskStrength = 1.f;
 	bool simulateCalibrationError = false;
 
-	void visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass,
-		const mat4& transform,
-		const dx_vertex_buffer_group_view& vertexBuffer,
-		const dx_index_buffer_view& indexBuffer,
-		submesh_info submesh,
-		uint32 objectID = -1);
-
 	void simulateProjectors(opaque_render_pass* opaqueRenderPass,
 		const mat4& transform,
 		const dx_vertex_buffer_group_view& vertexBuffer,
@@ -52,19 +45,23 @@ private:
 			   
 			dx_double_descriptor_handle tempIntensitiesSRVBaseDescriptor;
 			dx_double_descriptor_handle tempIntensitiesUAVBaseDescriptor;
+
+			dx_double_descriptor_handle confidencesSRVBaseDescriptor;
+			dx_double_descriptor_handle confidencesUAVBaseDescriptor;
 		};
 
-		dx_double_descriptor_handle descriptors[10];
+		dx_double_descriptor_handle descriptors[12];
 	};
 
-	D3D12_GPU_VIRTUAL_ADDRESS viewProjsGPUAddress;
-	D3D12_GPU_VIRTUAL_ADDRESS realViewProjsGPUAddress; // For simulation.
+	D3D12_GPU_VIRTUAL_ADDRESS projectorsGPUAddress;
+	D3D12_GPU_VIRTUAL_ADDRESS realProjectorsGPUAddress; // For simulation.
 	uint32 numProjectors;
 
 	uint32 widths[16];
 	uint32 heights[16];
 	dx_texture* intensityTempTextures[16];
 	dx_texture* intensityTextures[16];
+	dx_texture* confidenceTextures[16];
 
 	dx_pushable_descriptor_heap heaps[NUM_BUFFERED_FRAMES];
 

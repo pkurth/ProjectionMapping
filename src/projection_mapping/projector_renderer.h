@@ -61,6 +61,7 @@ private:
 	ref<dx_texture> solverIntensityTexture;
 	ref<dx_texture> solverIntensityTempTexture;
 
+	ref<dx_texture> confidenceTexture;
 
 	ref<dx_texture> depthDiscontinuitiesTexture;
 	ref<dx_texture> depthDilateTempTexture;

@@ -16,26 +16,6 @@ struct projector_cb
     vec4 forward;
 };
 
-struct projector_solver_cb
-{
-    uint32 currentIndex;
-    uint32 numProjectors;
-    float referenceDistance;
-    float maskStrength;
-};
-
-struct projector_visualization_cb
-{
-    uint32 numProjectors;
-    float referenceDistance;
-};
-
-struct projector_regularize_cb
-{
-    uint32 currentIndex;
-    float strength;
-};
-
 
 
 #ifdef HLSL
@@ -49,9 +29,17 @@ static float getAngleAttenuation(vec3 N, vec3 V)
 
 static float getDistanceAttenuation(float distance, float referenceDistance)
 {
-    return 1.f / pow(2.f, distance - referenceDistance);
+    return 1.f / exp2(distance - referenceDistance);
 }
 
+
+struct projector_solver_cb
+{
+    uint32 currentIndex;
+    uint32 numProjectors;
+    float referenceDistance;
+    float maskStrength;
+};
 
 #define PROJECTOR_SOLVER_RS \
     "RootFlags(0), " \
@@ -81,6 +69,12 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
 
 
 
+struct projector_regularize_cb
+{
+    uint32 currentIndex;
+    float strength;
+};
+
 #define PROJECTOR_REGULARIZE_RS \
     "RootFlags(0), " \
     "RootConstants(num32BitConstants=2, b0),"  \
@@ -97,6 +91,76 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
 
 
 
+struct projector_confidence_cb
+{
+    uint32 index;
+    float referenceDistance;
+    float desiredWhiteValue;
+};
+
+#define PROJECTOR_CONFIDENCE_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=3, b0),"  \
+    "SRV(t0, space=0), " \
+    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=5, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) )"
+
+
+#define PROJECTOR_CONFIDENCE_RS_CB                  0
+#define PROJECTOR_CONFIDENCE_RS_PROJECTORS          1
+#define PROJECTOR_CONFIDENCE_RS_RENDER_RESULTS      2
+#define PROJECTOR_CONFIDENCE_RS_WORLD_NORMALS       3
+#define PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES      4
+#define PROJECTOR_CONFIDENCE_RS_INTENSITIES         5
+#define PROJECTOR_CONFIDENCE_RS_MASKS               6
+#define PROJECTOR_CONFIDENCE_RS_OUT_CONFIDENCES     7
+
+
+
+struct projector_intensity_cb
+{
+    uint32 index;
+    uint32 numProjectors;
+};
+
+#define PROJECTOR_INTENSITIES_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=2, b0),"  \
+    "SRV(t0, space=0), " \
+    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "StaticSampler(s0," \
+        "addressU = TEXTURE_ADDRESS_BORDER," \
+        "addressV = TEXTURE_ADDRESS_BORDER," \
+        "addressW = TEXTURE_ADDRESS_BORDER," \
+        "filter = FILTER_MIN_MAG_MIP_LINEAR," \
+        "borderColor = STATIC_BORDER_COLOR_OPAQUE_BLACK), " \
+    "StaticSampler(s1," \
+        "addressU = TEXTURE_ADDRESS_BORDER," \
+        "addressV = TEXTURE_ADDRESS_BORDER," \
+        "addressW = TEXTURE_ADDRESS_BORDER," \
+        "filter = FILTER_MIN_MAG_MIP_POINT," \
+        "borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
+
+#define PROJECTOR_INTENSITIES_RS_CB                 0
+#define PROJECTOR_INTENSITIES_RS_PROJECTORS         1
+#define PROJECTOR_INTENSITIES_RS_CONFIDENCES        2
+#define PROJECTOR_INTENSITIES_RS_DEPTH_TEXTURES     3
+#define PROJECTOR_INTENSITIES_RS_OUT_INTENSITIES    4
+
+
+
+
+struct projector_visualization_cb
+{
+    uint32 numProjectors;
+    float referenceDistance;
+};
 
 
 #define PROJECTOR_SIMULATION_RS \

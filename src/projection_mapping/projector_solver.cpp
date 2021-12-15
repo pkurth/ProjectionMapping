@@ -13,8 +13,11 @@
 
 static dx_pipeline solverPipeline;
 static dx_pipeline regularizePipeline;
-static dx_pipeline visualizeIntensitiesPipeline;
-static dx_pipeline projectorSimulationPipeline;
+
+static dx_pipeline confidencePipeline;
+static dx_pipeline intensitiesPipeline;
+
+static dx_pipeline simulationPipeline;
 
 
 void projector_solver::initialize()
@@ -22,14 +25,16 @@ void projector_solver::initialize()
 	solverPipeline = createReloadablePipeline("projector_solver_cs");
 	regularizePipeline = createReloadablePipeline("projector_regularize_cs");
 
+	confidencePipeline = createReloadablePipeline("projector_confidence_cs");
+	intensitiesPipeline = createReloadablePipeline("projector_intensities_cs");
+
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
 			.inputLayout(inputLayout_position_uv_normal_tangent)
 			.renderTargets(opaqueLightPassFormats, arraysize(opaqueLightPassFormats), depthStencilFormat)
 			.depthSettings(true, false, D3D12_COMPARISON_FUNC_EQUAL);
 
-		visualizeIntensitiesPipeline = createReloadablePipeline(desc, { "default_vs", "projector_intensity_visualization_ps" });
-		projectorSimulationPipeline = createReloadablePipeline(desc, { "default_vs", "projector_simulation_ps" });
+		simulationPipeline = createReloadablePipeline(desc, { "default_vs", "projector_simulation_ps" });
 	}
 
 	for (uint32 i = 0; i < NUM_BUFFERED_FRAMES; ++i)
@@ -57,12 +62,12 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 	heap.reset();
 
 	dx_allocation alloc = dxContext.allocateDynamicBuffer(numProjectors * sizeof(projector_cb));
-	projector_cb* viewProjs = (projector_cb*)alloc.cpuPtr;
-	viewProjsGPUAddress = alloc.gpuPtr;
+	projector_cb* projectorCBs = (projector_cb*)alloc.cpuPtr;
+	projectorsGPUAddress = alloc.gpuPtr;
 
 	alloc = dxContext.allocateDynamicBuffer(numProjectors * sizeof(projector_cb));
-	projector_cb* realViewProjs = (projector_cb*)alloc.cpuPtr;
-	realViewProjsGPUAddress = alloc.gpuPtr;
+	projector_cb* realProjectorCBs = (projector_cb*)alloc.cpuPtr;
+	realProjectorsGPUAddress = alloc.gpuPtr;
 
 
 	for (uint32 i = 0; i < arraysize(descriptors); ++i)
@@ -75,13 +80,14 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 	{
 		const projector_component& p = projectors[i];
 
-		projectorToCB(p.calibratedCamera, viewProjs[i]);
-		projectorToCB(p.realCamera, realViewProjs[i]);
+		projectorToCB(p.calibratedCamera, projectorCBs[i]);
+		projectorToCB(p.realCamera, realProjectorCBs[i]);
 		
 		widths[i] = p.calibratedCamera.width;
 		heights[i] = p.calibratedCamera.height;
 		intensityTextures[i] = p.renderer.solverIntensityTexture.get();
 		intensityTempTextures[i] = p.renderer.solverIntensityTempTexture.get();
+		confidenceTextures[i] = p.renderer.confidenceTexture.get();
 
 
 		(linearRenderResultsBaseDescriptor + i).create2DTextureSRV(p.renderer.ldrPostProcessingTexture);
@@ -94,6 +100,8 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 		(intensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTexture);
 		(tempIntensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTempTexture);
 		(tempIntensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTempTexture);
+		(confidencesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.confidenceTexture);
+		(confidencesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.confidenceTexture);
 	}
 }
 
@@ -105,6 +113,7 @@ void projector_solver::solve()
 
 	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
 
+#if 0
 
 	for (uint32 iter = 0; iter < numIterationsPerFrame; ++iter)
 	{
@@ -124,7 +133,7 @@ void projector_solver::solve()
 			cl->setPipelineState(*solverPipeline.pipeline);
 			cl->setComputeRootSignature(*solverPipeline.rootSignature);
 
-			cl->setRootComputeSRV(PROJECTOR_SOLVER_RS_VIEWPROJS, viewProjsGPUAddress);
+			cl->setRootComputeSRV(PROJECTOR_SOLVER_RS_VIEWPROJS, projectorsGPUAddress);
 			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_RENDER_RESULTS, linearRenderResultsBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_SOLVER_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
@@ -173,6 +182,97 @@ void projector_solver::solve()
 		}
 	}
 
+#else
+
+
+	{
+		PROFILE_ALL(cl, "Projector solver");
+
+		{
+			barrier_batcher batch(cl);
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				batch.transition(confidenceTextures[i]->resource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			}
+		}
+
+		{
+			PROFILE_ALL(cl, "Confidences");
+
+			cl->setPipelineState(*confidencePipeline.pipeline);
+			cl->setComputeRootSignature(*confidencePipeline.rootSignature);
+
+			cl->setRootComputeSRV(PROJECTOR_CONFIDENCE_RS_PROJECTORS, projectorsGPUAddress);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_RENDER_RESULTS, linearRenderResultsBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_INTENSITIES, intensitiesSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_OUT_CONFIDENCES, confidencesUAVBaseDescriptor);
+
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				uint32 width = widths[i];
+				uint32 height = heights[i];
+
+				projector_confidence_cb cb;
+				cb.index = i;
+				cb.desiredWhiteValue = 0.7f;
+				cb.referenceDistance = referenceDistance;
+
+				cl->setCompute32BitConstants(PROJECTOR_CONFIDENCE_RS_CB, cb);
+
+				cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
+			}
+		}
+
+		{
+			barrier_batcher batch(cl);
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				batch.transition(confidenceTextures[i]->resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+				batch.transition(intensityTextures[i]->resource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			}
+		}
+
+		{
+			PROFILE_ALL(cl, "Intensities");
+
+			cl->setPipelineState(*intensitiesPipeline.pipeline);
+			cl->setComputeRootSignature(*intensitiesPipeline.rootSignature);
+
+			cl->setRootComputeSRV(PROJECTOR_INTENSITIES_RS_PROJECTORS, projectorsGPUAddress);
+			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_CONFIDENCES, confidencesSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_OUT_INTENSITIES, intensitiesUAVBaseDescriptor);
+
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				uint32 width = widths[i];
+				uint32 height = heights[i];
+
+				projector_intensity_cb cb;
+				cb.index = i;
+				cb.numProjectors = numProjectors;
+
+				cl->setCompute32BitConstants(PROJECTOR_INTENSITIES_RS_CB, cb);
+
+				cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
+			}
+		}
+
+		{
+			barrier_batcher batch(cl);
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				batch.transition(intensityTextures[i]->resource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+			}
+		}
+	}
+
+
+#endif
+
 	cl->resetToDynamicDescriptorHeap();
 
 	dxContext.executeCommandList(cl);
@@ -195,47 +295,6 @@ struct visualization_material
 	projector_solver* solver;
 };
 
-struct visualize_intensities_pipeline
-{
-	using material_t = visualization_material;
-
-	PIPELINE_SETUP_DECL;
-	PIPELINE_RENDER_DECL;
-};
-
-PIPELINE_SETUP_IMPL(visualize_intensities_pipeline)
-{
-	cl->setPipelineState(*visualizeIntensitiesPipeline.pipeline);
-	cl->setGraphicsRootSignature(*visualizeIntensitiesPipeline.rootSignature);
-	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-}
-
-PIPELINE_RENDER_IMPL(visualize_intensities_pipeline)
-{
-	projector_solver& solver = *rc.material.solver;
-
-	dx_pushable_descriptor_heap& heap = solver.heaps[dxContext.bufferedFrameID];
-
-	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
-
-	cl->setGraphics32BitConstants(PROJECTOR_INTENSITY_VISUALIZATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
-	cl->setGraphics32BitConstants(PROJECTOR_INTENSITY_VISUALIZATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
-	cl->setRootGraphicsSRV(PROJECTOR_INTENSITY_VISUALIZATION_RS_VIEWPROJS, solver.viewProjsGPUAddress);
-	cl->setGraphicsDescriptorTable(PROJECTOR_INTENSITY_VISUALIZATION_RS_DEPTH_TEXTURES, solver.depthTexturesBaseDescriptor);
-	cl->setGraphicsDescriptorTable(PROJECTOR_INTENSITY_VISUALIZATION_RS_INTENSITIES, solver.intensitiesSRVBaseDescriptor);
-
-
-	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
-	cl->setVertexBuffer(1, rc.vertexBuffer.others);
-	cl->setIndexBuffer(rc.indexBuffer);
-	cl->drawIndexed(rc.submesh.numIndices, 1, rc.submesh.firstIndex, rc.submesh.baseVertex, 0);
-
-	cl->resetToDynamicDescriptorHeap();
-}
-
-
-
-
 
 struct simulate_projectors_pipeline
 {
@@ -247,8 +306,8 @@ struct simulate_projectors_pipeline
 
 PIPELINE_SETUP_IMPL(simulate_projectors_pipeline)
 {
-	cl->setPipelineState(*projectorSimulationPipeline.pipeline);
-	cl->setGraphicsRootSignature(*projectorSimulationPipeline.rootSignature);
+	cl->setPipelineState(*simulationPipeline.pipeline);
+	cl->setGraphicsRootSignature(*simulationPipeline.rootSignature);
 	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
@@ -262,7 +321,7 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
-	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.realViewProjsGPUAddress);
+	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.realProjectorsGPUAddress);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_RENDER_RESULTS, solver.srgbRenderResultsBaseDescriptor);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES, solver.realDepthTexturesBaseDescriptor);
 
@@ -273,27 +332,6 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 	cl->drawIndexed(rc.submesh.numIndices, 1, rc.submesh.firstIndex, rc.submesh.baseVertex, 0);
 
 	cl->resetToDynamicDescriptorHeap();
-}
-
-
-
-
-
-
-
-
-void projector_solver::visualizeProjectorIntensities(opaque_render_pass* opaqueRenderPass,
-	const mat4& transform,
-	const dx_vertex_buffer_group_view& vertexBuffer,
-	const dx_index_buffer_view& indexBuffer,
-	submesh_info submesh,
-	uint32 objectID)
-{
-	opaqueRenderPass->renderStaticObject<visualize_intensities_pipeline>(
-		transform, vertexBuffer, indexBuffer,
-		submesh, { this },
-		objectID
-		);
 }
 
 void projector_solver::simulateProjectors(opaque_render_pass* opaqueRenderPass,

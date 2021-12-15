@@ -49,6 +49,9 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	solverIntensityTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
 	SET_NAME(solverIntensityTempTexture->resource, "Solver intensity temp");
 
+	confidenceTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	SET_NAME(confidenceTexture->resource, "Confidence");
+
 	depthDiscontinuitiesTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(depthDiscontinuitiesTexture->resource, "Depth discontinuities");
 
@@ -71,6 +74,8 @@ void projector_renderer::shutdown()
 
 	solverIntensityTexture = 0;
 	solverIntensityTempTexture = 0;
+
+	confidenceTexture = 0;
 
 	depthDiscontinuitiesTexture = 0;
 	depthDilateTempTexture = 0;
@@ -107,6 +112,8 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 
 		resizeTexture(solverIntensityTexture, renderWidth, renderHeight);
 		resizeTexture(solverIntensityTempTexture, renderWidth, renderHeight);
+
+		resizeTexture(confidenceTexture, renderWidth, renderHeight);
 
 		resizeTexture(depthDiscontinuitiesTexture, renderWidth, renderHeight);
 		resizeTexture(depthDilateTempTexture, renderWidth, renderHeight);
