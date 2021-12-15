@@ -11,7 +11,7 @@ std::vector<rgbd_camera_info> rgbd_camera::allConnectedRGBDCameras;
 
 static void printRealsenseError(rs2_error* e)
 {
-    std::cerr << "Error was raised when calling " << rs2_get_failed_function(e) << "(" << rs2_get_failed_args(e) << ").\n";
+    std::cerr << "Realsense error in function " << rs2_get_failed_function(e) << "(" << rs2_get_failed_args(e) << ").\n";
     std::cerr << "    " << rs2_get_error_message(e) << '\n';
 }
 
@@ -189,8 +189,6 @@ static void createUnprojectTable(const k4a_calibration_t& calibration, vec2* unp
 
 static void createDefaultUnprojectTable(camera_intrinsics intrinsics, vec2* unprojectTable, uint32 width, uint32 height)
 {
-    vec2 nanv(nanf(""));
-
     for (uint32 y = 0, idx = 0; y < height; ++y)
     {
         for (uint32 x = 0; x < width; ++x, ++idx)

@@ -769,8 +769,7 @@ void depth_tracker::update(scene_editor* editor)
 					ImGui::EndProperties();
 				}
 
-				uint32 width = min((uint32)ImGui::GetContentRegionAvail().x, renderedColorTexture->width);
-				ImGui::Image(renderedColorTexture, width, renderedColorTexture->height * width / renderedColorTexture->width);
+				ImGui::Image(renderedColorTexture);
 			}
 			else
 			{
