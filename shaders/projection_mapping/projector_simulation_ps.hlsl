@@ -25,8 +25,8 @@ struct ps_output
 ConstantBuffer<projector_visualization_cb> cb	: register(b0, space1);
 StructuredBuffer<projector_cb> projectors		: register(t0, space0);
 
-Texture2D<float4> renderResults[]				: register(t0, space1);
-Texture2D<float> depthTextures[]				: register(t0, space2);
+Texture2D<float4> renderResults[32]				: register(t0, space1);
+Texture2D<float> depthTextures[32]				: register(t0, space2);
 
 SamplerState borderSampler						: register(s0);
 

@@ -14,6 +14,7 @@
 #include "sky_rs.hlsli"
 #include "outline_rs.hlsli"
 #include "transform.hlsli"
+#include "visualization_rs.hlsli"
 
 static dx_pipeline depthPrePassPipeline;
 static dx_pipeline animatedDepthPrePassPipeline;
@@ -63,11 +64,17 @@ static dx_pipeline bloomThresholdPipeline;
 static dx_pipeline bloomCombinePipeline;
 
 static dx_pipeline hbaoPipeline;
+static dx_pipeline hbaoBlurXPipeline;
+static dx_pipeline hbaoBlurYPipeline;
 
 static dx_pipeline tonemapPipeline;
 static dx_pipeline presentPipeline;
 
 static dx_pipeline depthSobelPipeline;
+
+static dx_pipeline sssPipeline;
+
+static dx_pipeline visualizeSunShadowCascadesPipeline;
 
 static dx_command_signature rigidDepthPrePassCommandSignature;
 static dx_command_signature animatedDepthPrePassCommandSignature;
@@ -130,7 +137,7 @@ void loadCommonShaders()
 	// Shadow.
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
-			.renderTargets(0, 0, render_resources::shadowDepthFormat)
+			.renderTargets(0, 0, shadowDepthFormat)
 			.inputLayout(inputLayout_position)
 			//.cullFrontFaces()
 			;
@@ -176,7 +183,7 @@ void loadCommonShaders()
 	// Shadow map copy.
 	{
 		auto desc = CREATE_GRAPHICS_PIPELINE
-			.renderTargets(0, 0, render_resources::shadowDepthFormat)
+			.renderTargets(0, 0, shadowDepthFormat)
 			.depthSettings(true, true, D3D12_COMPARISON_FUNC_ALWAYS)
 			.cullingOff();
 
@@ -214,11 +221,17 @@ void loadCommonShaders()
 	bloomCombinePipeline = createReloadablePipeline("bloom_combine_cs");
 
 	hbaoPipeline = createReloadablePipeline("hbao_cs");
+	hbaoBlurXPipeline = createReloadablePipeline("hbao_blur_x_cs");
+	hbaoBlurYPipeline = createReloadablePipeline("hbao_blur_y_cs");
 
 	tonemapPipeline = createReloadablePipeline("tonemap_cs");
 	presentPipeline = createReloadablePipeline("present_cs");
 
 	depthSobelPipeline = createReloadablePipeline("depth_sobel_cs");
+
+	sssPipeline = createReloadablePipeline("sss_cs");
+
+	visualizeSunShadowCascadesPipeline = createReloadablePipeline("sun_shadow_cascades_cs");
 }
 
 void loadRemainingRenderResources()
@@ -709,7 +722,9 @@ void shadowPasses(dx_command_list* cl,
 
 
 
-		dx_render_target shadowRenderTarget({}, render_resources::shadowMap);
+		auto shadowRenderTarget = dx_render_target(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT)
+			.depthAttachment(render_resources::shadowMap);
+
 		cl->setRenderTarget(shadowRenderTarget);
 
 		{
@@ -950,7 +965,9 @@ void copyShadowMapParts(dx_command_list* cl,
 	// Since copies from or to parts of a depth-stencil texture are not allowed (even though they work on at least some hardware),
 	// we copy to and from the static shadow map cache via a shader, and not via CopyTextureRegion.
 
-	dx_render_target shadowRenderTarget({}, to);
+	auto shadowRenderTarget = dx_render_target(to->width, to->height)
+		.depthAttachment(to);
+
 	cl->setRenderTarget(shadowRenderTarget);
 
 	cl->setPipelineState(*shadowMapCopyPipeline.pipeline);
@@ -1330,6 +1347,7 @@ void specularAmbient(dx_command_list* cl,
 	ref<dx_texture> worldNormalsTexture,
 	ref<dx_texture> reflectanceTexture,
 	ref<dx_texture> environment,
+	ref<dx_texture> ao,
 	ref<dx_texture> output,
 	dx_dynamic_constant_buffer cameraCBV)
 {
@@ -1348,6 +1366,7 @@ void specularAmbient(dx_command_list* cl,
 	cl->setDescriptorHeapSRV(SPECULAR_AMBIENT_RS_TEXTURES, 4, ssr ? ssr->defaultSRV : render_resources::nullTextureSRV);
 	cl->setDescriptorHeapSRV(SPECULAR_AMBIENT_RS_TEXTURES, 5, environment ? environment : render_resources::blackCubeTexture);
 	cl->setDescriptorHeapSRV(SPECULAR_AMBIENT_RS_TEXTURES, 6, render_resources::brdfTex);
+	cl->setDescriptorHeapSRV(SPECULAR_AMBIENT_RS_TEXTURES, 7, ao ? ao : render_resources::whiteTexture);
 
 	cl->dispatch(bucketize(output->width, POST_PROCESSING_BLOCK_SIZE), bucketize(output->height, POST_PROCESSING_BLOCK_SIZE));
 }
@@ -1458,37 +1477,160 @@ void bloom(dx_command_list* cl,
 		.transition(bloomTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); // For next frame.
 }
 
-void hbao(dx_command_list* cl, 
-	ref<dx_texture> linearDepth, 
-	ref<dx_texture> worldNormals, 
-	ref<dx_texture> output, 
+static void bilateralBlurShadows(dx_command_list* cl,
+	ref<dx_texture> input,
+	ref<dx_texture> tempTexture,
+	ref<dx_texture> linearDepth,
+	ref<dx_texture> screenVelocitiesTexture,
+	ref<dx_texture> history,
+	ref<dx_texture> output)
+{
+	{
+		PROFILE_ALL(cl, "Horizontal blur");
+
+		hbao_blur_cb cb;
+		cb.dimensions.x = (float)tempTexture->width;
+		cb.dimensions.y = (float)tempTexture->height;
+		cb.invDimensions.x = 1.f / cb.dimensions.x;
+		cb.invDimensions.y = 1.f / cb.dimensions.y;
+
+		cl->setPipelineState(*hbaoBlurXPipeline.pipeline);
+		cl->setComputeRootSignature(*hbaoBlurXPipeline.rootSignature);
+
+		cl->setDescriptorHeapUAV(HBAO_BLUR_RS_TEXTURES, 0, tempTexture);
+		cl->setDescriptorHeapSRV(HBAO_BLUR_RS_TEXTURES, 1, input);
+		cl->setDescriptorHeapSRV(HBAO_BLUR_RS_TEXTURES, 2, linearDepth);
+
+		cl->setCompute32BitConstants(HBAO_BLUR_RS_CB, cb);
+
+		cl->dispatch(bucketize(tempTexture->width, POST_PROCESSING_BLOCK_SIZE), bucketize(tempTexture->height, POST_PROCESSING_BLOCK_SIZE));
+
+		barrier_batcher(cl)
+			//.uav(tempTexture)
+			.transition(tempTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+			.transitionBegin(input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	}
+
+	{
+		PROFILE_ALL(cl, "Vertical blur");
+
+		hbao_blur_cb cb;
+		cb.dimensions.x = (float)output->width;
+		cb.dimensions.y = (float)output->height;
+		cb.invDimensions.x = 1.f / cb.dimensions.x;
+		cb.invDimensions.y = 1.f / cb.dimensions.y;
+
+		cl->setPipelineState(*hbaoBlurYPipeline.pipeline);
+		cl->setComputeRootSignature(*hbaoBlurYPipeline.rootSignature);
+
+		cl->setDescriptorHeapUAV(HBAO_BLUR_RS_TEXTURES, 0, output);
+		cl->setDescriptorHeapSRV(HBAO_BLUR_RS_TEXTURES, 1, tempTexture);
+		cl->setDescriptorHeapSRV(HBAO_BLUR_RS_TEXTURES, 2, linearDepth);
+		cl->setDescriptorHeapSRV(HBAO_BLUR_RS_TEXTURES, 3, screenVelocitiesTexture);
+		cl->setDescriptorHeapSRV(HBAO_BLUR_RS_TEXTURES, 4, history);
+
+		cl->setCompute32BitConstants(HBAO_BLUR_RS_CB, cb);
+
+		cl->dispatch(bucketize(output->width, POST_PROCESSING_BLOCK_SIZE), bucketize(output->height, POST_PROCESSING_BLOCK_SIZE));
+
+		barrier_batcher(cl)
+			.uav(output)
+			.transition(tempTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+			.transitionEnd(input, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	}
+}
+
+void ambientOcclusion(dx_command_list* cl,
+	ref<dx_texture> linearDepth,
+	ref<dx_texture> screenVelocitiesTexture,
+	ref<dx_texture> aoCalculationTexture,
+	ref<dx_texture> aoBlurTempTexture,
+	ref<dx_texture> history,
+	ref<dx_texture> output,
 	hbao_settings settings,
 	dx_dynamic_constant_buffer cameraCBV)
 {
 	PROFILE_ALL(cl, "HBAO");
 
-	hbao_cb cb;
-	cb.screenWidth = output->width;
-	cb.screenHeight = output->height;
-	cb.depthBufferMipLevel = log2((float)linearDepth->width / output->width);
-	cb.halfRadius = settings.radius * 0.5f;
-	cb.maxNumSteps = settings.maxNumSteps;
-	cb.numSampleDirections = settings.numSampleDirections;
-	cb.bias = settings.bias;
-	cb.strength = settings.strength;
+	{
+		PROFILE_ALL(cl, "Calculate AO");
 
-	cl->setPipelineState(*hbaoPipeline.pipeline);
-	cl->setComputeRootSignature(*hbaoPipeline.rootSignature);
+		hbao_cb cb;
+		cb.screenWidth = aoCalculationTexture->width;
+		cb.screenHeight = aoCalculationTexture->height;
+		cb.depthBufferMipLevel = log2((float)linearDepth->width / aoCalculationTexture->width);
+		cb.numRays = settings.numRays;
+		cb.maxNumStepsPerRay = settings.maxNumStepsPerRay;
+		cb.strength = settings.strength;
+		cb.radius = settings.radius;
+		cb.seed = (float)(dxContext.frameID & 0xFFFFFFFF);
 
-	cl->setDescriptorHeapUAV(HBAO_RS_TEXTURES, 0, output);
-	cl->setDescriptorHeapUAV(HBAO_RS_TEXTURES, 1, linearDepth);
-	cl->setDescriptorHeapUAV(HBAO_RS_TEXTURES, 2, worldNormals);
+		float alpha = M_TAU / settings.numRays;
+		cb.rayDeltaRotation = vec2(cos(alpha), sin(alpha));
 
-	cl->setCompute32BitConstants(HBAO_RS_CB, cb);
-	cl->setCompute32BitConstants(HBAO_RS_CAMERA, cameraCBV);
+		cl->setPipelineState(*hbaoPipeline.pipeline);
+		cl->setComputeRootSignature(*hbaoPipeline.rootSignature);
 
-	cl->dispatch(bucketize(output->width, POST_PROCESSING_BLOCK_SIZE), bucketize(output->height, POST_PROCESSING_BLOCK_SIZE));
-	cl->uavBarrier(output);
+		cl->setDescriptorHeapUAV(HBAO_RS_TEXTURES, 0, aoCalculationTexture);
+		cl->setDescriptorHeapSRV(HBAO_RS_TEXTURES, 1, linearDepth);
+
+		cl->setCompute32BitConstants(HBAO_RS_CB, cb);
+		cl->setComputeDynamicConstantBuffer(HBAO_RS_CAMERA, cameraCBV);
+
+		cl->dispatch(bucketize(aoCalculationTexture->width, POST_PROCESSING_BLOCK_SIZE), bucketize(aoCalculationTexture->height, POST_PROCESSING_BLOCK_SIZE));
+
+		barrier_batcher(cl)
+			//.uav(aoTexture)
+			.transition(aoCalculationTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+
+	bilateralBlurShadows(cl, aoCalculationTexture, aoBlurTempTexture, linearDepth, screenVelocitiesTexture, history, output);
+}
+
+void screenSpaceShadows(dx_command_list* cl, 
+	ref<dx_texture> linearDepth, 
+	ref<dx_texture> screenVelocitiesTexture, 
+	ref<dx_texture> sssCalculationTexture, 
+	ref<dx_texture> sssBlurTempTexture, 
+	ref<dx_texture> history, 
+	ref<dx_texture> output, 
+	vec3 sunDirection, 
+	sss_settings settings, 
+	const mat4& view, 
+	dx_dynamic_constant_buffer cameraCBV)
+{
+	PROFILE_ALL(cl, "Screen space shadows");
+
+	{
+		PROFILE_ALL(cl, "Calculate SSS");
+
+		cl->setPipelineState(*sssPipeline.pipeline);
+		cl->setComputeRootSignature(*sssPipeline.rootSignature);
+
+		sss_cb cb;
+		cb.invDimensions = vec2(1.f / (float)sssCalculationTexture->width, 1.f / (float)sssCalculationTexture->height);
+		cb.lightDirection = -normalize(transformDirection(view, sunDirection));
+		cb.rayDistance = settings.rayDistance;
+		cb.numSteps = settings.numSteps;
+		cb.thickness = settings.thickness;
+		cb.maxDistanceFromCamera = settings.maxDistanceFromCamera;
+		cb.distanceFadeoutRange = settings.distanceFadeoutRange;
+		cb.invBorderFadeout = 1.f / settings.borderFadeout;
+		cb.seed = (float)(dxContext.frameID & 0xFFFFFFFF);
+
+		cl->setCompute32BitConstants(SSS_RS_CB, cb);
+		cl->setComputeDynamicConstantBuffer(SSS_RS_CAMERA, cameraCBV);
+		cl->setDescriptorHeapUAV(SSS_RS_TEXTURES, 0, sssCalculationTexture);
+		cl->setDescriptorHeapSRV(SSS_RS_TEXTURES, 1, linearDepth);
+
+		cl->dispatch(bucketize(sssCalculationTexture->width, POST_PROCESSING_BLOCK_SIZE), bucketize(sssCalculationTexture->height, POST_PROCESSING_BLOCK_SIZE));
+
+		barrier_batcher(cl)
+			//.uav(aoTexture)
+			.transition(sssCalculationTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+
+	bilateralBlurShadows(cl, sssCalculationTexture, sssBlurTempTexture, linearDepth, screenVelocitiesTexture, history, output);
 }
 
 void tonemap(dx_command_list* cl,
@@ -1550,6 +1692,32 @@ void present(dx_command_list* cl,
 	cl->setCompute32BitConstants(PRESENT_RS_CB, present_cb{ present_sdr, 0.f, sharpenSettings.strength, (xOffset << 16) | yOffset });
 
 	cl->dispatch(bucketize(output->width, POST_PROCESSING_BLOCK_SIZE), bucketize(output->height, POST_PROCESSING_BLOCK_SIZE));
+}
+
+void visualizeSunShadowCascades(dx_command_list* cl, 
+	ref<dx_texture> depthBuffer, 
+	ref<dx_texture> output, 
+	dx_dynamic_constant_buffer sunCBV, 
+	const mat4& invViewProj, 
+	vec3 cameraPosition, 
+	vec3 cameraForward)
+{
+	PROFILE_ALL(cl, "Visualize sun shadow cascades");
+
+	cl->setPipelineState(*visualizeSunShadowCascadesPipeline.pipeline);
+	cl->setComputeRootSignature(*visualizeSunShadowCascadesPipeline.rootSignature);
+
+	visualize_sun_shadow_cascades_cb cb;
+	cb.invViewProj = invViewProj;
+	cb.cameraPosition = vec4(cameraPosition, 1.f);
+	cb.cameraForward = vec4(cameraForward, 0.f);
+
+	cl->setDescriptorHeapUAV(VISUALIZE_SUN_SHADOW_CASCADES_RS_TEXTURES, 0, output);
+	cl->setDescriptorHeapSRV(VISUALIZE_SUN_SHADOW_CASCADES_RS_TEXTURES, 1, depthBuffer);
+	cl->setComputeDynamicConstantBuffer(VISUALIZE_SUN_SHADOW_CASCADES_RS_SUN, sunCBV);
+	cl->setCompute32BitConstants(VISUALIZE_SUN_SHADOW_CASCADES_RS_CB, cb);
+
+	cl->dispatch(bucketize(output->width, 16), bucketize(output->height, 16));
 }
 
 void light_culling::allocateIfNecessary(uint32 renderWidth, uint32 renderHeight)

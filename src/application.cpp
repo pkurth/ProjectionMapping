@@ -67,11 +67,15 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	editor.initialize(&scene, renderer);
 
-	if (auto targetObjectMesh = loadMeshFromFile("assets/nike/nike.obj"))
+	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/nike.obj"))
 	{
+#if 0
 		mat4 tracking(0.220782f, -0.454254f, -0.863081f, 0.000000f, 0.934979f, 0.350455f, 0.054724f, 0.000000f, 0.277612f, -0.819045f, 0.502093f, 0.000000f, -0.123806f, -0.086533f, -0.444866f, 1.000000f);
 		tracking = transpose(tracking);
 		trs transform = mat4ToTRS(tracking);
+#else
+		trs transform = trs::identity;
+#endif
 
 		auto targetObject = scene.createEntity("Target object")
 			.addComponent<transform_component>(transform)
@@ -89,9 +93,9 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	scene.sun.numShadowCascades = 3;
 	scene.sun.shadowDimensions = 2048;
-	scene.sun.cascadeDistances = vec4(9.f, 39.f, 74.f, 10000.f);
-	scene.sun.bias = vec4(0.000147f, 0.000147f, 0.000221f, 0.0035f);
-	scene.sun.blendDistances = vec4(3.f, 3.f, 10.f, 10.f);
+	scene.sun.cascadeDistances = vec4(9.f, 25.f, 50.f, 10000.f);
+	scene.sun.bias = vec4(0.000588f, 0.000784f, 0.000824f, 0.0035f);
+	scene.sun.blendDistances = vec4(5.f, 10.f, 10.f, 10.f);
 	scene.sun.stabilize = true;
 
 	for (uint32 i = 0; i < NUM_BUFFERED_FRAMES; ++i)
@@ -129,15 +133,15 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 			.addComponent<projector_component>();
 	}
 #else
-	//scene.createEntity("Projector")
-	//	.addComponent<position_rotation_component>(vec3(0.25f, 0.1f, 0.46f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
-	//	.addComponent<projector_component>();
-	//
-	//scene.createEntity("Projector")
-	//	.addComponent<position_rotation_component>(vec3(-0.17f, 0.1f, 0.43f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
-	//	.addComponent<projector_component>();
+	scene.createEntity("Projector")
+		.addComponent<position_rotation_component>(vec3(0.25f, 0.1f, 0.46f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
+		.addComponent<projector_component>();
+	
+	scene.createEntity("Projector")
+		.addComponent<position_rotation_component>(vec3(-0.17f, 0.1f, 0.43f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
+		.addComponent<projector_component>();
 
-	vec3 pos(-0.261083f, 0.367653f, 0.485125f);
+	/*vec3 pos(-0.261083f, 0.367653f, 0.485125f);
 	quat rotation = mat3ToQuaternion(transpose(mat3(0.277600f, -0.844187f, 0.458570f, 0.954835f, 0.295094f, -0.034776f, -0.105964f, 0.447513f, 0.887977f)));
 
 	render_camera projCamera;
@@ -145,7 +149,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	scene.createEntity("Projector")
 		.addComponent<position_rotation_component>(pos, rotation)
-		.addComponent<projector_component>(projCamera);
+		.addComponent<projector_component>(projCamera);*/
 #endif
 
 
@@ -235,7 +239,7 @@ void application::update(const user_input& input, float dt)
 
 
 #if 1
-	if (renderer->mode == renderer_mode_rasterized)
+	if (renderer->mode != renderer_mode_pathtraced)
 	{
 		if (dxContext.featureSupport.meshShaders())
 		{

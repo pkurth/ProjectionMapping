@@ -165,7 +165,8 @@ void projector_renderer::endFrame()
 	}
 	materialInfo.environmentIntensity = 1.f;
 	materialInfo.skyIntensity = 1.f;
-	materialInfo.brdf = render_resources::brdfTex;
+	materialInfo.aoTexture = render_resources::whiteTexture;
+	materialInfo.sssTexture = render_resources::whiteTexture;
 	materialInfo.tiledCullingGrid = 0;
 	materialInfo.tiledObjectsIndexList = 0;
 	materialInfo.pointLightBuffer = 0;
@@ -189,17 +190,26 @@ void projector_renderer::endFrame()
 	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 
-	dx_render_target realDepthOnlyRenderTarget({ }, realDepthStencilBuffer);
+	auto realDepthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
+		.depthAttachment(realDepthStencilBuffer);
+
 	depthPrePass(cl, realDepthOnlyRenderTarget, opaqueRenderPass,
 		realProjectorCamera.viewProj, realProjectorCamera.prevFrameViewProj, vec2(0.f, 0.f), vec2(0.f, 0.f));
 
 
-	dx_render_target depthOnlyRenderTarget({ }, depthStencilBuffer);
+	auto depthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
+		.depthAttachment(depthStencilBuffer);
+
 	depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
 		projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
 
 
-	dx_render_target hdrOpaqueRenderTarget({ hdrColorTexture, worldNormalsTexture, reflectanceTexture }, depthStencilBuffer);
+	auto hdrOpaqueRenderTarget = dx_render_target(renderWidth, renderHeight)
+		.colorAttachment(hdrColorTexture)
+		.colorAttachment(worldNormalsTexture)
+		.colorAttachment(reflectanceTexture)
+		.depthAttachment(depthStencilBuffer);
+
 	opaqueLightPass(cl, hdrOpaqueRenderTarget, opaqueRenderPass, materialInfo, projectorCamera.viewProj);
 
 
@@ -210,7 +220,7 @@ void projector_renderer::endFrame()
 
 
 	specularAmbient(cl, hdrColorTexture, 0, worldNormalsTexture, reflectanceTexture,
-		environment ? environment->environment : 0, hdrPostProcessingTexture, materialInfo.cameraCBV);
+		environment ? environment->environment : 0, render_resources::whiteTexture, hdrPostProcessingTexture, materialInfo.cameraCBV);
 
 
 	barrier_batcher(cl)

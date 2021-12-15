@@ -1,17 +1,37 @@
 #include "core/math.h"
 
-template <typename param_set>
-struct least_squares_function
+template <typename param_set_, uint32 numResiduals_ = 1>
+struct least_squares_residual
 {
-	virtual float value(const float* x, const param_set& params) const = 0;
-	virtual void grad(const float* x, const param_set& params, float* out) const = 0;
+	using param_set = param_set_;
+	static const uint32 numParams = sizeof(param_set) / sizeof(float);
+	static const uint32 numResiduals = numResiduals_;
+
+	virtual void value(const param_set& params, float out[numResiduals]) const = 0;
+	virtual void grad(const param_set& params, float out[numResiduals][numParams]) const = 0;
 };
 
-template <uint32 xDim>
-struct least_squares_observation
+template <typename residual_t, typename param_set = residual_t::param_set, uint32 numResiduals = residual_t::numResiduals>
+struct least_squares_residual_array
 {
-	float x[xDim];
-	float y;
+	const residual_t* residuals;
+	uint32 count;
+
+	least_squares_residual_array(const residual_t* residuals, uint32 numResiduals) : residuals(residuals), count(numResiduals) {}
+	least_squares_residual_array(const std::vector<residual_t>& residuals) : residuals(residuals.data()), count((uint32)residuals.size()) {}
+	template <uint32 N> least_squares_residual_array(const residual_t(&residuals)[N]) : residuals(residuals), count(N) {}
+};
+
+struct gauss_newton_settings
+{
+	uint32 maxNumIterations = 20;
+};
+
+struct levenberg_marquardt_settings
+{
+	uint32 maxNumIterations = 20;
+	float lambda = 0.001f; 
+	float termEpsilon = 0.01f;
 };
 
 
@@ -75,35 +95,46 @@ static void conjugateGradient(const float (&A)[N][N], const float (&b)[N], float
 	}
 }
 
-template <typename param_set, uint32 xDim>
-void gaussNewton(const least_squares_function<param_set>& func, param_set& params, const least_squares_observation<xDim>* observations, uint32 numObservations,
-	uint32 maxNumIterations = 20)
+
+template <typename param_set, typename residual_t, uint32 numSubResiduals, uint32 numParams>
+static void gaussNewtonInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
+	float(&JTJ)[numParams][numParams], float(&negJTr)[numParams])
 {
-	const uint32 numParams = sizeof(param_set) / sizeof(float);
-
-	for (uint32 gnIt = 0; gnIt < maxNumIterations; ++gnIt)
+	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
-		float JTJ[numParams][numParams] = {};
-		float negJTr[numParams] = {};
+		float grad[numSubResiduals][numParams];
+		residualArray.residuals[i].grad(params, grad);
 
-		for (uint32 i = 0; i < numObservations; ++i)
+		float value[numSubResiduals];
+		residualArray.residuals[i].value(params, value);
+
+		for (uint32 s = 0; s < numSubResiduals; ++s)
 		{
-			const float* xi = observations[i].x;
-			float grad[numParams];
-			func.grad(xi, params, grad);
-
-			float value = func.value(xi, params);
-
 			for (uint32 r = 0; r < numParams; ++r)
 			{
 				for (uint32 c = 0; c < numParams; ++c)
 				{
-					JTJ[r][c] += grad[r] * grad[c];
+					JTJ[r][c] += grad[s][r] * grad[s][c];
 				}
 
-				negJTr[r] += -grad[r] * (observations[i].y - value);
+				negJTr[r] += -grad[s][r] * value[s];
 			}
 		}
+	}
+}
+
+template <typename param_set, typename... residual_t, uint32... numSubResiduals>
+void gaussNewton(gauss_newton_settings settings, param_set& params, 
+	least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArrays)
+{
+	const uint32 numParams = sizeof(param_set) / sizeof(float);
+
+	for (uint32 gnIt = 0; gnIt < settings.maxNumIterations; ++gnIt)
+	{
+		float JTJ[numParams][numParams] = {};
+		float negJTr[numParams] = {};
+
+		(gaussNewtonInternal(params, residualArrays, JTJ, negJTr), ...);
 
 		float x[numParams] = {}; // Step
 		conjugateGradient(JTJ, negJTr, x, 5);
@@ -116,63 +147,92 @@ void gaussNewton(const least_squares_function<param_set>& func, param_set& param
 	}
 }
 
-template <typename param_set, uint32 xDim>
-static float chiSquared(const least_squares_function<param_set>& func, param_set& params, const least_squares_observation<xDim>* observations, uint32 numObservations)
+template <typename param_set, typename residual_t>
+void gaussNewton(gauss_newton_settings settings, param_set& params, const residual_t* residuals, uint32 numResiduals)
+{
+	least_squares_residual_array<residual_t> arr(residuals, numResiduals);
+	gaussNewton(settings, params, arr);
+}
+
+template <typename param_set, typename residual_t, uint32 numSubResiduals>
+static float chiSquaredInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray)
 {
 	float sum = 0.f;
 
-	for (uint32 i = 0; i < numObservations; ++i)
+	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
-		float d = observations[i].y - func.value(observations[i].x, params);
-		//d = d / s[i];
-		sum = sum + (d * d);
+		float value[numSubResiduals];
+		residualArray.residuals[i].value(params, value);
+		for (uint32 s = 0; s < numSubResiduals; ++s)
+		{
+			float d = value[s];
+			//d = d / s[i];
+			sum = sum + (d * d);
+		}
 	}
 
 	return sum;
 }
 
-template <typename param_set, uint32 xDim>
-void levenbergMarquardt(const least_squares_function<param_set>& func, param_set& params, const least_squares_observation<xDim>* observations, uint32 numObservations,
-	float lambda = 0.001f, float termEpsilon = 0.01f, uint32 maxNumIterations = 20)
+template <typename param_set, typename... residual_t, uint32... numSubResiduals>
+static float chiSquared(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArray)
+{
+	return (chiSquaredInternal(params, residualArray) + ...);
+}
+
+template <typename param_set, typename residual_t, uint32 numSubResiduals, uint32 numParams>
+static void levenbergMarquardtInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
+	float(&H)[numParams][numParams], float(&g)[numParams])
+{
+	for (uint32 i = 0; i < residualArray.count; ++i)
+	{
+		float grad[numSubResiduals][numParams];
+		residualArray.residuals[i].grad(params, grad);
+
+		float value[numSubResiduals];
+		residualArray.residuals[i].value(params, value);
+
+		float oos2 = 1.f; // Squared observation weight.
+
+		for (uint32 s = 0; s < numSubResiduals; ++s)
+		{
+			for (uint32 r = 0; r < numParams; ++r)
+			{
+				for (uint32 c = 0; c < numParams; ++c)
+				{
+					H[r][c] += oos2 * grad[s][r] * grad[s][c];
+				}
+
+				g[r] += oos2 * value[s] * grad[s][r];
+			}
+		}
+	}
+}
+
+template <typename param_set, typename... residual_t, uint32... numSubResiduals>
+void levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, 
+	least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArrays)
 {
 	// http://scribblethink.org/Computer/Javanumeric/LM.java
 
 	const uint32 numParams = sizeof(param_set) / sizeof(float);
 
-	float e0 = chiSquared(func, params, observations, numObservations);
+	float e0 = chiSquared(params, residualArrays...);
 
 	uint32 term = 0;
 
-	for (uint32 lmIt = 0; lmIt < maxNumIterations; ++lmIt)
+	for (uint32 lmIt = 0; lmIt < settings.maxNumIterations; ++lmIt)
 	{
 		float H[numParams][numParams] = {};
 		float g[numParams] = {};
 
 		// Hessian approximation and gradient.
-		for (uint32 i = 0; i < numObservations; ++i)
-		{
-			const float* xi = observations[i].x;
-			float grad[numParams];
-			func.grad(xi, params, grad);
-			float value = func.value(xi, params);
-
-			float oos2 = 1.f; // Squared observation weight.
-
-			for (uint32 r = 0; r < numParams; ++r)
-			{
-				for (uint32 c = 0; c < numParams; ++c)
-				{
-					H[r][c] += oos2 * grad[r] * grad[c];
-				}
-
-				g[r] += oos2 * (observations[i].y - value) * grad[r];
-			}
-		}
+		(levenbergMarquardtInternal(params, residualArrays, H, g), ...);
 
 		// Boost diagonal towards gradient descent.
 		for (uint32 r = 0; r < numParams; ++r)
 		{
-			H[r][r] *= (1.f + lambda);
+			H[r][r] *= (1.f + settings.lambda);
 		}
 
 		float x[numParams] = {};
@@ -186,12 +246,12 @@ void levenbergMarquardt(const least_squares_function<param_set>& func, param_set
 		}
 
 
-		float e1 = chiSquared(func, newParams, observations, numObservations);
+		float e1 = chiSquared(newParams, residualArrays...);
 
 		bool done = false;
 
-		// Termination test (slightly different than NR)
-		if (abs(e1 - e0) > termEpsilon)
+		// Termination test.
+		if (abs(e1 - e0) > settings.termEpsilon)
 		{
 			term = 0;
 		}
@@ -207,12 +267,12 @@ void levenbergMarquardt(const least_squares_function<param_set>& func, param_set
 		if (e1 > e0 || isnan(e1))
 		{
 			// New location is worse than before.
-			lambda *= 10.f;
+			settings.lambda *= 10.f;
 		}
 		else
 		{
 			// New location is better, accept new parameters.
-			lambda *= 0.1f;
+			settings.lambda *= 0.1f;
 			e0 = e1;
 			params = newParams;
 		}
@@ -222,5 +282,12 @@ void levenbergMarquardt(const least_squares_function<param_set>& func, param_set
 			break;
 		}
 	}
+}
+
+template <typename param_set, typename residual_t>
+void levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, const residual_t* residuals, uint32 numResiduals)
+{
+	least_squares_residual_array<residual_t> arr(residuals, numResiduals);
+	levenbergMarquardt(settings, params, arr);
 }
 

@@ -64,88 +64,36 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 	projector_cb* realViewProjs = (projector_cb*)alloc.cpuPtr;
 	realViewProjsGPUAddress = alloc.gpuPtr;
 
+
+	for (uint32 i = 0; i < arraysize(descriptors); ++i)
+	{
+		descriptors[i].cpuHandle = heap.baseCPU + i * numProjectors;
+		descriptors[i].gpuHandle = heap.baseGPU + i * numProjectors;
+	}
+
 	for (uint32 i = 0; i < numProjectors; ++i)
 	{
 		const projector_component& p = projectors[i];
 
-		projectorToCB(p.calibratedCamera, *viewProjs++);
-		projectorToCB(p.realCamera, *realViewProjs++);
+		projectorToCB(p.calibratedCamera, viewProjs[i]);
+		projectorToCB(p.realCamera, realViewProjs[i]);
 		
 		widths[i] = p.calibratedCamera.width;
 		heights[i] = p.calibratedCamera.height;
 		intensityTextures[i] = p.renderer.solverIntensityTexture.get();
 		intensityTempTextures[i] = p.renderer.solverIntensityTempTexture.get();
-	}
 
 
-	linearRenderResultsBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureSRV(p.renderer.ldrPostProcessingTexture);
-	}
-
-	srgbRenderResultsBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureSRV(p.renderer.frameResult);
-	}
-
-	worldNormalsBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureSRV(p.renderer.worldNormalsTexture);
-	}
-
-	depthTexturesBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().createDepthTextureSRV(p.renderer.depthStencilBuffer);
-	}
-
-	realDepthTexturesBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().createDepthTextureSRV(p.renderer.realDepthStencilBuffer);
-	}
-
-	depthDiscontinuitiesTexturesBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().createDepthTextureSRV(p.renderer.depthDiscontinuitiesTexture);
-	}
-
-	intensitiesSRVBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureSRV(p.renderer.solverIntensityTexture);
-	}
-
-	intensitiesUAVBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureUAV(p.renderer.solverIntensityTexture);
-	}
-
-	tempIntensitiesSRVBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureSRV(p.renderer.solverIntensityTempTexture);
-	}
-
-	tempIntensitiesUAVBaseDescriptor = heap.currentGPU;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		const projector_component& p = projectors[i];
-		heap.push().create2DTextureUAV(p.renderer.solverIntensityTempTexture);
+		(linearRenderResultsBaseDescriptor + i).create2DTextureSRV(p.renderer.ldrPostProcessingTexture);
+		(srgbRenderResultsBaseDescriptor + i).create2DTextureSRV(p.renderer.frameResult);
+		(worldNormalsBaseDescriptor + i).create2DTextureSRV(p.renderer.worldNormalsTexture);
+		(depthTexturesBaseDescriptor + i).createDepthTextureSRV(p.renderer.depthStencilBuffer);
+		(realDepthTexturesBaseDescriptor + i).createDepthTextureSRV(p.renderer.realDepthStencilBuffer);
+		(depthDiscontinuitiesTexturesBaseDescriptor + i).create2DTextureSRV(p.renderer.depthDiscontinuitiesTexture);
+		(intensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTexture);
+		(intensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTexture);
+		(tempIntensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTempTexture);
+		(tempIntensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTempTexture);
 	}
 }
 

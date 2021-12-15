@@ -1331,6 +1331,18 @@ bool scene_editor::deserializeFromFile()
 	return false;
 }
 
+static bool editCamera(render_camera& camera)
+{
+	bool result = false;
+	if (ImGui::BeginTree("Camera"))
+	{
+		result |= ImGui::PropertySliderAngle("Field of view", camera.verticalFOV, 1.f, 150.f);
+		
+		ImGui::EndTree();
+	}
+	return result;
+}
+
 static bool plotAndEditTonemapping(tonemap_settings& tonemap)
 {
 	bool result = false;
@@ -1372,10 +1384,14 @@ static bool editSunShadowParameters(directional_light& sun)
 		{
 			result |= ImGui::PropertySlider("Intensity", sun.intensity, 0.f, 1000.f);
 			result |= ImGui::PropertyColor("Color", sun.color);
+
+			result |= ImGui::PropertyDropdownPowerOfTwo("Shadow resolution", 128, 2048, sun.shadowDimensions);
+			result |= ImGui::PropertyCheckbox("Stabilize", sun.stabilize);
+
 			result |= ImGui::PropertySlider("# Cascades", sun.numShadowCascades, 1, 4);
 
 			const float minCascadeDistance = 0.f, maxCascadeDistance = 300.f;
-			const float minBias = 0.f, maxBias = 0.005f;
+			const float minBias = 0.f, maxBias = 0.0015f;
 			const float minBlend = 0.f, maxBlend = 10.f;
 			if (sun.numShadowCascades == 1)
 			{
@@ -1410,7 +1426,7 @@ static bool editSunShadowParameters(directional_light& sun)
 	return result;
 }
 
-static bool editAO(bool& enable, hbao_settings& settings)
+static bool editAO(bool& enable, hbao_settings& settings, const ref<dx_texture>& aoTexture)
 {
 	bool result = false;
 	if (ImGui::BeginProperties())
@@ -1418,13 +1434,47 @@ static bool editAO(bool& enable, hbao_settings& settings)
 		result |= ImGui::PropertyCheckbox("Enable HBAO", enable);
 		if (enable)
 		{
+			result |= ImGui::PropertySlider("Num rays", settings.numRays, 1, 16);
+			result |= ImGui::PropertySlider("Max num steps per ray", settings.maxNumStepsPerRay, 1, 16);
+			result |= ImGui::PropertySlider("Radius", settings.radius, 0.f, 1.f, "%.3fm");
+			result |= ImGui::PropertySlider("Strength", settings.strength, 0.f, 2.f);
 		}
 		ImGui::EndProperties();
+	}
+	if (enable && aoTexture && ImGui::BeginTree("Show##ShowAO"))
+	{
+		ImGui::Image(aoTexture);
+		ImGui::EndTree();
 	}
 	return result;
 }
 
-static bool editSSR(bool& enable, ssr_settings& settings)
+static bool editSSS(bool& enable, sss_settings& settings, const ref<dx_texture>& sssTexture)
+{
+	bool result = false;
+	if (ImGui::BeginProperties())
+	{
+		result |= ImGui::PropertyCheckbox("Enable SSS", enable);
+		if (enable)
+		{
+			result |= ImGui::PropertySlider("Num iterations", settings.numSteps, 1, 64);
+			result |= ImGui::PropertySlider("Ray distance", settings.rayDistance, 0.05f, 3.f, "%.3fm");
+			result |= ImGui::PropertySlider("Thickness", settings.thickness, 0.05f, 1.f, "%.3fm");
+			result |= ImGui::PropertySlider("Max distance from camera", settings.maxDistanceFromCamera, 5.f, 1000.f, "%.3fm");
+			result |= ImGui::PropertySlider("Distance fadeout range", settings.distanceFadeoutRange, 1.f, 5.f, "%.3fm");
+			result |= ImGui::PropertySlider("Border fadeout", settings.borderFadeout, 0.f, 0.5f);
+		}
+		ImGui::EndProperties();
+	}
+	if (enable && sssTexture && ImGui::BeginTree("Show##ShowSSS"))
+	{
+		ImGui::Image(sssTexture);
+		ImGui::EndTree();
+	}
+	return result;
+}
+
+static bool editSSR(bool& enable, ssr_settings& settings, const ref<dx_texture>& ssrTexture)
 {
 	bool result = false;
 	if (ImGui::BeginProperties())
@@ -1433,11 +1483,16 @@ static bool editSSR(bool& enable, ssr_settings& settings)
 		if (enable)
 		{
 			result |= ImGui::PropertySlider("Num iterations", settings.numSteps, 1, 1024);
-			result |= ImGui::PropertySlider("Max distance", settings.maxDistance, 5.f, 1000.f);
-			result |= ImGui::PropertySlider("Min. stride", settings.minStride, 1.f, 50.f);
-			result |= ImGui::PropertySlider("Max. stride", settings.maxStride, settings.minStride, 50.f);
+			result |= ImGui::PropertySlider("Max distance", settings.maxDistance, 5.f, 1000.f, "%.3fm");
+			result |= ImGui::PropertySlider("Min stride", settings.minStride, 1.f, 50.f, "%.3fm");
+			result |= ImGui::PropertySlider("Max stride", settings.maxStride, settings.minStride, 50.f, "%.3fm");
 		}
 		ImGui::EndProperties();
+	}
+	if (enable && ssrTexture && ImGui::BeginTree("Show##ShowSSR"))
+	{
+		ImGui::Image(ssrTexture);
+		ImGui::EndTree();
 	}
 	return result;
 }
@@ -1457,7 +1512,7 @@ static bool editTAA(bool& enable, taa_settings& settings)
 	return result;
 }
 
-static bool editBloom(bool& enable, bloom_settings& settings)
+static bool editBloom(bool& enable, bloom_settings& settings, const ref<dx_texture>& bloomTexture)
 {
 	bool result = false;
 	if (ImGui::BeginProperties())
@@ -1469,6 +1524,11 @@ static bool editBloom(bool& enable, bloom_settings& settings)
 			result |= ImGui::PropertySlider("Bloom strength", settings.strength);
 		}
 		ImGui::EndProperties();
+	}
+	if (enable && bloomTexture && ImGui::BeginTree("Show##ShowBloom"))
+	{
+		ImGui::Image(bloomTexture);
+		ImGui::EndTree();
 	}
 	return result;
 }
@@ -1515,21 +1575,17 @@ void scene_editor::drawSettings(float dt)
 			ImGui::EndProperties();
 		}
 
+		editCamera(scene->camera);
 		plotAndEditTonemapping(renderer->settings.tonemapSettings);
 		editSunShadowParameters(scene->sun);
 
 		if (ImGui::BeginTree("Post processing"))
 		{
-			if (ImGui::BeginProperties())
-			{
-				ImGui::PropertyCheckbox("Disable all post processing", renderer->disableAllPostProcessing);
-				ImGui::EndProperties();
-			}
-
-			if (renderer->spec.allowAO) { editAO(renderer->settings.enableAO, renderer->settings.aoSettings); ImGui::Separator(); }
-			if (renderer->spec.allowSSR) { editSSR(renderer->settings.enableSSR, renderer->settings.ssrSettings); ImGui::Separator(); }
+			if (renderer->spec.allowAO) { editAO(renderer->settings.enableAO, renderer->settings.aoSettings, renderer->getAOResult()); ImGui::Separator(); }
+			if (renderer->spec.allowSSS) { editSSS(renderer->settings.enableSSS, renderer->settings.sssSettings, renderer->getSSSResult()); ImGui::Separator(); }
+			if (renderer->spec.allowSSR) { editSSR(renderer->settings.enableSSR, renderer->settings.ssrSettings, renderer->getSSRResult()); ImGui::Separator(); }
 			if (renderer->spec.allowTAA) { editTAA(renderer->settings.enableTAA, renderer->settings.taaSettings); ImGui::Separator(); }
-			if (renderer->spec.allowBloom) { editBloom(renderer->settings.enableBloom, renderer->settings.bloomSettings); ImGui::Separator(); }
+			if (renderer->spec.allowBloom) { editBloom(renderer->settings.enableBloom, renderer->settings.bloomSettings, renderer->getBloomResult()); ImGui::Separator(); }
 			editSharpen(renderer->settings.enableSharpen, renderer->settings.sharpenSettings);
 
 			ImGui::EndTree();

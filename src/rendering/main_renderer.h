@@ -28,6 +28,9 @@ struct renderer_settings
 	bool enableAO = true;
 	hbao_settings aoSettings;
 
+	bool enableSSS = true;
+	sss_settings sssSettings;
+
 	bool enableSSR = true;
 	ssr_settings ssrSettings;
 
@@ -61,6 +64,7 @@ static const char* aspectRatioNames[] =
 enum renderer_mode
 {
 	renderer_mode_rasterized,
+	renderer_mode_visualize_sun_shadow_cascades,
 	renderer_mode_pathtraced,
 
 	renderer_mode_count,
@@ -69,14 +73,16 @@ enum renderer_mode
 static const char* rendererModeNames[] =
 {
 	"Rasterized",
+	"Visualize sun shadow cascades",
 	"Path-traced",
 };
 
 
 struct renderer_spec
 {
-	bool allowObjectPicking = true; // This currently can only be true, if ALL other flags are also set to true.
+	bool allowObjectPicking = true;
 	bool allowAO = true;
+	bool allowSSS = true;
 	bool allowSSR = true;
 	bool allowTAA = true;
 	bool allowBloom = true;
@@ -127,6 +133,12 @@ struct main_renderer
 
 	path_tracer pathTracer;
 
+
+	const ref<dx_texture>& getAOResult() const { return aoTextures[aoHistoryIndex]; }
+	const ref<dx_texture>& getSSSResult() const { return sssTextures[sssHistoryIndex]; }
+	const ref<dx_texture>& getSSRResult() const { return ssrResolveTexture; }
+	const ref<dx_texture>& getBloomResult() const { return bloomTexture; }
+
 private:
 
 	raytracing_tlas* tlas;
@@ -151,7 +163,18 @@ private:
 	ref<dx_texture> depthStencilBuffer;
 	ref<dx_texture> linearDepthBuffer;
 	ref<dx_texture> opaqueDepthBuffer; // The depth-stencil buffer gets copied to this texture after the opaque pass.
-	ref<dx_texture> aoTexture;
+
+	ref<dx_texture> aoCalculationTexture;
+	ref<dx_texture> aoBlurTempTexture;
+	ref<dx_texture> aoTextures[2]; // These get flip-flopped from frame to frame.
+	uint32 aoHistoryIndex = 0;
+	bool aoWasOnLastFrame = false;
+
+	ref<dx_texture> sssCalculationTexture;
+	ref<dx_texture> sssBlurTempTexture;
+	ref<dx_texture> sssTextures[2]; // These get flip-flopped from frame to frame.
+	uint32 sssHistoryIndex = 0;
+	bool sssWasOnLastFrame = false;
 
 	ref<dx_texture> ssrRaycastTexture;
 	ref<dx_texture> ssrResolveTexture;

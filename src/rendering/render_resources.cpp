@@ -19,8 +19,8 @@ ref<dx_texture> render_resources::staticShadowMapCache;
 dx_cpu_descriptor_handle render_resources::nullTextureSRV;
 dx_cpu_descriptor_handle render_resources::nullBufferSRV;
 
-dx_cpu_descriptor_handle render_resources::nullTextureUAV;
-dx_cpu_descriptor_handle render_resources::nullBufferUAV;
+dx_rtv_descriptor_handle render_resources::nullScreenVelocitiesRTV;
+dx_rtv_descriptor_handle render_resources::nullObjectIDsRTV;
 
 dx_heap render_resources::resourceHeap;
 std::unordered_map<uint64, render_resources::temporary_render_resources> render_resources::resourceMap;
@@ -60,8 +60,8 @@ void render_resources::initializeGlobalResources()
 	nullTextureSRV = dx_cpu_descriptor_handle(dxContext.srvUavAllocator.allocate(1).cpuAt(0)).createNullTextureSRV();
 	nullBufferSRV = dx_cpu_descriptor_handle(dxContext.srvUavAllocator.allocate(1).cpuAt(0)).createNullBufferSRV();
 
-	nullTextureUAV = dx_cpu_descriptor_handle(dxContext.srvUavAllocator.allocate(1).cpuAt(0)).createNullTextureUAV();
-	nullBufferUAV = dx_cpu_descriptor_handle(dxContext.srvUavAllocator.allocate(1).cpuAt(0)).createNullBufferUAV();
+	nullScreenVelocitiesRTV = dx_rtv_descriptor_handle(dxContext.rtvAllocator.allocate(1).cpuAt(0)).createNullTextureRTV(screenVelocitiesFormat);
+	nullObjectIDsRTV = dx_rtv_descriptor_handle(dxContext.rtvAllocator.allocate(1).cpuAt(0)).createNullTextureRTV(objectIDsFormat);
 }
 
 void render_resources::declareTemporaryResourceNeeds(uint64 id, const std::vector<render_resource_desc>& descs)
