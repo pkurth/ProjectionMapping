@@ -612,6 +612,53 @@ namespace ImGui
 		return ImGui::InputInternal(ImGuiDataType_U32, 1, label, &f, format);
 	}
 
+	static bool DragInternal(ImGuiDataType_ type, int32 count, const char* label, void* f, float speed, const char* format)
+	{
+		pre(label);
+		bool result;
+		if (count == 1)
+		{
+			result = ImGui::DragScalar("", type, f, speed, 0, 0, format);
+		}
+		else
+		{
+			result = ImGui::DragScalarN("", type, f, count, speed, 0, 0, format);
+		}
+		post();
+		return result;
+	}
+
+	bool PropertyDrag(const char* label, float& f, float speed, const char* format)
+	{
+		return ImGui::DragInternal(ImGuiDataType_Float, 1, label, &f, speed, format);
+	}
+
+	bool PropertyDrag(const char* label, vec2& f, float speed, const char* format)
+	{
+		return ImGui::DragInternal(ImGuiDataType_Float, 2, label, f.data, speed, format);
+	}
+
+	bool PropertyDrag(const char* label, vec3& f, float speed, const char* format)
+	{
+		return ImGui::DragInternal(ImGuiDataType_Float, 3, label, f.data, speed, format);
+	}
+
+	bool PropertyDrag(const char* label, vec4& f, float speed, const char* format)
+	{
+		return ImGui::DragInternal(ImGuiDataType_Float, 4, label, f.data, speed, format);
+	}
+
+	bool PropertyDrag(const char* label, int32& f, float speed, const char* format)
+	{
+		return ImGui::DragInternal(ImGuiDataType_S32, 1, label, &f, speed, format);
+	}
+
+	bool PropertyDrag(const char* label, uint32& f, float speed, const char* format)
+	{
+		return ImGui::DragInternal(ImGuiDataType_U32, 1, label, &f, speed, format);
+	}
+
+
 	bool PropertyDropdown(const char* label, const char** names, uint32 count, uint32& current)
 	{
 		pre(label);

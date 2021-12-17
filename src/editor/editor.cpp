@@ -394,39 +394,88 @@ bool scene_editor::drawSceneHierarchy()
 				{
 					drawComponent<transform_component>(selectedEntity, "TRANSFORM", [this, &objectMovedByWidget](transform_component& transform)
 					{
-						objectMovedByWidget |= ImGui::DragFloat3("Position", transform.position.data, 0.1f, 0.f, 0.f);
-
-						if (ImGui::DragFloat3("Rotation", selectedEntityEulerRotation.data, 0.1f, 0.f, 0.f))
+						if (ImGui::BeginProperties())
 						{
-							vec3 euler = selectedEntityEulerRotation;
-							euler.x = deg2rad(euler.x);
-							euler.y = deg2rad(euler.y);
-							euler.z = deg2rad(euler.z);
-							transform.rotation = eulerToQuat(euler);
+							objectMovedByWidget |= ImGui::PropertyDrag("Position", transform.position, 0.1f);
 
-							objectMovedByWidget = true;
+							if (ImGui::PropertyDrag("Rotation", selectedEntityEulerRotation, 0.1f))
+							{
+								vec3 euler = selectedEntityEulerRotation;
+								euler.x = deg2rad(euler.x);
+								euler.y = deg2rad(euler.y);
+								euler.z = deg2rad(euler.z);
+								transform.rotation = eulerToQuat(euler);
+
+								objectMovedByWidget = true;
+							}
+
+							objectMovedByWidget |= ImGui::PropertyDrag("Scale", transform.scale, 0.1f);
+
+							if (ImGui::PropertyButton("Export", "Copy 4x4 matrix to clipboard"))
+							{
+								mat4 m = trsToMat4(transform);
+
+								char buffer[512];
+								snprintf(buffer, sizeof(buffer),
+									"%f %f %f %f "
+									"%f %f %f %f "
+									"%f %f %f %f "
+									"%f %f %f %f",
+									m.m[0], m.m[1], m.m[2], m.m[3],
+									m.m[4], m.m[5], m.m[6], m.m[7],
+									m.m[8], m.m[9], m.m[10], m.m[11],
+									m.m[12], m.m[13], m.m[14], m.m[15]);
+								
+								ImGui::SetClipboardText(buffer);
+							}
+
+							if (ImGui::PropertyButton("Import", "Set from clipboard"))
+							{
+								mat4 m;
+
+								const char* buffer = ImGui::GetClipboardText();
+								sscanf(buffer,
+									"%f %f %f %f "
+									"%f %f %f %f "
+									"%f %f %f %f "
+									"%f %f %f %f",
+									&m.m[0], &m.m[1], &m.m[2], &m.m[3],
+									&m.m[4], &m.m[5], &m.m[6], &m.m[7],
+									&m.m[8], &m.m[9], &m.m[10], &m.m[11],
+									&m.m[12], &m.m[13], &m.m[14], &m.m[15]);
+
+								transform = mat4ToTRS(m);
+							}
+
+							ImGui::EndProperties();
 						}
-
-						objectMovedByWidget |= ImGui::DragFloat3("Scale", transform.scale.data, 0.1f, 0.f, 0.f);
 					});
 
 					drawComponent<position_component>(selectedEntity, "TRANSFORM", [&objectMovedByWidget](position_component& position)
 					{
-						objectMovedByWidget |= ImGui::DragFloat3("Position", position.position.data, 0.1f, 0.f, 0.f);
+						if (ImGui::BeginProperties())
+						{
+							objectMovedByWidget |= ImGui::PropertyDrag("Position", position.position, 0.1f);
+							ImGui::EndProperties();
+						}
 					});
 
 					drawComponent<position_rotation_component>(selectedEntity, "TRANSFORM", [this, &objectMovedByWidget](position_rotation_component& pr)
 					{
-						objectMovedByWidget |= ImGui::DragFloat3("Translation", pr.position.data, 0.1f, 0.f, 0.f);
-						if (ImGui::DragFloat3("Rotation", selectedEntityEulerRotation.data, 0.1f, 0.f, 0.f))
+						if (ImGui::BeginProperties())
 						{
-							vec3 euler = selectedEntityEulerRotation;
-							euler.x = deg2rad(euler.x);
-							euler.y = deg2rad(euler.y);
-							euler.z = deg2rad(euler.z);
-							pr.rotation = eulerToQuat(euler);
+							objectMovedByWidget |= ImGui::PropertyDrag("Translation", pr.position, 0.1f);
+							if (ImGui::PropertyDrag("Rotation", selectedEntityEulerRotation, 0.1f))
+							{
+								vec3 euler = selectedEntityEulerRotation;
+								euler.x = deg2rad(euler.x);
+								euler.y = deg2rad(euler.y);
+								euler.z = deg2rad(euler.z);
+								pr.rotation = eulerToQuat(euler);
 
-							objectMovedByWidget = true;
+								objectMovedByWidget = true;
+							}
+							ImGui::EndProperties();
 						}
 					});
 
