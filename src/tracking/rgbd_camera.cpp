@@ -157,16 +157,18 @@ void rgbd_camera::operator=(rgbd_camera&& o) noexcept
     depthSensor = o.depthSensor;
     colorSensor = o.colorSensor;
     type = o.type;
+
+    o.depthSensor.unprojectTable = 0;
+    o.colorSensor.unprojectTable = 0;
 }
 
-// Use only for depth image.
-static void createUnprojectTable(const k4a_calibration_t& calibration, vec2* unprojectTable)
+static void createUnprojectTable(const k4a_calibration_t& calibration, vec2* unprojectTable, bool depth)
 {
-    int width = calibration.depth_camera_calibration.resolution_width;
-    int height = calibration.depth_camera_calibration.resolution_height;
+    int width = depth ? calibration.depth_camera_calibration.resolution_width : calibration.color_camera_calibration.resolution_width;
+    int height = depth ? calibration.depth_camera_calibration.resolution_height : calibration.color_camera_calibration.resolution_height;
+    k4a_calibration_type_t type = depth ? K4A_CALIBRATION_TYPE_DEPTH : K4A_CALIBRATION_TYPE_COLOR;
 
     vec2 p;
-
     vec2 nanv(nanf(""));
 
     for (int y = 0, idx = 0; y < height; ++y)
@@ -179,7 +181,7 @@ static void createUnprojectTable(const k4a_calibration_t& calibration, vec2* unp
             vec3 ray;
             int valid;
             k4a_calibration_2d_to_3d(
-                &calibration, (k4a_float2_t*)&p, 1.f, K4A_CALIBRATION_TYPE_DEPTH, K4A_CALIBRATION_TYPE_DEPTH, (k4a_float3_t*)&ray, &valid);
+                &calibration, (k4a_float2_t*)&p, 1.f, type, type, (k4a_float3_t*)&ray, &valid);
 
             ray.y = -ray.y;
             unprojectTable[idx] = valid ? ray.xy : nanv;
@@ -187,14 +189,28 @@ static void createUnprojectTable(const k4a_calibration_t& calibration, vec2* unp
     }
 }
 
-static void createDefaultUnprojectTable(camera_intrinsics intrinsics, vec2* unprojectTable, uint32 width, uint32 height)
+static void createUnprojectTable(const rs2_stream_profile* streamProfile, vec2* unprojectTable)
 {
-    for (uint32 y = 0, idx = 0; y < height; ++y)
+    rs2_error* e = 0;
+
+    rs2_intrinsics intrinsics;
+    rs2_get_video_stream_intrinsics(streamProfile, &intrinsics, &e);
+    assertRealsenseSuccess(e);
+
+    vec2 p;
+
+    for (int y = 0, idx = 0; y < intrinsics.height; ++y)
     {
-        for (uint32 x = 0; x < width; ++x, ++idx)
+        p.y = (float)y;
+        for (int x = 0; x < intrinsics.width; ++x, ++idx)
         {
-            unprojectTable[idx].x = (x - intrinsics.cx) / intrinsics.fx;
-            unprojectTable[idx].y = -(y - intrinsics.cy) / intrinsics.fy;
+            p.x = (float)x;
+
+            vec3 ray;
+            rs2_deproject_pixel_to_point(ray.data, &intrinsics, p.data, 1.f);
+
+            ray.y = -ray.y;
+            unprojectTable[idx] = ray.xy;
         }
     }
 }
@@ -241,7 +257,6 @@ static void getCalibration(const k4a_calibration_camera_t& calib, rgbd_camera_se
     result.rotation = conjugate(rotation);
     result.position = -(conjugate(rotation) * position);
 }
-
 
 static const rs2_stream_profile* getStreamProfile(rs2_stream_profile_list* streamList, rs2_stream streamType)
 {
@@ -344,7 +359,7 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
             getCalibration(calibration.depth_camera_calibration, depthSensor);
 
             depthSensor.unprojectTable = new vec2[depthSensor.width * depthSensor.height];
-            createUnprojectTable(calibration, depthSensor.unprojectTable);
+            createUnprojectTable(calibration, depthSensor.unprojectTable, true);
         }
         if (colorSensor.active)
         {
@@ -365,7 +380,7 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
     rs2_error* e = 0;
 
     rs2_device_list* deviceList = rs2_query_devices(rsContext, &e);
-    realsense.device = rs2_create_device(deviceList, 0, &e);
+    realsense.device = rs2_create_device(deviceList, deviceIndex, &e);
     if (!checkRealsenseSuccess(e))
     {
         return false;
@@ -414,7 +429,7 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         getCalibration(depthStreamProfile, depthStreamProfile, depthSensor);
         
         depthSensor.unprojectTable = new vec2[depthSensor.width * depthSensor.height];
-        createDefaultUnprojectTable(depthSensor.intrinsics, depthSensor.unprojectTable, depthSensor.width, depthSensor.height);
+        createUnprojectTable(depthStreamProfile, depthSensor.unprojectTable);
 
         if (colorSensor.active)
         {
@@ -497,6 +512,12 @@ void rgbd_camera::shutdown()
     {
         delete depthSensor.unprojectTable;
         depthSensor.unprojectTable = 0;
+    }
+
+    if (colorSensor.unprojectTable)
+    {
+        delete colorSensor.unprojectTable;
+        colorSensor.unprojectTable = 0;
     }
 
     type = rgbd_camera_type_uninitialized;

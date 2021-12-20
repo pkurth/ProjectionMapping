@@ -208,7 +208,7 @@ void projector_solver::solve()
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_INTENSITIES, intensitiesSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_OUT_CONFIDENCES, confidencesUAVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_OUTPUT, confidencesUAVBaseDescriptor);
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{

@@ -307,7 +307,7 @@ ps_output main(ps_input IN)
 	// Normal and reflectance are not needed for transparent surfaces.
 #endif
 
-	OUT.hdrColor.rgb = float3(0.6f, 0.6f, 0.6f);
+	//OUT.hdrColor.rgb = float3(0.6f, 0.6f, 0.6f);
 
 	return OUT;
 }

@@ -5,7 +5,7 @@
 ConstantBuffer<projector_intensity_cb> cb	: register(b0, space0);
 StructuredBuffer<projector_cb> projectors	: register(t0, space0);
 
-Texture2D<float> confidenceTextures[32]		: register(t0, space1);
+Texture2D<float2> confidenceTextures[32]	: register(t0, space1);
 Texture2D<float> depthTextures[32]			: register(t0, space2);
 
 RWTexture2D<float> outIntensities[32]		: register(u0, space0);
@@ -39,12 +39,13 @@ void main(cs_input IN)
 
 	float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 
-	//float confidences[32];
-	//uint numConfidences = 0;
+	float2 confidences[32];
+	uint numConfidences = 0;
 
 	float confidenceSum = 0.f;
 	float maxConfidence = 0.f;
 
+#if 0
 	uint numProjectors = cb.numProjectors;
 	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
 	{
@@ -59,18 +60,18 @@ void main(cs_input IN)
 			float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
 			if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
 			{
-				float conf = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0);
-				if (conf > 0.f)
+				float2 confidence = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0);
+				if (confidence.y > 0.f)
 				{
-					//confidences[numConfidences++] = conf;
-					confidenceSum += conf;
-					maxConfidence = max(maxConfidence, conf);
+					//confidences[numConfidences++] = confidence;
+					confidenceSum += confidence;
+					maxConfidence = max(maxConfidence, confidence);
 				}
 			}
 		}
 	}
 
-	float ownConfidence = confidenceTextures[index][texCoord];
+	float2 ownConfidence = confidenceTextures[index][texCoord];
 
 	if (ownConfidence > maxConfidence)
 	{
@@ -83,4 +84,5 @@ void main(cs_input IN)
 	}
 
 	//outIntensities[index][texCoord] = ownConfidence / (ownConfidence + confidenceSum);
+#endif
 }
