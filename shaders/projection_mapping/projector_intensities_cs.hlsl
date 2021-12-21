@@ -39,13 +39,13 @@ void main(cs_input IN)
 
 	float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 
+#if 0
 	float2 confidences[32];
 	uint numConfidences = 0;
 
 	float confidenceSum = 0.f;
 	float maxConfidence = 0.f;
 
-#if 0
 	uint numProjectors = cb.numProjectors;
 	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
 	{
@@ -85,4 +85,35 @@ void main(cs_input IN)
 
 	//outIntensities[index][texCoord] = ownConfidence / (ownConfidence + confidenceSum);
 #endif
+
+
+	float Esum = 0.f;
+	float k = 4.f;
+
+	uint numProjectors = cb.numProjectors;
+	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
+	{
+		if (projIndex != index)
+		{
+			float4 projected = mul(projectors[projIndex].viewProj, float4(P, 1.f));
+			projected.xyz /= projected.w;
+
+			float2 projUV = projected.xy * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+			float testDepth = projected.z;
+
+			float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
+			if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
+			{
+				float atten = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0).x;
+				Esum += pow(atten, k);
+			}
+		}
+	}
+
+	float ownAtten = confidenceTextures[index][texCoord].x;
+	float E = pow(ownAtten, k);
+	float weight = E / max(E + Esum, 0.0001f);
+
+	outIntensities[index][texCoord] = weight / ownAtten;
+
 }

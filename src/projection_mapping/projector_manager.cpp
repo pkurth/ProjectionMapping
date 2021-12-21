@@ -45,8 +45,9 @@ void projector_manager::updateAndRender()
 
 		for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 		{
-			//ImGui::Image(projector.renderer.solverIntensity, 400, (uint32)(400 / projector.calibratedCamera.aspect));
-			ImGui::Image(projector.renderer.depthDiscontinuitiesTexture, 400, (uint32)(400 / projector.calibratedCamera.aspect));
+			//ImGui::Image(projector.renderer.solverIntensity);
+			//ImGui::Image(projector.renderer.depthDiscontinuitiesTexture);
+			ImGui::Image(projector.renderer.confidenceTexture);
 		}
 	}
 	ImGui::End();
