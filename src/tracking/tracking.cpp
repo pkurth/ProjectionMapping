@@ -760,6 +760,8 @@ void depth_tracker::update(scene_editor* editor)
 					ImGui::PropertySlider("Smoothing (higher is smoother)", smoothing);
 					ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
 
+					ImGui::PropertyCheckbox("Visualize depth", showDepth);
+
 					ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
 					ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
 
@@ -816,7 +818,7 @@ void depth_tracker::update(scene_editor* editor)
 
 void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 {
-	if (cameraInitialized())
+	if (showDepth && cameraInitialized())
 	{
 		auto& c = camera.colorSensor;
 		mat4 colorCameraV = createViewMatrix(c.position, c.rotation);

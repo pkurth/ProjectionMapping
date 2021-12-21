@@ -62,6 +62,8 @@ private:
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);
 
+	bool showDepth = true;
+
 	float smoothing = 0.7f;
 	uint32 minNumCorrespondences = 5000;
 
