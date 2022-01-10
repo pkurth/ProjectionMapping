@@ -291,6 +291,7 @@ project "D3D12ProjectionMapping"
 			"_CRT_SECURE_NO_WARNINGS",
 			"ENABLE_CPU_PROFILING=1",
 			"ENABLE_DX_PROFILING=1",
+			"ENABLE_MESSAGE_LOG=1",
 		}
 		
 		if turing_or_higher then

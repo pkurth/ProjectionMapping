@@ -2,6 +2,7 @@
 #include "editor.h"
 #include "core/imgui.h"
 #include "core/cpu_profiling.h"
+#include "core/log.h"
 #include "dx/dx_profiling.h"
 #include "scene/components.h"
 #include "animation/animation.h"
@@ -34,6 +35,16 @@ struct selection_undo
 
 	void undo() { editor->setSelectedEntityNoUndo(before); }
 	void redo() { editor->setSelectedEntityNoUndo(after); }
+};
+
+struct sun_direction_undo
+{
+	directional_light* sun;
+	vec3 before;
+	vec3 after;
+
+	void undo() { sun->direction = before; }
+	void redo() { sun->direction = after; }
 };
 
 void scene_editor::updateSelectedEntityUIRotation()
@@ -79,11 +90,24 @@ void scene_editor::initialize(game_scene* scene, main_renderer* renderer)
 	this->scene = scene;
 	this->renderer = renderer;
 	cameraController.initialize(&scene->camera);
+
+	systemInfo = getSystemInfo();
+
+
+
+	treeEntity = scene->createEntity("Test tree")
+		.addComponent<transform_component>(trs::identity)
+		.addComponent<raster_component>(make_ref<composite_mesh>());
 }
 
 bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPass, float dt)
 {
 	CPU_PROFILE_BLOCK("Update editor");
+
+	if (selectedEntity && !scene->isEntityValid(selectedEntity))
+	{
+		setSelectedEntityNoUndo({});
+	}
 
 	bool objectDragged = false;
 	objectDragged |= handleUserInput(input, ldrRenderPass, dt);
@@ -110,9 +134,11 @@ void scene_editor::drawMainMenuBar()
 {
 	static bool showIconsWindow = false;
 	static bool showDemoWindow = false;
+	static bool showSystemWindow = false;
 
 	bool controlsClicked = false;
 	bool aboutClicked = false;
+	bool systemClicked = false;
 
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -174,6 +200,20 @@ void scene_editor::drawMainMenuBar()
 				cpuProfilerWindowOpen = !cpuProfilerWindowOpen;
 			}
 
+			ImGui::Separator();
+
+			if (ImGui::MenuItem(logWindowOpen ? (ICON_FA_CLIPBOARD_LIST "  Hide message log") : (ICON_FA_CLIPBOARD_LIST "  Show message log"), "Ctrl+L", nullptr, ENABLE_MESSAGE_LOG))
+			{
+				logWindowOpen = !logWindowOpen;
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem(ICON_FA_DESKTOP "  System"))
+			{
+				systemClicked = true;
+			}
+
 			ImGui::EndMenu();
 		}
 
@@ -195,15 +235,32 @@ void scene_editor::drawMainMenuBar()
 		ImGui::EndMainMenuBar();
 	}
 
-	if (controlsClicked)
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+
+	if (systemClicked)
 	{
-		ImGui::OpenPopup("Controls");
+		ImGui::OpenPopup(ICON_FA_DESKTOP "  System");
 	}
 
-	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal(ICON_FA_DESKTOP "  System", 0, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Value("CPU", systemInfo.cpuName.c_str());
+		ImGui::Value("GPU", systemInfo.gpuName.c_str());
 
-	if (ImGui::BeginPopupModal("Controls", 0, ImGuiWindowFlags_AlwaysAutoResize))
+		ImGui::Separator();
+
+		ImGui::PopupOkButton();
+		ImGui::EndPopup();
+	}
+
+	if (controlsClicked)
+	{
+		ImGui::OpenPopup(ICON_FA_COMPASS "  Controls");
+	}
+
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal(ICON_FA_COMPASS "  Controls", 0, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		ImGui::Text("The camera can be controlled in two modes:");
 		ImGui::BulletText(
@@ -221,12 +278,12 @@ void scene_editor::drawMainMenuBar()
 			"Left-click on objects to select them. Toggle through gizmos using\n"
 			"Q (no gizmo), W (translate), E (rotate), R (scale).\n"
 			"Press G to toggle between global and local coordinate system.\n"
-			"You can also change the object's properties in the Scene Hierarchy window."
+			"You can also change the object's transform in the Scene Hierarchy window."
 		);
 		ImGui::Separator();
 		ImGui::Text(
 			"Press F to focus the camera on the selected object. This automatically\n"
-			"sets the orbit distance such that you now orbit around this object (with alt)."
+			"sets the orbit distance such that you now orbit around this object (with alt, see above)."
 		);
 		ImGui::Separator();
 		ImGui::Text(
@@ -234,44 +291,39 @@ void scene_editor::drawMainMenuBar()
 		);
 		ImGui::Separator();
 		ImGui::Text(
-			"You can drag and drop meshes from the asset window at the bottom into the game\n"
+			"You can drag and drop meshes from the asset window at the bottom into the scene\n"
 			"window to add it to the scene."
 		);
 		ImGui::Separator();
 
-		ImGui::SetCursorPosX((ImGui::GetWindowSize().x - 120) * 0.5f);
-
-		if (ImGui::Button("OK", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
-		ImGui::SetItemDefaultFocus();
+		ImGui::PopupOkButton();
 		ImGui::EndPopup();
 	}
 
 	if (aboutClicked)
 	{
-		ImGui::OpenPopup("About");
+		ImGui::OpenPopup(ICON_FA_QUESTION "  About");
 	}
 
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-	if (ImGui::BeginPopupModal("About", 0, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal(ICON_FA_QUESTION "  About", 0, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		ImGui::Text("Direct3D renderer");
 		ImGui::Separator();
 
-		ImGui::SetCursorPosX((ImGui::GetWindowSize().x - 120) * 0.5f);
-
-		if (ImGui::Button("OK", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
-		ImGui::SetItemDefaultFocus();
+		ImGui::PopupOkButton();
 		ImGui::EndPopup();
 	}
 
 
 	if (showIconsWindow)
 	{
-		ImGui::Begin("Icons", &showIconsWindow);
+		ImGui::Begin(ICON_FA_ICONS "  Icons", &showIconsWindow);
 
 		static ImGuiTextFilter filter;
 		filter.Draw();
+
+		ImGui::BeginChild("Icons List");
 		for (uint32 i = 0; i < arraysize(awesomeIcons); ++i)
 		{
 			ImGui::PushID(i);
@@ -286,6 +338,7 @@ void scene_editor::drawMainMenuBar()
 			}
 			ImGui::PopID();
 		}
+		ImGui::EndChild();
 		ImGui::End();
 	}
 
@@ -1152,9 +1205,9 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 			gizmo.manipulateNothing(scene->camera, input, !inputCaptured, ldrRenderPass);
 		}
 
-		if (!inputCaptured)
+		if (!inputCaptured && !ImGui::IsAnyItemActive())
 		{
-			if (input.keyboard[key_backspace].pressEvent || input.keyboard[key_delete].pressEvent)
+			if (ImGui::IsKeyPressed(key_backspace) || ImGui::IsKeyPressed(key_delete))
 			{
 				// Delete entity.
 				scene->deleteEntity(selectedEntity);
@@ -1162,7 +1215,7 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 				inputCaptured = true;
 				objectMovedByGizmo = true;
 			}
-			else if (input.keyboard[key_ctrl].down && input.keyboard['D'].pressEvent)
+			else if (ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('D'))
 			{
 				// Duplicate entity.
 				scene_entity newEntity = scene->copyEntity(selectedEntity);
@@ -1178,13 +1231,10 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 	}
 
 
-	if (!inputCaptured)
+	if (!inputCaptured && !ImGui::IsAnyItemActive() && ImGui::IsKeyDown(key_shift) && ImGui::IsKeyPressed('A'))
 	{
-		if (input.keyboard[key_shift].down && input.keyboard['A'].pressEvent)
-		{
-			ImGui::OpenPopup("CreateEntityPopup");
-			inputCaptured = true;
-		}
+		ImGui::OpenPopup("CreateEntityPopup");
+		inputCaptured = true;
 	}
 
 	drawEntityCreationPopup();
@@ -1203,32 +1253,36 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 	ImGui::End();
 
 
-
-	if (!inputCaptured)
+	if (!ImGui::IsAnyItemActive())
 	{
-		if (input.keyboard[key_ctrl].down && input.keyboard['Z'].pressEvent)
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('Z'))
 		{
 			undoStack.undo();
 			inputCaptured = true;
 			objectMovedByGizmo = true;
 		}
-		if (input.keyboard[key_ctrl].down && input.keyboard['Y'].pressEvent)
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('Y'))
 		{
 			undoStack.redo();
 			inputCaptured = true;
 			objectMovedByGizmo = true;
 		}
-		if (input.keyboard[key_ctrl].down && input.keyboard['S'].pressEvent)
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('S'))
 		{
 			serializeSceneToDisk(*scene, renderer->settings);
 			inputCaptured = true;
 			ImGui::GetIO().KeysDown['S'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
 		}
-		if (input.keyboard[key_ctrl].down && input.keyboard['O'].pressEvent)
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('O'))
 		{
 			deserializeFromFile();
 			inputCaptured = true;
 			ImGui::GetIO().KeysDown['O'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
+		}
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('L'))
+		{
+			logWindowOpen = !logWindowOpen;
+			inputCaptured = true;
 		}
 	}
 
@@ -1238,6 +1292,13 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 		if (input.keyboard[key_shift].down)
 		{
 			testPhysicsInteraction(*scene, scene->camera.generateWorldSpaceRay(input.mouse.relX, input.mouse.relY));
+		}
+		else if (input.keyboard[key_ctrl].down)
+		{
+			vec3 dir = -scene->camera.generateWorldSpaceRay(input.mouse.relX, input.mouse.relY).direction;
+			undoStack.pushAction("sun direction", sun_direction_undo{ &scene->sun, scene->sun.direction, dir });
+			scene->sun.direction = dir;
+			inputCaptured = true;
 		}
 		else
 		{
@@ -1250,13 +1311,6 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 				setSelectedEntity({});
 			}
 		}
-		inputCaptured = true;
-	}
-
-	if (!inputCaptured && input.mouse.left.down && input.keyboard[key_ctrl].down)
-	{
-		vec3 dir = scene->camera.generateWorldSpaceRay(input.mouse.relX, input.mouse.relY).direction;
-		scene->sun.direction = -dir;
 		inputCaptured = true;
 	}
 
@@ -1358,7 +1412,8 @@ void scene_editor::setEnvironment(const fs::path& filename)
 
 	if (!scene->environment)
 	{
-		std::cout << "Could not load environment '" << filename << "'. Renderer will use procedural sky box. Procedural sky boxes currently cannot contribute to global illumnation, so expect very dark lighting.\n";
+		LOG_WARNING("Could not load environment '%ws'. Renderer will use procedural sky box. Procedural sky boxes currently cannot contribute to global illumination, so expect very dark lighting", filename.c_str());
+		std::cout << "Could not load environment '" << filename << "'. Renderer will use procedural sky box. Procedural sky boxes currently cannot contribute to global illumination, so expect very dark lighting.\n";
 	}
 }
 
@@ -1647,6 +1702,24 @@ void scene_editor::drawSettings(float dt)
 				ImGui::PropertySlider("Environment intensity", renderer->settings.environmentIntensity, 0.f, 2.f);
 				ImGui::PropertySlider("Sky intensity", renderer->settings.skyIntensity, 0.f, 2.f);
 				ImGui::EndProperties();
+			}
+
+			ImGui::EndTree();
+		}
+
+		if (ImGui::BeginTree("Tree generation"))
+		{
+			if (treeGenerator.edit())
+			{
+				auto mesh = treeEntity.getComponent<raster_component>().mesh;
+				auto gen = treeGenerator.generatedMesh;
+				mesh->mesh = gen;
+				mesh->submeshes.clear();
+				mesh->submeshes.push_back({ submesh_info{ gen.indexBuffer->elementCount, 0, 0, gen.vertexBuffer.positions->elementCount }, 
+					{},
+					trs::identity,
+					getDefaultPBRMaterial()
+					});
 			}
 
 			ImGui::EndTree();

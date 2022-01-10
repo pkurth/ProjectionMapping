@@ -2,7 +2,7 @@
 #include "transformation_gizmo.h"
 #include "dx/dx_command_list.h"
 #include "dx/dx_pipeline.h"
-#include "geometry/geometry.h"
+#include "geometry/mesh_builder.h"
 #include "physics/bounding_volumes.h"
 #include "rendering/render_utils.h"
 #include "rendering/debug_visualization.h"
@@ -64,16 +64,49 @@ static dx_mesh mesh;
 
 void initializeTransformationGizmos()
 {
-	cpu_mesh mesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals);
+	mesh_builder mesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals);
 	float shaftLength = 1.f;
 	float headLength = 0.2f;
 	float radius = 0.03f;
 	float headRadius = 0.065f;
-	translationSubmesh = mesh.pushArrow(6, radius, headRadius, shaftLength, headLength);
-	rotationSubmesh = mesh.pushTorus(6, 64, shaftLength, radius);
-	scaleSubmesh = mesh.pushMace(6, radius, headRadius, shaftLength, headLength);
-	planeSubmesh = mesh.pushCube(vec3(shaftLength, 0.01f, shaftLength) * 0.2f, false, vec3(shaftLength, 0.f, shaftLength) * 0.35f);
-	boxSubmesh = mesh.pushCube((shaftLength + headLength) * 0.3f);
+
+	arrow_mesh_desc arrowMesh;
+	arrowMesh.slices = 6;
+	arrowMesh.shaftRadius = radius;
+	arrowMesh.headRadius = headRadius;
+	arrowMesh.shaftLength = shaftLength;
+	arrowMesh.headLength = headLength;
+	mesh.pushArrow(arrowMesh);
+	translationSubmesh = mesh.endSubmesh();
+
+	torus_mesh_desc torusMesh;
+	torusMesh.slices = 6;
+	torusMesh.segments = 64;
+	torusMesh.torusRadius = shaftLength;
+	torusMesh.tubeRadius = radius;
+	mesh.pushTorus(torusMesh);
+	rotationSubmesh = mesh.endSubmesh();
+
+	mace_mesh_desc maceMesh;
+	maceMesh.slices = 6;
+	maceMesh.shaftRadius = radius;
+	maceMesh.headRadius = headRadius;
+	maceMesh.shaftLength = shaftLength;
+	maceMesh.headLength = headLength;
+	mesh.pushMace(maceMesh);
+	scaleSubmesh = mesh.endSubmesh();
+
+	box_mesh_desc planeMesh;
+	planeMesh.radius = vec3(shaftLength, 0.01f, shaftLength) * 0.2f;
+	planeMesh.center = vec3(shaftLength, 0.f, shaftLength) * 0.35f;
+	mesh.pushBox(planeMesh);
+	planeSubmesh = mesh.endSubmesh();
+
+	box_mesh_desc boxMesh;
+	boxMesh.radius = (shaftLength + headLength) * 0.3f;
+	mesh.pushBox(boxMesh);
+	boxSubmesh = mesh.endSubmesh();
+
 	::mesh = mesh.createDXMesh();
 
 	for (uint32 i = 0; i < 3; ++i)
@@ -379,42 +412,42 @@ uint32 transformation_gizmo::handleScaling(trs& transform, ray r, const user_inp
 	return dragging ? axisIndex : hoverAxisIndex;
 }
 
-bool transformation_gizmo::handleUserInput(const user_input& input, bool allowKeyboardInput, 
+bool transformation_gizmo::handleUserInput(bool allowKeyboardInput, 
 	bool allowTranslation, bool allowRotation, bool allowScaling, bool allowSpaceChange)
 {
 	bool keyboardInteraction = false;
 	bool uiInteraction = false;
 
-	if (allowKeyboardInput)
+	if (allowKeyboardInput && !ImGui::IsAnyItemActive() && !ImGui::AnyModifiersDown())
 	{
 		if (type != transformation_type_scale)
 		{
-			if (input.keyboard['G'].pressEvent && allowSpaceChange)
+			if (ImGui::IsKeyPressed('G') && allowSpaceChange)
 			{
 				space = (transformation_space)(1 - space);
 				dragging = false;
 				keyboardInteraction = true;
 			}
 		}
-		if (input.keyboard['Q'].pressEvent)
+		if (ImGui::IsKeyPressed('Q'))
 		{
 			type = transformation_type_none;
 			dragging = false;
 			keyboardInteraction = true;
 		}
-		if (input.keyboard['W'].pressEvent && allowTranslation)
+		if (ImGui::IsKeyPressed('W') && allowTranslation)
 		{
 			type = transformation_type_translation;
 			dragging = false;
 			keyboardInteraction = true;
 		}
-		if (input.keyboard['E'].pressEvent && allowRotation)
+		if (ImGui::IsKeyPressed('E') && allowRotation)
 		{
 			type = transformation_type_rotation;
 			dragging = false;
 			keyboardInteraction = true;
 		}
-		if (input.keyboard['R'].pressEvent && allowScaling)
+		if (ImGui::IsKeyPressed('R') && allowScaling)
 		{
 			type = transformation_type_scale;
 			dragging = false;
@@ -569,7 +602,7 @@ void transformation_gizmo::manipulateInternal(trs& transform, const render_camer
 
 bool transformation_gizmo::manipulateTransformation(trs& transform, const render_camera& camera, const user_input& input, bool allowInput, ldr_render_pass* ldrRenderPass)
 {
-	bool inputCaptured = handleUserInput(input, allowInput, true, true, true, true);
+	bool inputCaptured = handleUserInput(allowInput, true, true, true, true);
 	manipulateInternal(transform, camera, input, allowInput, ldrRenderPass);
 	return dragging;
 }
@@ -582,7 +615,7 @@ bool transformation_gizmo::manipulatePosition(vec3& position, const render_camer
 	}
 	space = transformation_global;
 
-	bool inputCaptured = handleUserInput(input, allowInput, true, false, false, false);
+	bool inputCaptured = handleUserInput(allowInput, true, false, false, false);
 	trs transform = { position, quat::identity, vec3(1.f, 1.f, 1.f) };
 	manipulateInternal(transform, camera, input, allowInput, ldrRenderPass);
 	position = transform.position;
@@ -596,7 +629,7 @@ bool transformation_gizmo::manipulatePositionRotation(vec3& position, quat& rota
 		type = transformation_type_translation;
 	}
 
-	bool inputCaptured = handleUserInput(input, allowInput, true, true, false, true);
+	bool inputCaptured = handleUserInput(allowInput, true, true, false, true);
 	trs transform = { position, rotation, vec3(1.f, 1.f, 1.f) };
 	manipulateInternal(transform, camera, input, allowInput, ldrRenderPass);
 	position = transform.position;
@@ -607,7 +640,7 @@ bool transformation_gizmo::manipulatePositionRotation(vec3& position, quat& rota
 bool transformation_gizmo::manipulateNothing(const render_camera& camera, const user_input& input, bool allowInput, ldr_render_pass* ldrRenderPass)
 {
 	dragging = false;
-	bool inputCaptured = handleUserInput(input, allowInput, true, true, true, true);
+	bool inputCaptured = handleUserInput(allowInput, true, true, true, true);
 	return false;
 }
 

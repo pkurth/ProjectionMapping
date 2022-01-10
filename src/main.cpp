@@ -5,7 +5,9 @@
 #include "dx/dx_profiling.h"
 #include "core/input.h"
 #include "core/imgui.h"
+#include "core/log.h"
 #include "core/cpu_profiling.h"
+#include "core/file_registry.h"
 #include "editor/file_browser.h"
 #include "application.h"
 #include "rendering/render_utils.h"
@@ -107,6 +109,8 @@ int main(int argc, char** argv)
 	rgbd_camera::initializeCommon();
 
 	initializeJobSystem();
+	initializeMessageLog();
+	initializeFileRegistry();
 
 	dx_window window;
 	window.initialize(TEXT("D3D12 Projection Mapping"), 1920, 1080);
@@ -259,6 +263,8 @@ int main(int argc, char** argv)
 
 		fileBrowser.draw(meshEditor);
 		meshEditor.draw();
+
+		updateMessageLog(dt);
 
 		renderToMainWindow(window);
 

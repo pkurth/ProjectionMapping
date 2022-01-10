@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "projector_solver.h"
-#include "geometry/geometry.h"
 #include "rendering/render_utils.h"
 
 #include "dx/dx_pipeline.h"

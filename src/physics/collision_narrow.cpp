@@ -8,29 +8,6 @@
 #include "core/cpu_profiling.h"
 
 
-#ifndef PHYSICS_ONLY
-#include "rendering/render_pass.h"
-#include "rendering/debug_visualization.h"
-#include "rendering/pbr.h"
-
-struct debug_draw_call
-{
-	mat4 transform;
-	vec4 color;
-};
-
-static std::vector<debug_draw_call> debugDrawCalls;
-
-static void debugSphere(vec3 position, float radius, vec4 color)
-{
-	debugDrawCalls.push_back({
-		createModelMatrix(position, quat::identity, radius),
-		color,
-	});
-}
-#endif
-
-
 struct contact_manifold
 {
 	contact_info contacts[4];
@@ -1578,14 +1555,14 @@ static bool intersection(const bounding_hull& a, const bounding_hull& b, contact
 	return true;
 }
 
-static bool collisionCheck(collider_union* worldSpaceColliders, broadphase_collision overlap, contact_manifold& contact)
+static bool collisionCheck(const collider_union* worldSpaceColliders, collider_pair overlap, contact_manifold& contact)
 {
-	collider_union* colliderAInitial = worldSpaceColliders + overlap.colliderA;
-	collider_union* colliderBInitial = worldSpaceColliders + overlap.colliderB;
+	const collider_union* colliderAInitial = worldSpaceColliders + overlap.colliderA;
+	const collider_union* colliderBInitial = worldSpaceColliders + overlap.colliderB;
 
 	bool keepOrder = (colliderAInitial->type < colliderBInitial->type);
-	collider_union* colliderA = keepOrder ? colliderAInitial : colliderBInitial;
-	collider_union* colliderB = keepOrder ? colliderBInitial : colliderAInitial;
+	const collider_union* colliderA = keepOrder ? colliderAInitial : colliderBInitial;
+	const collider_union* colliderB = keepOrder ? colliderBInitial : colliderAInitial;
 
 	contact.colliderA = keepOrder ? overlap.colliderA : overlap.colliderB;
 	contact.colliderB = keepOrder ? overlap.colliderB : overlap.colliderA;
@@ -1667,19 +1644,19 @@ static bool collisionCheck(collider_union* worldSpaceColliders, broadphase_colli
 	return collides;
 }
 
-static bool overlapCheck(collider_union* worldSpaceColliders, broadphase_collision overlap, non_collision_interaction& interaction)
+static bool overlapCheck(const collider_union* worldSpaceColliders, collider_pair overlap, non_collision_interaction& interaction)
 {
-	collider_union* colliderAInitial = worldSpaceColliders + overlap.colliderA;
-	collider_union* colliderBInitial = worldSpaceColliders + overlap.colliderB;
+	const collider_union* colliderAInitial = worldSpaceColliders + overlap.colliderA;
+	const collider_union* colliderBInitial = worldSpaceColliders + overlap.colliderB;
 
 	bool keepOrder = (colliderAInitial->type < colliderBInitial->type);
-	collider_union* colliderA = keepOrder ? colliderAInitial : colliderBInitial;
-	collider_union* colliderB = keepOrder ? colliderBInitial : colliderAInitial;
+	const collider_union* colliderA = keepOrder ? colliderAInitial : colliderBInitial;
+	const collider_union* colliderB = keepOrder ? colliderBInitial : colliderAInitial;
 
-	assert(colliderA->type == physics_object_type_rigid_body || colliderB->type == physics_object_type_rigid_body);
-	assert(colliderA->type != physics_object_type_rigid_body || colliderB->type != physics_object_type_rigid_body);
+	assert(colliderA->objectType == physics_object_type_rigid_body || colliderB->objectType == physics_object_type_rigid_body);
+	assert(colliderA->objectType != physics_object_type_rigid_body || colliderB->objectType != physics_object_type_rigid_body);
 
-	if (colliderA->type == physics_object_type_rigid_body)
+	if (colliderA->objectType == physics_object_type_rigid_body)
 	{
 		interaction.rigidBodyIndex = colliderA->objectIndex;
 		interaction.otherIndex = colliderB->objectIndex;
@@ -1769,19 +1746,20 @@ static bool overlapCheck(collider_union* worldSpaceColliders, broadphase_collisi
 	return overlaps;
 }
 
-narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_collision* possibleCollisions, uint32 numPossibleCollisions,
+narrowphase_result narrowphase(const collider_union* worldSpaceColliders, collider_pair* collisionPairs, uint32 numCollisionPairs,
 	collision_contact* outContacts, constraint_body_pair* outBodyPairs, non_collision_interaction* outNonCollisionInteractions)
 {
 	CPU_PROFILE_BLOCK("Narrow phase");
 
+	uint32 numCollisions = 0;
 	uint32 numContacts = 0;
 	uint32 numNonCollisionInteractions = 0;
 
-	for (uint32 i = 0; i < numPossibleCollisions; ++i)
+	for (uint32 i = 0; i < numCollisionPairs; ++i)
 	{
-		broadphase_collision overlap = possibleCollisions[i];
-		collider_union* colliderA = worldSpaceColliders + overlap.colliderA;
-		collider_union* colliderB = worldSpaceColliders + overlap.colliderB;
+		collider_pair overlap = collisionPairs[i];
+		const collider_union* colliderA = worldSpaceColliders + overlap.colliderA;
+		const collider_union* colliderB = worldSpaceColliders + overlap.colliderB;
 
 		if (colliderA->objectType != physics_object_type_rigid_body && colliderB->objectType != physics_object_type_rigid_body)
 		{
@@ -1796,20 +1774,18 @@ narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_c
 			continue;
 		}
 
-		// At this point, either one or both colliders belong to a rigid body. One of them could be a force field or a solo collider still.
+		// At this point, either one or both colliders belong to a rigid body. One of them could be a force field, trigger or a solo collider still.
 
-		if (colliderA->objectType == physics_object_type_force_field || colliderB->objectType == physics_object_type_force_field)
-		{
-			non_collision_interaction& interaction = outNonCollisionInteractions[numNonCollisionInteractions];
-			numNonCollisionInteractions += overlapCheck(worldSpaceColliders, overlap, interaction);
-		}
-		else
+		bool swapBack = true;
+
+		if (colliderA->objectType == physics_object_type_rigid_body && colliderB->objectType == physics_object_type_rigid_body // Both rigid bodies.
+			|| colliderA->objectType == physics_object_type_static_collider || colliderB->objectType == physics_object_type_static_collider) // One is a static collider.
 		{
 			contact_manifold contact;
 			if (collisionCheck(worldSpaceColliders, overlap, contact))
 			{
-				collider_union* colliderA = worldSpaceColliders + contact.colliderA;
-				collider_union* colliderB = worldSpaceColliders + contact.colliderB;
+				const collider_union* colliderA = worldSpaceColliders + contact.colliderA;
+				const collider_union* colliderB = worldSpaceColliders + contact.colliderB;
 
 				uint16 rbA = colliderA->objectIndex;
 				uint16 rbB = colliderB->objectIndex;
@@ -1837,31 +1813,26 @@ narrowphase_result narrowphase(collider_union* worldSpaceColliders, broadphase_c
 
 					++numContacts;
 				}
+
+				swapBack = false;
+				++numCollisions;
 			}
+		}
+		else
+		{
+			non_collision_interaction& interaction = outNonCollisionInteractions[numNonCollisionInteractions];
+			numNonCollisionInteractions += overlapCheck(worldSpaceColliders, overlap, interaction);
+		}
+
+		if (swapBack)
+		{
+			// A copy may be enough, but this preserves all the pairs.
+			std::swap(collisionPairs[i], collisionPairs[numCollisionPairs - 1]);
+			--numCollisionPairs;
+			--i;
 		}
 	}
 
-	return narrowphase_result{ numContacts, numNonCollisionInteractions };
+	return narrowphase_result{ numCollisions, numContacts, numNonCollisionInteractions };
 }
 
-#ifndef PHYSICS_ONLY
-void collisionDebugDraw(ldr_render_pass* renderPass)
-{
-	static dx_mesh debugMesh;
-	static submesh_info sphereMesh;
-
-	if (!debugMesh.vertexBuffer.positions)
-	{
-		cpu_mesh primitiveMesh(mesh_creation_flags_with_positions | mesh_creation_flags_with_uvs | mesh_creation_flags_with_normals);
-		sphereMesh = primitiveMesh.pushSphere(15, 15, 1.f);
-		debugMesh = primitiveMesh.createDXMesh();		
-	}
-
-	for (auto& dc : debugDrawCalls)
-	{
-		renderPass->renderObject<debug_unlit_pipeline>(dc.transform, debugMesh.vertexBuffer, debugMesh.indexBuffer, sphereMesh, { dc.color });
-	}
-	
-	debugDrawCalls.clear();
-}
-#endif

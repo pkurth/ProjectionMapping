@@ -2,11 +2,13 @@
 #include "physics.h"
 #include "collision_broad.h"
 #include "collision_narrow.h"
-#include "geometry/geometry.h"
+#include "geometry/mesh_builder.h"
 #include "core/cpu_profiling.h"
 
+#include <unordered_set>
 
-extern physics_settings physicsSettings = {};
+physics_settings physicsSettings = {};
+std::function<void(const collision_event&)> collisionCallback;
 static std::vector<bounding_hull_geometry> boundingHullGeometries;
 
 struct constraint_context
@@ -62,14 +64,18 @@ uint32 allocateBoundingHullGeometry(const std::string& meshFilepath)
 		return INVALID_BOUNDING_HULL_INDEX;
 	}
 
-	cpu_mesh cpuMesh(mesh_creation_flags_with_positions);
+	mesh_builder builder(mesh_creation_flags_with_positions);
 
 	assert(scene->mNumMeshes == 1);
-	cpuMesh.pushAssimpMesh(scene->mMeshes[0], 1.f);
+	builder.pushAssimpMesh(scene->mMeshes[0], 1.f);
 
 
 	uint32 index = (uint32)boundingHullGeometries.size();
-	boundingHullGeometries.push_back(bounding_hull_geometry::fromMesh(cpuMesh.vertexPositions, cpuMesh.numVertices, cpuMesh.triangles, cpuMesh.numTriangles));
+	boundingHullGeometries.push_back(bounding_hull_geometry::fromMesh(
+		builder.getPositions(),
+		builder.getNumVertices(),
+		(indexed_triangle16*)builder.getTriangles(),
+		builder.getNumTriangles()));
 	return index;
 }
 #endif
@@ -548,8 +554,7 @@ static void getWorldSpaceColliders(game_scene& scene, bounding_box* outWorldspac
 		++pushIndex;
 
 		scene_entity entity = { collider.parentEntity, scene };
-		assert(entity.hasComponent<transform_component>());
-		transform_component& transform = entity.getComponent<transform_component>();
+		const transform_component& transform = entity.hasComponent<transform_component>() ? entity.getComponent<transform_component>() : trs::identity;
 
 		col.type = collider.type;
 		col.properties = collider.properties;
@@ -564,10 +569,15 @@ static void getWorldSpaceColliders(game_scene& scene, bounding_box* outWorldspac
 			col.objectIndex = (uint16)entity.getComponentIndex<force_field_component>();
 			col.objectType = physics_object_type_force_field;
 		}
+		else if (entity.hasComponent<trigger_component>())
+		{
+			col.objectIndex = (uint16)entity.getComponentIndex<trigger_component>();
+			col.objectType = physics_object_type_trigger;
+		}
 		else
 		{
 			col.objectIndex = dummyRigidBodyIndex;
-			col.objectType = physics_object_type_none;
+			col.objectType = physics_object_type_static_collider;
 		}
 
 		switch (collider.type)
@@ -825,6 +835,25 @@ void validate(uint32 line, simd_collision_constraint_batch* constraints, uint32 
 #define VALIDATE(...)
 #endif
 
+
+struct entity_pair
+{
+	entt::entity a;
+	entt::entity b;
+};
+
+namespace std
+{
+	template<> struct hash<entity_pair> { size_t operator()(entity_pair x) const { return std::hash<uint64>()(((uint64)x.a << 32) | ((uint64)x.b)); } };
+}
+
+static bool operator==(entity_pair a, entity_pair b) { return a.a == b.a && a.b == b.b; }
+
+static std::unordered_set<entity_pair> triggerOverlaps[2];
+static std::unordered_set<entity_pair> objectContacts[2];
+static uint32 historyIndex = 0;
+
+
 void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 {
 	CPU_PROFILE_BLOCK("Physics step");
@@ -845,6 +874,7 @@ void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 	}
 
 	uint32 numForceFields = scene.numberOfComponentsOfType<force_field_component>();
+	uint32 numTriggers = scene.numberOfComponentsOfType<trigger_component>();
 	uint32 numColliders = scene.numberOfComponentsOfType<collider_component>();
 
 	uint32 numDistanceConstraints = scene.numberOfComponentsOfType<distance_constraint>();
@@ -864,7 +894,7 @@ void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 	bounding_box* worldSpaceAABBs = arena.allocate<bounding_box>(numColliders);
 	collider_union* worldSpaceColliders = arena.allocate<collider_union>(numColliders);
 
-	broadphase_collision* possibleCollisions = arena.allocate<broadphase_collision>(numColliders * numColliders); // Conservative estimate.
+	collider_pair* collisionPairs = arena.allocate<collider_pair>(numColliders * numColliders); // Conservative estimate.
 
 	uint32 dummyRigidBodyIndex = numRigidBodies;
 
@@ -873,40 +903,66 @@ void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 	VALIDATE(worldSpaceColliders, numColliders);
 	VALIDATE(worldSpaceAABBs, numColliders);
 
-	uint32 numPossibleCollisions = broadphase(scene, worldSpaceAABBs, arena, possibleCollisions);
+	uint32 numBroadphaseOverlaps = broadphase(scene, worldSpaceAABBs, arena, collisionPairs);
 
-	non_collision_interaction* nonCollisionInteractions = arena.allocate<non_collision_interaction>(numPossibleCollisions);
-	collision_contact* contacts = arena.allocate<collision_contact>(numPossibleCollisions * 4); // Each collision can have up to 4 contact points.
+	non_collision_interaction* nonCollisionInteractions = arena.allocate<non_collision_interaction>(numBroadphaseOverlaps);
+	collision_contact* contacts = arena.allocate<collision_contact>(numBroadphaseOverlaps * 4); // Each collision can have up to 4 contact points.
 	constraint_body_pair* allConstraintBodyPairs = arena.allocate<constraint_body_pair>(
-		numConstraints + numPossibleCollisions * 4);
+		numConstraints + numBroadphaseOverlaps * 4);
 
 	constraint_body_pair* collisionBodyPairs = allConstraintBodyPairs + numConstraints;
 
-	narrowphase_result narrowPhaseResult = narrowphase(worldSpaceColliders, possibleCollisions, numPossibleCollisions, contacts, collisionBodyPairs, nonCollisionInteractions);
+	narrowphase_result narrowPhaseResult = narrowphase(worldSpaceColliders, collisionPairs, numBroadphaseOverlaps, contacts, collisionBodyPairs, nonCollisionInteractions);
 	VALIDATE(contacts, narrowPhaseResult.numContacts);
+
+
+	auto& prevFrameObjectContacts = objectContacts[historyIndex];
+	auto& thisFrameObjectContacts = objectContacts[1 - historyIndex];
+	thisFrameObjectContacts.clear();
+
+	for (uint32 i = 0; i < narrowPhaseResult.numCollisions; ++i)
+	{
+		collider_pair pair = collisionPairs[i];
+
+		scene_entity colliderAEntity = scene.getEntityFromComponentAtIndex<collider_component>(pair.colliderA);
+		scene_entity colliderBEntity = scene.getEntityFromComponentAtIndex<collider_component>(pair.colliderB);
+
+		entity_pair contact = { colliderAEntity.handle, colliderBEntity.handle };
+		thisFrameObjectContacts.insert(contact);
+	}
+
 
 	vec3 globalForceField = getForceFieldStates(scene, ffGlobal);
 
-
+	auto& prevFrameTriggerOverlaps = triggerOverlaps[historyIndex];
+	auto& thisFrameTriggerOverlaps = triggerOverlaps[1 - historyIndex];
+	thisFrameTriggerOverlaps.clear();
+	
 	// Handle non-collision interactions (triggers, force fields etc).
 	for (uint32 i = 0; i < narrowPhaseResult.numNonCollisionInteractions; ++i)
 	{
 		non_collision_interaction interaction = nonCollisionInteractions[i];
 		rigid_body_component& rb = scene.getComponentAtIndex<rigid_body_component>(interaction.rigidBodyIndex);
 
-		switch (interaction.otherType)
+		if (interaction.otherType == physics_object_type_force_field)
 		{
-			case physics_object_type_force_field:
-			{
-				const force_field_global_state& ff = ffGlobal[interaction.otherIndex];
-				rb.forceAccumulator += ff.force;
-			} break;
+			const force_field_global_state& ff = ffGlobal[interaction.otherIndex];
+			rb.forceAccumulator += ff.force;
+		}
+		else if (interaction.otherType == physics_object_type_trigger)
+		{
+			scene_entity triggerEntity = scene.getEntityFromComponentAtIndex<trigger_component>(interaction.otherIndex);
+			scene_entity rbEntity = scene.getEntityFromComponent(rb);
+
+			entity_pair overlap = { triggerEntity.handle, rbEntity.handle };
+			thisFrameTriggerOverlaps.insert(overlap);
 		}
 	}
 
 	CPU_PROFILE_STAT("Num rigid bodies", numRigidBodies);
 	CPU_PROFILE_STAT("Num colliders", numColliders);
-	CPU_PROFILE_STAT("Num broadphase overlaps", numPossibleCollisions);
+	CPU_PROFILE_STAT("Num broadphase overlaps", numBroadphaseOverlaps);
+	CPU_PROFILE_STAT("Num narrowphase overlaps", narrowPhaseResult.numCollisions);
 	CPU_PROFILE_STAT("Num narrowphase contacts", narrowPhaseResult.numContacts);
 
 
@@ -952,88 +1008,25 @@ void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 	getConstraintBodyPairs<cone_twist_constraint>(scene, coneTwistConstraintBodyPairs);
 	getConstraintBodyPairs<slider_constraint>(scene, sliderConstraintBodyPairs);
 
-	distance_constraint_solver distanceConstraintSolver;
-	simd_distance_constraint_solver distanceConstraintSolverSIMD;
-
-	ball_constraint_solver ballConstraintSolver;
-	simd_ball_constraint_solver ballConstraintSolverSIMD;
-
-	fixed_constraint_solver fixedConstraintSolver;
-	simd_fixed_constraint_solver fixedConstraintSolverSIMD;
-
-	hinge_constraint_solver hingeConstraintSolver;
-	simd_hinge_constraint_solver hingeConstraintSolverSIMD;
-
-	cone_twist_constraint_solver coneTwistConstraintSolver;
-	simd_cone_twist_constraint_solver coneTwistConstraintSolverSIMD;
-
-	slider_constraint_solver sliderConstraintSolver;
-	simd_slider_constraint_solver sliderConstraintSolverSIMD;
-
-	collision_constraint_solver collisionConstraintSolver;
-	simd_collision_constraint_solver collisionConstraintSolverSIMD;
-
 
 	// Solve constraints.
-	{
-		CPU_PROFILE_BLOCK("Initialize constraints");
+	constraint_solver constraintSolver;
+	constraintSolver.initialize(arena, rbGlobal,
+		distanceConstraints, distanceConstraintBodyPairs, numDistanceConstraints,
+		ballConstraints, ballConstraintBodyPairs, numBallConstraints,
+		fixedConstraints, fixedConstraintBodyPairs, numFixedConstraints,
+		hingeConstraints, hingeConstraintBodyPairs, numHingeConstraints,
+		coneTwistConstraints, coneTwistConstraintBodyPairs, numConeTwistConstraints,
+		sliderConstraints, sliderConstraintBodyPairs, numSliderConstraints,
+		contacts, collisionBodyPairs, numContacts,
+		dummyRigidBodyIndex, physicsSettings.simd, dt);
 
-		if (physicsSettings.simd)
-		{
-			distanceConstraintSolverSIMD = initializeDistanceVelocityConstraintsSIMD(arena, rbGlobal, distanceConstraints, distanceConstraintBodyPairs, numDistanceConstraints, dt);
-			ballConstraintSolverSIMD = initializeBallVelocityConstraintsSIMD(arena, rbGlobal, ballConstraints, ballConstraintBodyPairs, numBallConstraints, dt);
-			fixedConstraintSolverSIMD = initializeFixedVelocityConstraintsSIMD(arena, rbGlobal, fixedConstraints, fixedConstraintBodyPairs, numFixedConstraints, dt);
-			hingeConstraintSolverSIMD = initializeHingeVelocityConstraintsSIMD(arena, rbGlobal, hingeConstraints, hingeConstraintBodyPairs, numHingeConstraints, dt);
-			coneTwistConstraintSolverSIMD = initializeConeTwistVelocityConstraintsSIMD(arena, rbGlobal, coneTwistConstraints, coneTwistConstraintBodyPairs, numConeTwistConstraints, dt);
-			sliderConstraintSolverSIMD = initializeSliderVelocityConstraintsSIMD(arena, rbGlobal, sliderConstraints, sliderConstraintBodyPairs, numSliderConstraints, dt);
-			collisionConstraintSolverSIMD = initializeCollisionVelocityConstraintsSIMD(arena, rbGlobal, contacts, collisionBodyPairs, numContacts, dummyRigidBodyIndex, dt);
-
-			VALIDATE(collisionConstraintSolverSIMD.batches, collisionConstraintSolverSIMD.numBatches);
-		}
-		else
-		{
-			distanceConstraintSolver = initializeDistanceVelocityConstraints(arena, rbGlobal, distanceConstraints, distanceConstraintBodyPairs, numDistanceConstraints, dt);
-			ballConstraintSolver = initializeBallVelocityConstraints(arena, rbGlobal, ballConstraints, ballConstraintBodyPairs, numBallConstraints, dt);
-			fixedConstraintSolver = initializeFixedVelocityConstraints(arena, rbGlobal, fixedConstraints, fixedConstraintBodyPairs, numFixedConstraints, dt);
-			hingeConstraintSolver = initializeHingeVelocityConstraints(arena, rbGlobal, hingeConstraints, hingeConstraintBodyPairs, numHingeConstraints, dt);
-			coneTwistConstraintSolver = initializeConeTwistVelocityConstraints(arena, rbGlobal, coneTwistConstraints, coneTwistConstraintBodyPairs, numConeTwistConstraints, dt);
-			sliderConstraintSolver = initializeSliderVelocityConstraints(arena, rbGlobal, sliderConstraints, sliderConstraintBodyPairs, numSliderConstraints, dt);
-			collisionConstraintSolver = initializeCollisionVelocityConstraints(arena, rbGlobal, contacts, collisionBodyPairs, numContacts, dt);
-
-			VALIDATE(collisionConstraintSolver.constraints, collisionConstraintSolver.count);
-		}
-	}
 	{
 		CPU_PROFILE_BLOCK("Solve constraints");
 
 		for (uint32 it = 0; it < physicsSettings.numRigidSolverIterations; ++it)
 		{
-			if (physicsSettings.simd)
-			{
-				solveDistanceVelocityConstraintsSIMD(distanceConstraintSolverSIMD, rbGlobal);
-				solveBallVelocityConstraintsSIMD(ballConstraintSolverSIMD, rbGlobal);
-				solveFixedVelocityConstraintsSIMD(fixedConstraintSolverSIMD, rbGlobal);
-				solveHingeVelocityConstraintsSIMD(hingeConstraintSolverSIMD, rbGlobal);
-				solveConeTwistVelocityConstraintsSIMD(coneTwistConstraintSolverSIMD, rbGlobal);
-				solveSliderVelocityConstraintsSIMD(sliderConstraintSolverSIMD, rbGlobal);
-				solveCollisionVelocityConstraintsSIMD(collisionConstraintSolverSIMD, rbGlobal);
-
-				VALIDATE(collisionConstraintSolverSIMD.batches, collisionConstraintSolverSIMD.numBatches);
-			}
-			else
-			{
-				solveDistanceVelocityConstraints(distanceConstraintSolver, rbGlobal);
-				solveBallVelocityConstraints(ballConstraintSolver, rbGlobal);
-				solveFixedVelocityConstraints(fixedConstraintSolver, rbGlobal);
-				solveHingeVelocityConstraints(hingeConstraintSolver, rbGlobal);
-				solveConeTwistVelocityConstraints(coneTwistConstraintSolver, rbGlobal);
-				solveSliderVelocityConstraints(sliderConstraintSolver, rbGlobal);
-				solveCollisionVelocityConstraints(collisionConstraintSolver, rbGlobal);
-
-				VALIDATE(collisionConstraintSolver.constraints, collisionConstraintSolver.count);
-			}
-
-			VALIDATE(rbGlobal, numRigidBodies);
+			constraintSolver.solveOneIteration();
 		}
 	}
 
@@ -1061,6 +1054,80 @@ void physicsStep(game_scene& scene, memory_arena& arena, float dt)
 	}
 
 	arena.resetToMarker(marker);
+
+
+
+	// Collision callbacks.
+	if (collisionCallback)
+	{
+		for (entity_pair o : thisFrameObjectContacts)
+		{
+			// Didn't touch last frame -> fire collision start event.
+			if (prevFrameObjectContacts.find(o) == prevFrameObjectContacts.end())
+			{
+				scene_entity colliderAEntity = { o.a, scene };
+				scene_entity colliderBEntity = { o.b, scene };
+				const collider_component& colliderA = colliderAEntity.getComponent<collider_component>();
+				const collider_component& colliderB = colliderBEntity.getComponent<collider_component>();
+
+				scene_entity entityA = { colliderA.parentEntity, scene };
+				scene_entity entityB = { colliderB.parentEntity, scene };
+
+				collisionCallback(collision_event{ entityA, colliderAEntity, colliderA, entityB, colliderBEntity, colliderB, collision_event_start });
+			}
+		}
+
+		for (entity_pair o : prevFrameObjectContacts)
+		{
+			// Did touch last frame and don't this frame -> fire collision end event.
+			if (thisFrameObjectContacts.find(o) == thisFrameObjectContacts.end())
+			{
+				scene_entity colliderAEntity = { o.a, scene };
+				scene_entity colliderBEntity = { o.b, scene };
+				if (scene.isEntityValid(colliderAEntity) && scene.isEntityValid(colliderBEntity))
+				{
+					const collider_component& colliderA = colliderAEntity.getComponent<collider_component>();
+					const collider_component& colliderB = colliderBEntity.getComponent<collider_component>();
+
+					scene_entity entityA = { colliderA.parentEntity, scene };
+					scene_entity entityB = { colliderB.parentEntity, scene };
+
+					collisionCallback(collision_event{ entityA, colliderAEntity, colliderA, entityB, colliderBEntity, colliderB, collision_event_end });
+				}
+			}
+		}
+	}
+
+
+	// Trigger callbacks.
+	for (entity_pair o : thisFrameTriggerOverlaps)
+	{
+		// Didn't overlap last frame -> fire enter event.
+		if (prevFrameTriggerOverlaps.find(o) == prevFrameTriggerOverlaps.end())
+		{
+			scene_entity triggerEntity = { o.a, scene };
+			scene_entity otherEntity = { o.b, scene };
+			const trigger_component& triggerComp = triggerEntity.getComponent<trigger_component>();
+			triggerComp.callback(trigger_event{ triggerEntity, otherEntity, trigger_event_enter });
+		}
+	}
+
+	for (entity_pair o : prevFrameTriggerOverlaps)
+	{
+		// Did overlap last frame and don't this frame -> fire leave event.
+		if (thisFrameTriggerOverlaps.find(o) == thisFrameTriggerOverlaps.end())
+		{
+			scene_entity triggerEntity = { o.a, scene };
+			scene_entity otherEntity = { o.b, scene };
+			if (scene.isEntityValid(triggerEntity) && scene.isEntityValid(otherEntity))
+			{
+				const trigger_component& triggerComp = triggerEntity.getComponent<trigger_component>();
+				triggerComp.callback(trigger_event{ triggerEntity, otherEntity, trigger_event_leave });
+			}
+		}
+	}
+
+	historyIndex = 1 - historyIndex;
 }
 
 // This function returns the inertia tensors with respect to the center of gravity, so with a coordinate system centered at the COG.

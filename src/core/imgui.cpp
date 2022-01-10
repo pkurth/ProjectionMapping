@@ -11,6 +11,7 @@
 #include <imgui/backends/imgui_impl_win32.cpp>
 #include <imgui/backends/imgui_impl_dx12.cpp>
 
+#include "input.h"
 #include "imgui.h"
 #include "dx/dx_context.h"
 #include "dx/dx_command_list.h"
@@ -184,6 +185,11 @@ static ImTextureID pushTexture(dx_cpu_descriptor_handle handle)
 
 namespace ImGui
 {
+	bool AnyModifiersDown()
+	{
+		return ImGui::IsKeyDown(key_ctrl) || ImGui::IsKeyDown(key_shift) || ImGui::IsKeyDown(key_alt);
+	}
+
 	bool BeginWindowHiddenTabBar(const char* name, bool* open, ImGuiWindowFlags flags)
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -219,22 +225,22 @@ namespace ImGui
 
 	void Image(const ref<dx_texture>& texture, ImVec2 size)
 	{
+		if (size.x == 0)
+		{
+			size.x = min(ImGui::GetContentRegionAvail().x, (float)texture->width);
+		}
+
+		if (size.y == 0)
+		{
+			size.y = texture->height * size.x / (float)texture->width;
+		}
+
 		ImGui::Image(texture->defaultSRV, size);
 	}
 
 	void Image(const ref<dx_texture>& texture, uint32 width, uint32 height)
 	{
-		if (width == 0)
-		{
-			width = min((uint32)ImGui::GetContentRegionAvail().x, texture->width);
-		}
-
-		if (height == 0)
-		{
-			height = texture->height * width / texture->width;
-		}
-
-		ImGui::Image(texture->defaultSRV, width, height);
+		ImGui::Image(texture, ImVec2((float)width, (float)height));
 	}
 
 	bool ImageButton(::dx_cpu_descriptor_handle& handle, ImVec2 size, ImVec2 uvTopLeft, ImVec2 uvBottomRight)
@@ -448,6 +454,13 @@ namespace ImGui
 		ImGui::TreePop();
 	}
 
+	void PopupOkButton(uint32 width)
+	{
+		float w = (float)width;
+		ImGui::SetCursorPosX((ImGui::GetWindowSize().x - w) * 0.5f);
+		if (ImGui::Button("OK", ImVec2(w, 0))) { ImGui::CloseCurrentPopup(); }
+		ImGui::SetItemDefaultFocus();
+	}
 
 
 
@@ -467,7 +480,6 @@ namespace ImGui
 		ImGui::PopID();
 		ImGui::PopItemWidth();
 	}
-
 
 	bool BeginProperties()
 	{
@@ -601,7 +613,7 @@ namespace ImGui
 	{
 		return ImGui::InputInternal(ImGuiDataType_Float, 4, label, f.data, format);
 	}
-
+	
 	bool PropertyInput(const char* label, int32& f, const char* format)
 	{
 		return ImGui::InputInternal(ImGuiDataType_S32, 1, label, &f, format);
@@ -657,7 +669,6 @@ namespace ImGui
 	{
 		return ImGui::DragInternal(ImGuiDataType_U32, 1, label, &f, speed, format);
 	}
-
 
 	bool PropertyDropdown(const char* label, const char** names, uint32 count, uint32& current)
 	{
@@ -847,8 +858,18 @@ namespace ImGui
 		return output;
 	}
 
-	bool Spline(const char* label, const ImVec2& size, uint32 maxpoints, float* x, float* y, uint32 drawResolution)
+	bool Spline(const char* label, ImVec2 size, uint32 maxpoints, float* x, float* y, uint32 drawResolution)
 	{
+		if (size.x == 0)
+		{
+			size.x = ImGui::GetContentRegionAvail().x;
+		}
+
+		if (size.y == 0)
+		{
+			size.y = size.x;
+		}
+
 		bool modified = false;
 		if (maxpoints < 2 || !x || !y)
 		{
@@ -1065,6 +1086,7 @@ namespace ImGui
 			{
 				y[i] = 1 - y[i];
 			}
+			modified = true;
 		}
 		ImGui::SameLine();
 
@@ -1082,6 +1104,7 @@ namespace ImGui
 			{
 				x[max / 2] = 1 - x[max / 2];
 			}
+			modified = true;
 		}
 		ImGui::SameLine();
 
@@ -1134,6 +1157,7 @@ namespace ImGui
 					y[i] = float(tween::ease(item - 1, x[i]));
 				}
 			}
+			modified = true;
 		}
 
 		char buf[128];

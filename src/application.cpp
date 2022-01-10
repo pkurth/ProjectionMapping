@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "application.h"
-#include "geometry/geometry.h"
 #include "dx/dx_texture.h"
 #include "core/random.h"
 #include "core/color.h"

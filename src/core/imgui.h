@@ -31,7 +31,7 @@ static const char* imguiIconNames[] =
 	"Translate (W)",
 	"Rotate (E)",
 	"Scale (R)",
-	"No widget (Q)",
+	"No gizmo (Q)",
 };
 
 #define IMGUI_ICON_COLS 4
@@ -39,6 +39,8 @@ static const char* imguiIconNames[] =
 
 namespace ImGui
 {
+	bool AnyModifiersDown();
+
 	bool BeginWindowHiddenTabBar(const char* name, bool* open = 0, ImGuiWindowFlags flags = 0);
 	bool BeginControlsWindow(const char* name);
 
@@ -71,6 +73,8 @@ namespace ImGui
 	inline void Value(const char* prefix, uint64 v) { ImGui::Text("%s: %llu", prefix, v); }
 	inline void Value(const char* prefix, const char* v) { ImGui::Text("%s: %s", prefix, v); }
 
+
+	void PopupOkButton(uint32 width = 120);
 
 
 	bool BeginProperties();
@@ -131,10 +135,10 @@ namespace ImGui
 
 
 	float SplineValue(float p, const float* x, const float* y, uint32 numPoints);
-	bool Spline(const char* label, const ImVec2& size, uint32 maxNumPoints, float* x, float* y, uint32 drawResolution = 256);
+	bool Spline(const char* label, ImVec2 size, uint32 maxNumPoints, float* x, float* y, uint32 drawResolution = 256);
 
 #ifdef spline
-	template <uint32 maxNumPoints> bool Spline(const char* label, const ImVec2& size, struct spline(float, maxNumPoints)& s, uint32 drawResolution = 256)
+	template <uint32 maxNumPoints> bool Spline(const char* label, ImVec2 size, struct spline(float, maxNumPoints)& s, uint32 drawResolution = 256)
 	{
 		return Spline(label, size, maxNumPoints, s.ts, s.values, drawResolution);
 	}
