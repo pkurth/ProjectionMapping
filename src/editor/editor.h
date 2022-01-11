@@ -6,11 +6,11 @@
 #include "undo_stack.h"
 #include "transformation_gizmo.h"
 #include "rendering/main_renderer.h"
-#include "tree_generation.h"
+#include "tracking/tracking.h"
 
 struct scene_editor
 {
-	void initialize(game_scene* scene, main_renderer* renderer);
+	void initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker);
 
 	bool update(const user_input& input, ldr_render_pass* ldrRenderPass, float dt);
 
@@ -36,6 +36,7 @@ private:
 
 	game_scene* scene;
 	main_renderer* renderer;
+	depth_tracker* tracker;
 
 	undo_stack undoStack;
 	transformation_gizmo gizmo;
@@ -45,9 +46,6 @@ private:
 	vec3 selectedEntityEulerRotation;
 
 	system_info systemInfo;
-
-	tree_generator treeGenerator;
-	scene_entity treeEntity;
 
 	friend struct selection_undo;
 };

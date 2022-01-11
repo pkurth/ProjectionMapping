@@ -5,7 +5,6 @@
 #include "dx/dx_buffer.h"
 #include "rendering/render_pass.h"
 #include "scene/scene.h"
-#include "editor/editor.h"
 
 enum tracking_direction
 {
@@ -19,6 +18,12 @@ enum tracking_rotation_representation
 	tracking_rotation_representation_lie,
 };
 
+enum tracker_ui_interaction
+{
+	tracker_ui_no_interaction,
+	tracker_ui_select_tracked_entity,
+};
+
 struct depth_tracker
 {
 	depth_tracker();
@@ -26,13 +31,20 @@ struct depth_tracker
 	depth_tracker& operator=(const depth_tracker&) = delete;
 	depth_tracker& operator=(depth_tracker&&) = default;
 
-	void trackObject(scene_entity entity);
-
-	void update(scene_editor* editor);
+	tracker_ui_interaction drawSettings();
+	void update();
 	void visualizeDepth(ldr_render_pass* renderPass);
 
+	struct solver_stats
+	{
+		float error;
+		uint32 numCGIterations;
+	};
+
+	scene_entity trackedEntity = {};
 
 private:
+
 	bool cameraInitialized() { return cameraDepthTexture != 0; }
 
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
@@ -57,8 +69,6 @@ private:
 
 	ref<dx_buffer> ataReadbackBuffer;
 
-	scene_entity trackedEntity = {};
-
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);
 
@@ -71,5 +81,10 @@ private:
 	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
 
 	bool tracking = false;
+
+
+	// This is declared here, so that we can show it in the editor.
+	solver_stats stats = {};
+	uint32 numCorrespondences = 0;
 };
 

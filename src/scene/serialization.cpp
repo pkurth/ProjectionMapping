@@ -7,6 +7,8 @@
 
 #include "physics/physics.h"
 
+#include "projection_mapping/projector.h"
+
 
 static YAML::Emitter& operator<<(YAML::Emitter& out, const render_camera& camera)
 {
@@ -26,7 +28,9 @@ static YAML::Emitter& operator<<(YAML::Emitter& out, const render_camera& camera
 		out << YAML::Key << "Fx" << YAML::Value << camera.intrinsics.fx
 			<< YAML::Key << "Fy" << YAML::Value << camera.intrinsics.fy
 			<< YAML::Key << "Cx" << YAML::Value << camera.intrinsics.cx
-			<< YAML::Key << "Cy" << YAML::Value << camera.intrinsics.cy;
+			<< YAML::Key << "Cy" << YAML::Value << camera.intrinsics.cy
+			<< YAML::Key << "Width" << YAML::Value << camera.width
+			<< YAML::Key << "Height" << YAML::Value << camera.height;
 	}
 
 	out << YAML::EndMap;
@@ -294,6 +298,15 @@ static YAML::Emitter& operator<<(YAML::Emitter& out, const raster_component& c)
 	return out;
 }
 
+static YAML::Emitter& operator<<(YAML::Emitter& out, const projector_component& c)
+{
+	out << YAML::BeginMap
+		<< YAML::Key << "Camera" << YAML::Value << c.calibratedCamera
+		<< YAML::EndMap;
+
+	return out;
+}
+
 namespace YAML
 {
 	template<>
@@ -319,6 +332,8 @@ namespace YAML
 				YAML_LOAD(n, camera.intrinsics.fy, "Fy");
 				YAML_LOAD(n, camera.intrinsics.cx, "Cx");
 				YAML_LOAD(n, camera.intrinsics.cy, "Cy");
+				YAML_LOAD(n, camera.width, "Width");
+				YAML_LOAD(n, camera.height, "Height");
 			}
 
 			return true; 
@@ -713,9 +728,24 @@ namespace YAML
 			return true;
 		}
 	};
+
+	template<>
+	struct convert<projector_component>
+	{
+		static bool decode(const Node& n, projector_component& c)
+		{
+			if (!n.IsMap()) { return false; }
+
+			render_camera camera;
+			YAML_LOAD(n, camera, "Camera");
+			c.initialize(camera);
+
+			return true;
+		}
+	};
 }
 
-void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSettings)
+void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSettings, depth_tracker* tracker)
 {
 	if (scene.savePath.empty())
 	{
@@ -742,7 +772,7 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 		<< YAML::BeginSeq;
 
 
-	scene.forEachEntity([&out, &scene](entt::entity entityID)
+	scene.forEachEntity([&out, &scene, tracker](entt::entity entityID)
 	{
 		scene_entity entity = { entityID, scene };
 
@@ -776,7 +806,12 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 					out << YAML::EndSeq;
 				}
 			}
+			if (auto* c = entity.getComponentIfExists<projector_component>()) { out << YAML::Key << "Projector" << YAML::Value << *c; }
 
+			if (tracker->trackedEntity == entity)
+			{
+				out << YAML::Key << "Tracking" << YAML::Value << true;
+			}
 
 			/* 
 			TODO:
@@ -800,7 +835,7 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 	LOG_MESSAGE("Scene saved to '%ws'", scene.savePath.c_str());
 }
 
-bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSettings, std::string& environmentName)
+bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSettings, std::string& environmentName, depth_tracker* tracker)
 {
 	fs::path filename = openFileDialog("Scene files", "sc");
 	if (filename.empty())
@@ -852,6 +887,13 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 				entity.addComponent<collider_component>(collidersNode[i].as<collider_component>());
 			}
 		}
+
+		if (entityNode["Tracking"])
+		{
+			tracker->trackedEntity = entity;
+		}
+
+		LOAD_COMPONENT(projector_component, "Projector");
 	}
 
 	LOG_MESSAGE("Scene loaded from '%ws'", scene.savePath.c_str());

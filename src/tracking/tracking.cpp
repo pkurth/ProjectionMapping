@@ -179,11 +179,6 @@ void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)
 	ataReadbackBuffer = createReadbackBuffer(sizeof(tracking_ata_atb), NUM_BUFFERED_FRAMES * 2);
 }
 
-void depth_tracker::trackObject(scene_entity entity)
-{
-	trackedEntity = entity;
-}
-
 struct vec6
 {
 	float m[6];
@@ -354,16 +349,10 @@ static rotation_translation smoothDeltaTransform(rotation_translation delta, flo
 	return lieExp(lieLog(delta) * t);
 }
 
-struct solver_stats
-{
-	float error;
-	uint32 numCGIterations;
-};
-
 struct solver_result
 {
 	vec6 x;
-	solver_stats stats;
+	depth_tracker::solver_stats stats;
 };
 
 static solver_result solve(const tracking_ata& A, const tracking_atb& b, uint32 maxNumIterations = 20)
@@ -395,7 +384,7 @@ static solver_result solve(const tracking_ata& A, const tracking_atb& b, uint32 
 		p = r + p * beta;
 	}
 
-	return { x, solver_stats{ rdotr, k } };
+	return { x, { rdotr, k } };
 }
 
 static rotation_translation eulerUpdate(vec6 x, float smoothing)
@@ -435,10 +424,81 @@ static rotation_translation lieUpdate(vec6 x, float smoothing)
 	return smoothDeltaTransform(x, 1.f - smoothing);
 }
 
-void depth_tracker::update(scene_editor* editor)
+tracker_ui_interaction depth_tracker::drawSettings()
 {
-	solver_stats stats = {}; // This is declared here, so that we can show it in the editor.
-	uint32 numCorrespondences = 0;
+	tracker_ui_interaction result = tracker_ui_no_interaction;
+
+	if (cameraInitialized())
+	{
+		if (ImGui::BeginProperties())
+		{
+			bool valid = trackedEntity;
+			if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
+			{
+				result = tracker_ui_select_tracked_entity;
+			}
+			ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
+			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
+			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
+			ImGui::PropertySlider("Smoothing (higher is smoother)", smoothing);
+			ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
+
+			ImGui::PropertyCheckbox("Visualize depth", showDepth);
+
+			ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
+			ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
+
+			if (tracking)
+			{
+				ImGui::Separator();
+				ImGui::PropertyValue("Number of correspondences", numCorrespondences);
+				//ImGui::PropertyValue("Current error", stats.error, "%.8f");
+				ImGui::PropertyValue("CG iterations", stats.numCGIterations);
+			}
+
+			ImGui::EndProperties();
+		}
+
+		ImGui::Image(renderedColorTexture);
+	}
+	else
+	{
+		ImGui::Text("Tracking disabled, because camera is not initialized.");
+		ImGui::Separator();
+
+		if (ImGui::BeginProperties())
+		{
+			uint32 index = -1;
+
+			if (ImGui::PropertyButton("Refresh", ICON_FA_REDO_ALT))
+			{
+				rgbd_camera::enumerate();
+			}
+
+			bool changed = ImGui::PropertyDropdown("Available cameras", [](uint32 index, void* data) -> const char*
+				{
+					auto& cameras = *(std::vector<rgbd_camera_info>*)data;
+
+					if (index == -1) { return "--"; }
+					if (index >= cameras.size()) { return 0; }
+					return cameras[index].description.c_str();
+				}, index, &rgbd_camera::allConnectedRGBDCameras);
+
+			if (changed)
+			{
+				initialize(rgbd_camera::allConnectedRGBDCameras[index].type, rgbd_camera::allConnectedRGBDCameras[index].deviceIndex);
+			}
+
+			ImGui::EndProperties();
+		}
+	}
+
+	return result;
+}
+
+void depth_tracker::update()
+{
+	numCorrespondences = 0;
 
 	if (cameraInitialized())
 	{
@@ -740,80 +800,6 @@ void depth_tracker::update(scene_editor* editor)
 		dxContext.executeCommandList(cl);
 
 	}
-
-	if (ImGui::Begin("Settings"))
-	{
-		if (ImGui::BeginTree("Tracker"))
-		{
-			if (cameraInitialized())
-			{
-				if (ImGui::BeginProperties())
-				{
-					bool valid = trackedEntity;
-					if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
-					{
-						editor->setSelectedEntity(trackedEntity);
-					}
-					ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
-					ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
-					ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
-					ImGui::PropertySlider("Smoothing (higher is smoother)", smoothing);
-					ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
-
-					ImGui::PropertyCheckbox("Visualize depth", showDepth);
-
-					ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
-					ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
-
-					if (tracking)
-					{
-						ImGui::Separator();
-						ImGui::PropertyValue("Number of correspondences", numCorrespondences);
-						//ImGui::PropertyValue("Current error", stats.error, "%.8f");
-						ImGui::PropertyValue("CG iterations", stats.numCGIterations);
-					}
-
-					ImGui::EndProperties();
-				}
-
-				ImGui::Image(renderedColorTexture);
-			}
-			else
-			{
-				ImGui::Text("Tracking disabled, because camera is not initialized.");
-				ImGui::Separator();
-
-				if (ImGui::BeginProperties())
-				{
-					uint32 index = -1;
-
-					if (ImGui::PropertyButton("Refresh", ICON_FA_REDO_ALT))
-					{
-						rgbd_camera::enumerate();
-					}
-
-					bool changed = ImGui::PropertyDropdown("Available cameras", [](uint32 index, void* data) -> const char*
-					{
-						auto& cameras = *(std::vector<rgbd_camera_info>*)data;
-
-						if (index == -1) { return "--"; }
-						if (index >= cameras.size()) { return 0; }
-						return cameras[index].description.c_str();
-					}, index, &rgbd_camera::allConnectedRGBDCameras);
-
-					if (changed)
-					{
-						initialize(rgbd_camera::allConnectedRGBDCameras[index].type, rgbd_camera::allConnectedRGBDCameras[index].deviceIndex);
-					}
-
-					ImGui::EndProperties();
-				}
-			}
-
-			ImGui::EndTree();
-		}
-	}
-	ImGui::End();
 }
 
 void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)

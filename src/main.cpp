@@ -254,7 +254,7 @@ int main(int argc, char** argv)
 		renderer.beginFrame(renderWidth, renderHeight);
 		
 		app.update(input, dt);
-		tracker.update(&app.getEditor());
+		tracker.update();
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();

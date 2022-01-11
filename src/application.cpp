@@ -64,7 +64,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	scene.camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 
-	editor.initialize(&scene, renderer);
+	editor.initialize(&scene, renderer, tracker);
 
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/nike.obj"))
 	{
@@ -80,7 +80,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 			.addComponent<transform_component>(transform)
 			.addComponent<raster_component>(targetObjectMesh);
 
-		tracker->trackObject(targetObject);
+		tracker->trackedEntity = targetObject;
 	}
 
 	editor.setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");

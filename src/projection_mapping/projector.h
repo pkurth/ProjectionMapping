@@ -9,6 +9,18 @@ struct projector_component
 {
 	projector_component()
 	{
+		initialize();
+	}
+
+	projector_component(const render_camera& camera)
+	{
+		initialize(camera);
+	}
+
+	void initialize()
+	{
+		shutdown();
+
 		uint32 width = 1920;
 		uint32 height = 1080;
 		window.initialize(TEXT("Projector"), width, height);
@@ -34,8 +46,10 @@ struct projector_component
 		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
 	}
 
-	projector_component(const render_camera& camera)
+	void initialize(const render_camera& camera)
 	{
+		shutdown();
+
 		calibratedCamera = camera;
 		realCamera = calibratedCamera;
 
@@ -46,14 +60,19 @@ struct projector_component
 		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
 	}
 
-	projector_component(projector_component&&) = default;
-	projector_component& operator=(const projector_component&) = delete;
-	projector_component& operator=(projector_component&& ) = default;
-	
-	~projector_component()
+	void shutdown()
 	{
 		window.shutdown();
 		renderer.shutdown();
+	}
+
+	projector_component(projector_component&&) = default;
+	projector_component& operator=(const projector_component&) = delete;
+	projector_component& operator=(projector_component&&) = default;
+	
+	~projector_component()
+	{
+		shutdown();
 	}
 
 	projector_renderer renderer;

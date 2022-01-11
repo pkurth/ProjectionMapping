@@ -15,7 +15,7 @@ projector_manager::projector_manager(game_scene& scene)
 
 void projector_manager::beginFrame()
 {
-	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
+	for (auto& [entityHandle, projector] : scene->view<projector_component>().each())
 	{
 		projector.renderer.beginFrame(projector.window.clientWidth, projector.window.clientHeight);
 	}
@@ -74,7 +74,7 @@ void projector_manager::updateAndRender()
 				};
 
 				uint32 i = 0;
-				for (auto [entityHandle, projector] : scene->view<projector_component>().each())
+				for (auto& [entityHandle, projector] : scene->view<projector_component>().each())
 				{
 					ImGui::TableNextRow();
 					

@@ -13,7 +13,6 @@
 #include "scene/serialization.h"
 #include "projection_mapping/projector.h"
 #include "rendering/debug_visualization.h"
-#include "tracking/tracking.h"
 
 #include <fontawesome/list.h>
 
@@ -85,19 +84,14 @@ void scene_editor::setSelectedEntityNoUndo(scene_entity entity)
 	updateSelectedEntityUIRotation();
 }
 
-void scene_editor::initialize(game_scene* scene, main_renderer* renderer)
+void scene_editor::initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker)
 {
 	this->scene = scene;
 	this->renderer = renderer;
+	this->tracker = tracker;
 	cameraController.initialize(&scene->camera);
 
 	systemInfo = getSystemInfo();
-
-
-
-	treeEntity = scene->createEntity("Test tree")
-		.addComponent<transform_component>(trs::identity)
-		.addComponent<raster_component>(make_ref<composite_mesh>());
 }
 
 bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPass, float dt)
@@ -1269,7 +1263,7 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 		}
 		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('S'))
 		{
-			serializeSceneToDisk(*scene, renderer->settings);
+			serializeSceneToDisk(*scene, renderer->settings, tracker);
 			inputCaptured = true;
 			ImGui::GetIO().KeysDown['S'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
 		}
@@ -1419,13 +1413,13 @@ void scene_editor::setEnvironment(const fs::path& filename)
 
 void scene_editor::serializeToFile()
 {
-	serializeSceneToDisk(*scene, renderer->settings);
+	serializeSceneToDisk(*scene, renderer->settings, tracker);
 }
 
 bool scene_editor::deserializeFromFile()
 {
 	std::string environmentName;
-	if (deserializeSceneFromDisk(*scene, renderer->settings, environmentName))
+	if (deserializeSceneFromDisk(*scene, renderer->settings, environmentName, tracker))
 	{
 		setSelectedEntityNoUndo({});
 		setEnvironment(environmentName);
@@ -1707,21 +1701,41 @@ void scene_editor::drawSettings(float dt)
 			ImGui::EndTree();
 		}
 
-		if (ImGui::BeginTree("Tree generation"))
+		if (ImGui::BeginTree("Physics"))
 		{
-			if (treeGenerator.edit())
+			if (ImGui::BeginProperties())
 			{
-				auto mesh = treeEntity.getComponent<raster_component>().mesh;
-				auto gen = treeGenerator.generatedMesh;
-				mesh->mesh = gen;
-				mesh->submeshes.clear();
-				mesh->submeshes.push_back({ submesh_info{ gen.indexBuffer->elementCount, 0, 0, gen.vertexBuffer.positions->elementCount }, 
-					{},
-					trs::identity,
-					getDefaultPBRMaterial()
-					});
-			}
+				bool physicsPaused = physicsSettings.globalTimeScale < 0.f;
+				if (ImGui::PropertyCheckbox("Pause", physicsPaused))
+				{
+					physicsSettings.globalTimeScale *= -1.f;
+				}
+				if (physicsSettings.globalTimeScale >= 0.f)
+				{
+					ImGui::PropertySlider("Time scale", physicsSettings.globalTimeScale);
+				}
 
+				ImGui::PropertySlider("Rigid solver iterations", physicsSettings.numRigidSolverIterations, 1, 200);
+
+				ImGui::PropertySlider("Cloth velocity iterations", physicsSettings.numClothVelocityIterations, 0, 10);
+				ImGui::PropertySlider("Cloth position iterations", physicsSettings.numClothPositionIterations, 0, 10);
+				ImGui::PropertySlider("Cloth drift iterations", physicsSettings.numClothDriftIterations, 0, 10);
+
+				ImGui::PropertySlider("Test force", physicsSettings.testForce, 1.f, 10000.f);
+
+				ImGui::PropertyCheckbox("Use SIMD", physicsSettings.simd);
+
+				ImGui::EndProperties();
+			}
+			ImGui::EndTree();
+		}
+
+		if (ImGui::BeginTree("Tracker"))
+		{
+			if (tracker->drawSettings() == tracker_ui_select_tracked_entity)
+			{
+				setSelectedEntity(tracker->trackedEntity);
+			}
 			ImGui::EndTree();
 		}
 
@@ -1755,45 +1769,6 @@ void scene_editor::drawSettings(float dt)
 			if (pathTracerDirty)
 			{
 				pathTracer.numAveragedFrames = 0;
-			}
-		}
-		else
-		{
-			//if (ImGui::BeginTree("Particle systems"))
-			//{
-			//	editFireParticleSystem(fireParticleSystem);
-			//	editBoidParticleSystem(boidParticleSystem);
-			//
-			//	ImGui::EndTree();
-			//}
-
-			if (ImGui::BeginTree("Physics"))
-			{
-				if (ImGui::BeginProperties())
-				{
-					bool physicsPaused = physicsSettings.globalTimeScale < 0.f;
-					if (ImGui::PropertyCheckbox("Pause", physicsPaused))
-					{
-						physicsSettings.globalTimeScale *= -1.f;
-					}
-					if (physicsSettings.globalTimeScale >= 0.f)
-					{
-						ImGui::PropertySlider("Time scale", physicsSettings.globalTimeScale);
-					}
-
-					ImGui::PropertySlider("Rigid solver iterations", physicsSettings.numRigidSolverIterations, 1, 200);
-
-					ImGui::PropertySlider("Cloth velocity iterations", physicsSettings.numClothVelocityIterations, 0, 10);
-					ImGui::PropertySlider("Cloth position iterations", physicsSettings.numClothPositionIterations, 0, 10);
-					ImGui::PropertySlider("Cloth drift iterations", physicsSettings.numClothDriftIterations, 0, 10);
-
-					ImGui::PropertySlider("Test force", physicsSettings.testForce, 1.f, 10000.f);
-
-					ImGui::PropertyCheckbox("Use SIMD", physicsSettings.simd);
-
-					ImGui::EndProperties();
-				}
-				ImGui::EndTree();
 			}
 		}
 	}

@@ -9,6 +9,7 @@ struct projector_renderer
 	static void initializeCommon();
 
 	projector_renderer() {}
+
 	void initialize(color_depth colorDepth, uint32 windowWidth, uint32 windowHeight);
 	void shutdown();
 
@@ -33,7 +34,7 @@ struct projector_renderer
 	static inline tonemap_settings tonemapSettings;
 
 
-	static inline float depthDiscontinuityThreshold = 0.05f;
+	static inline float depthDiscontinuityThreshold = 0.01f;
 	static inline uint32 depthDiscontinuityDilateRadius = 1;
 	static inline bool blurDepthDiscontinuities = false;
 
