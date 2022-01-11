@@ -13,7 +13,7 @@ Texture2D<float> depthTextures[32]			: register(t0, space3);
 Texture2D<float> intensities[32]			: register(t0, space4);
 Texture2D<float> masks[32]					: register(t0, space5);
 
-RWTexture2D<float2> output[32]				: register(u0, space0);
+RWTexture2D<float4> output[32]				: register(u0, space0);
 
 
 [numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
@@ -32,7 +32,7 @@ void main(cs_input IN)
 	const float depth = depthTextures[index][texCoord];
 	if (depth == 1.f)
 	{
-		output[index][texCoord] = float2(0.f, 0.f);
+		output[index][texCoord] = (float4)0.f;
 		return;
 	}
 
@@ -64,5 +64,5 @@ void main(cs_input IN)
 	float maxComponent = max(color.r, max(color.g, color.b));
 	float maxCompensation = 1.f / maxComponent; // Max value for compensation to avoid clipping.
 
-	output[index][texCoord] = float2(possibleWhiteIntensity, maxCompensation);
+	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, 1.f - mask, 0.f);
 }

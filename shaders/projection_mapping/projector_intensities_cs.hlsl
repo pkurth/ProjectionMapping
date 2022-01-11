@@ -5,7 +5,7 @@
 ConstantBuffer<projector_intensity_cb> cb	: register(b0, space0);
 StructuredBuffer<projector_cb> projectors	: register(t0, space0);
 
-Texture2D<float2> confidenceTextures[32]	: register(t0, space1);
+Texture2D<float4> confidenceTextures[32]	: register(t0, space1);
 Texture2D<float> depthTextures[32]			: register(t0, space2);
 
 RWTexture2D<float> outIntensities[32]		: register(u0, space0);
@@ -41,7 +41,9 @@ void main(cs_input IN)
 
 
 	float Esum = 0.f;
-	float k = 4.f;
+	const float k = 4.f;
+
+#define USE_MASK 1
 
 	uint numProjectors = cb.numProjectors;
 	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
@@ -57,14 +59,18 @@ void main(cs_input IN)
 			float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
 			if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
 			{
-				float atten = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0).x;
-				Esum += pow(atten, k);
+				float4 c = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0);
+				float mask = USE_MASK ? c.z : 1.f;
+				float atten = c.x;
+				Esum += pow(atten, k) * mask;
 			}
 		}
 	}
 
-	float ownAtten = confidenceTextures[index][texCoord].x;
-	float E = pow(ownAtten, k);
+	float4 c = confidenceTextures[index][texCoord];
+	float mask = USE_MASK ? c.z : 1.f;
+	float ownAtten = c.x;
+	float E = pow(ownAtten, k) * mask;
 	float weight = E / max(E + Esum, 0.0001f);
 
 	outIntensities[index][texCoord] = weight / ownAtten;
