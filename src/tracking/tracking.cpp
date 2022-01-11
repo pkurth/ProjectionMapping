@@ -68,7 +68,7 @@ PIPELINE_RENDER_IMPL(visualize_depth_pipeline)
 	DX_PROFILE_BLOCK(cl, "Render depth camera image");
 
 	visualize_depth_cb cb;
-	cb.vp = viewProj;
+	cb.vp = viewProj * rc.transform;
 	cb.colorCameraV = rc.material.colorCameraV;
 	cb.colorCameraIntrinsics = rc.material.colorCameraIntrinsics;
 	cb.colorCameraDistortion = rc.material.colorCameraDistortion;
@@ -608,6 +608,12 @@ void depth_tracker::update()
 						translation = -(rotation * translation);
 					}
 
+					rotation = camera.depthSensor.rotation * rotation * conjugate(camera.depthSensor.rotation);
+					translation = camera.depthSensor.rotation * translation;
+
+					rotation = globalCameraRotation * rotation * conjugate(globalCameraRotation);
+					translation = globalCameraRotation * translation;
+
 					if (trackedEntity)
 					{
 						transform_component& transform = trackedEntity.getComponent<transform_component>();
@@ -636,7 +642,10 @@ void depth_tracker::update()
 				auto& i = camera.depthSensor.intrinsics;
 				create_correspondences_vs_cb vscb;
 				vscb.distortion = camera.depthSensor.distortion;
-				vscb.m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) * trsToMat4(transform); // TODO: Global camera position.
+				vscb.m = 
+					createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation) 
+					* createViewMatrix(globalCameraPosition, globalCameraRotation)
+					* trsToMat4(transform);
 				vscb.p = createPerspectiveProjectionMatrix((float)camera.depthSensor.width, (float)camera.depthSensor.height, i.fx, i.fy, i.cx, i.cy, 0.1f, -1.f);
 
 
@@ -807,8 +816,11 @@ void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 	if (showDepth && cameraInitialized())
 	{
 		auto& c = camera.colorSensor;
-		mat4 colorCameraV = createViewMatrix(c.position, c.rotation);
-		renderPass->renderObject<visualize_depth_pipeline>(mat4::identity, {}, {}, {},
+		mat4 colorCameraV = createViewMatrix(c.position, c.rotation); // Local.
+
+		mat4 m = createModelMatrix(globalCameraPosition, globalCameraRotation) * createModelMatrix(camera.depthSensor.position, camera.depthSensor.rotation);
+
+		renderPass->renderObject<visualize_depth_pipeline>(m, {}, {}, {},
 			visualize_depth_material{ colorCameraV, c.intrinsics, c.distortion, cameraDepthTexture, cameraUnprojectTableTexture, cameraColorTexture, camera.depthScale });
 	}
 }

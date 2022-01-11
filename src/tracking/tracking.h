@@ -43,6 +43,9 @@ struct depth_tracker
 
 	scene_entity trackedEntity = {};
 
+	vec3 globalCameraPosition = vec3(0.f, 0.f, 0.f);
+	quat globalCameraRotation = quat::identity;
+
 private:
 
 	bool cameraInitialized() { return cameraDepthTexture != 0; }
