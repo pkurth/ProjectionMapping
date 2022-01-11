@@ -39,53 +39,6 @@ void main(cs_input IN)
 
 	float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 
-#if 0
-	float2 confidences[32];
-	uint numConfidences = 0;
-
-	float confidenceSum = 0.f;
-	float maxConfidence = 0.f;
-
-	uint numProjectors = cb.numProjectors;
-	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
-	{
-		if (projIndex != index)
-		{
-			float4 projected = mul(projectors[projIndex].viewProj, float4(P, 1.f));
-			projected.xyz /= projected.w;
-
-			float2 projUV = projected.xy * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
-			float testDepth = projected.z;
-
-			float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
-			if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
-			{
-				float2 confidence = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0);
-				if (confidence.y > 0.f)
-				{
-					//confidences[numConfidences++] = confidence;
-					confidenceSum += confidence;
-					maxConfidence = max(maxConfidence, confidence);
-				}
-			}
-		}
-	}
-
-	float2 ownConfidence = confidenceTextures[index][texCoord];
-
-	if (ownConfidence > maxConfidence)
-	{
-		outIntensities[index][texCoord] = 1.f / ownConfidence;
-	}
-	else
-	{
-		//float remaining = 
-		outIntensities[index][texCoord] = 0.f;
-	}
-
-	//outIntensities[index][texCoord] = ownConfidence / (ownConfidence + confidenceSum);
-#endif
-
 
 	float Esum = 0.f;
 	float k = 4.f;

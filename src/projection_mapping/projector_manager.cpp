@@ -41,18 +41,60 @@ void projector_manager::updateAndRender()
 			ImGui::EndProperties();
 		}
 
-
-
-		for (auto [entityHandle, projector] : scene->view<projector_component>().each())
+		if (ImGui::Button("Detailed view"))
 		{
-			//ImGui::Image(projector.renderer.solverIntensity);
-			//ImGui::Image(projector.renderer.depthDiscontinuitiesTexture);
-			ImGui::Image(projector.renderer.confidenceTexture);
+			detailWindowOpen = true;
 		}
 	}
 	ImGui::End();
 
 
+	if (detailWindowOpen)
+	{
+		if (ImGui::Begin("Projector details", &detailWindowOpen))
+		{
+			if (ImGui::BeginTable("##Table", 4))
+			{
+				ImGui::TableSetupColumn("Projector");
+				ImGui::TableSetupColumn("Rendering");
+				ImGui::TableSetupColumn("Depth discontinuities");
+				ImGui::TableHeadersRow();
+
+				auto hoverImage = [](const ref<dx_texture>& tex)
+				{
+					ImGui::PushID(&tex);
+					ImGui::Image(tex);
+					if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Right))
+					{
+						ImGui::BeginTooltip();
+						ImGui::Image(tex, tex->width, tex->height);
+						ImGui::EndTooltip();
+					}
+					ImGui::PopID();
+				};
+
+				uint32 i = 0;
+				for (auto [entityHandle, projector] : scene->view<projector_component>().each())
+				{
+					ImGui::TableNextRow();
+					
+					ImGui::TableNextColumn();
+					ImGui::Text("%u", i);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.frameResult);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.depthDiscontinuitiesTexture);
+
+					++i;
+				}
+
+				ImGui::EndTable();
+			}
+		}
+		ImGui::End();
+	}
 
 	for (auto [entityHandle, projector, transform] : scene->group(entt::get<projector_component, position_rotation_component>).each())
 	{

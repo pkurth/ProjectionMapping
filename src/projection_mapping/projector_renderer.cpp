@@ -190,76 +190,79 @@ void projector_renderer::endFrame()
 
 	dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
-
-	cl->clearDepthAndStencil(depthStencilBuffer);
-	cl->clearDepthAndStencil(realDepthStencilBuffer);
-	cl->clearRTV(hdrColorTexture, 0.f, 0.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors. Clear alpha to zero too, to indicate background.
-	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-
-	auto realDepthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
-		.depthAttachment(realDepthStencilBuffer);
-
-	depthPrePass(cl, realDepthOnlyRenderTarget, opaqueRenderPass,
-		realProjectorCamera.viewProj, realProjectorCamera.prevFrameViewProj, vec2(0.f, 0.f), vec2(0.f, 0.f));
-
-
-	auto depthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
-		.depthAttachment(depthStencilBuffer);
-
-	depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
-		projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
-
-
-	auto hdrOpaqueRenderTarget = dx_render_target(renderWidth, renderHeight)
-		.colorAttachment(hdrColorTexture)
-		.colorAttachment(worldNormalsTexture)
-		.colorAttachment(reflectanceTexture)
-		.depthAttachment(depthStencilBuffer);
-
-	opaqueLightPass(cl, hdrOpaqueRenderTarget, opaqueRenderPass, materialInfo, projectorCamera.viewProj);
-
-
-	barrier_batcher(cl)
-		.transition(hdrColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-		.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-		.transition(reflectanceTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-
-	specularAmbient(cl, hdrColorTexture, 0, worldNormalsTexture, reflectanceTexture,
-		environment ? environment->environment : 0, render_resources::whiteTexture, hdrPostProcessingTexture, materialInfo.cameraCBV);
-
-
-	barrier_batcher(cl)
-		//.uav(hdrPostProcessingTexture)
-		.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) // Will be read by rest of post processing stack. 
-		.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-
-	depthSobel(cl, depthStencilBuffer, depthDiscontinuitiesTexture, projectorCamera.projectionParams, depthDiscontinuityThreshold);
-
-	barrier_batcher(cl)
-		//.uav(depthDiscontinuitiesTexture)
-		.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-	dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuityDilateRadius);
-	if (blurDepthDiscontinuities)
 	{
-		gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
+		PROFILE_ALL(cl, "Projector");
+
+		cl->clearDepthAndStencil(depthStencilBuffer);
+		cl->clearDepthAndStencil(realDepthStencilBuffer);
+		cl->clearRTV(hdrColorTexture, 0.f, 0.f, 0.f, 0.f); // This replaces the sky, which is not rendered for projectors. Clear alpha to zero too, to indicate background.
+		cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+
+		auto realDepthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
+			.depthAttachment(realDepthStencilBuffer);
+
+		depthPrePass(cl, realDepthOnlyRenderTarget, opaqueRenderPass,
+			realProjectorCamera.viewProj, realProjectorCamera.prevFrameViewProj, vec2(0.f, 0.f), vec2(0.f, 0.f));
+
+
+		auto depthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
+			.depthAttachment(depthStencilBuffer);
+
+		depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
+			projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
+
+
+		auto hdrOpaqueRenderTarget = dx_render_target(renderWidth, renderHeight)
+			.colorAttachment(hdrColorTexture)
+			.colorAttachment(worldNormalsTexture)
+			.colorAttachment(reflectanceTexture)
+			.depthAttachment(depthStencilBuffer);
+
+		opaqueLightPass(cl, hdrOpaqueRenderTarget, opaqueRenderPass, materialInfo, projectorCamera.viewProj);
+
+
+		barrier_batcher(cl)
+			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+			.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+
+		specularAmbient(cl, hdrColorTexture, 0, worldNormalsTexture, reflectanceTexture,
+			environment ? environment->environment : 0, render_resources::whiteTexture, hdrPostProcessingTexture, materialInfo.cameraCBV);
+
+
+		barrier_batcher(cl)
+			//.uav(hdrPostProcessingTexture)
+			.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) // Will be read by rest of post processing stack. 
+			.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+
+		depthSobel(cl, depthStencilBuffer, depthDiscontinuitiesTexture, projectorCamera.projectionParams, depthDiscontinuityThreshold);
+
+		barrier_batcher(cl)
+			//.uav(depthDiscontinuitiesTexture)
+			.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+		dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuityDilateRadius);
+		if (blurDepthDiscontinuities)
+		{
+			gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
+		}
+
+		ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
+
+		tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
+
+		barrier_batcher(cl)
+			.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE)
+			.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
+			.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+			.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
+			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
 	}
-
-	ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
-
-	tonemap(cl, hdrResult, ldrPostProcessingTexture, tonemapSettings);
-
-	barrier_batcher(cl)
-		.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE)
-		.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-		.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-		.transition(reflectanceTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
 
 	dxContext.executeCommandList(cl);
 }
