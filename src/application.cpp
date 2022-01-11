@@ -66,15 +66,23 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	editor.initialize(&scene, renderer, tracker);
 
+	quat setupRotation = quat::identity;
+
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/nike.obj"))
 	{
 #if 1
-		mat4 tracking(-0.083425f, -0.864685f, -0.495625f, 0.000000f, 0.986401f, -0.000487f, -0.165152f, 0.000000f, 0.142610f, -0.502576f, 0.852713f, 0.000000f, -0.199039f, 0.007941f, -0.425269f, 1.000000f);
+		mat4 tracking(-0.085918f, -0.830350f, -0.551099f, 0.000000f, 0.988732f, -0.001771f, -0.151439f, 0.000000f, 0.124796f, -0.557665f, 0.820684f, 0.000000f, -0.196369f, -0.007664f, -0.431165f, 1.000000f);
 		tracking = transpose(tracking);
 		trs transform = mat4ToTRS(tracking);
 #else
 		trs transform = trs::identity;
 #endif
+
+		setupRotation = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
+		
+		
+		transform.rotation = setupRotation * transform.rotation;
+		transform.position = setupRotation * transform.position;
 
 		auto targetObject = scene.createEntity("Target object")
 			.addComponent<transform_component>(transform)
@@ -82,6 +90,9 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 		tracker->trackedEntity = targetObject;
 	}
+
+	tracker->globalCameraRotation = setupRotation;
+
 
 	editor.setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");
 
@@ -144,6 +155,9 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		vec3 pos(-0.028214f, 0.155007f, 0.162065f);
 		quat rotation = mat3ToQuaternion(transpose(mat3(0.035539f, -0.963963f, 0.263652f, 0.966903f, -0.033532f, -0.252932f, 0.252658f, 0.263915f, 0.930867f)));
 
+		pos = setupRotation * pos;
+		rotation = setupRotation * rotation;
+
 		render_camera projCamera;
 		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2659.303711f, 2621.513428f, 823.621033f, 1152.324097f }, 0.01f);
 
@@ -155,6 +169,9 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	{
 		vec3 pos(-0.069300f, -0.353412f, 0.148525f);
 		quat rotation = mat3ToQuaternion(transpose(mat3(-0.079446f, -0.916031f, -0.393161f, 0.981706f, -0.003434f, -0.190373f, 0.173037f, -0.401093f, 0.899546f)));
+
+		pos = setupRotation * pos;
+		rotation = setupRotation * rotation;
 
 		render_camera projCamera;
 		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2643.893555f, 2646.583496f, 1015.666138f, 1196.278442f }, 0.01f);
