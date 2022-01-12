@@ -345,6 +345,11 @@ static rotation_translation smoothDeltaTransform(vec6 delta, float t)
 
 static rotation_translation smoothDeltaTransform(rotation_translation delta, float t)
 {
+	if (t == 1.f)
+	{
+		return delta;
+	}
+
 	// https://www.geometrictools.com/Documentation/InterpolationRigidMotions.pdf
 	return lieExp(lieLog(delta) * t);
 }
@@ -596,20 +601,39 @@ void depth_tracker::update()
 					solver_result result = solve(ata, atb);
 					stats = result.stats;
 
+					float s = smoothing;
+
+					if (oldSmoothingMode)
+					{
+						s = 0.f;
+					}
+
 					rotation_translation delta;
 					if (rotationRepresentation == tracking_rotation_representation_euler)
 					{
-						delta = eulerUpdate(result.x, smoothing);
+						delta = eulerUpdate(result.x, s);
 					}
 					else
 					{
 						assert(rotationRepresentation == tracking_rotation_representation_lie);
-						delta = lieUpdate(result.x, smoothing);
+						delta = lieUpdate(result.x, s);
 					}
 
 
 					quat rotation = mat3ToQuaternion(delta.rotation);
 					vec3 translation = delta.translation;
+
+					if (oldSmoothingMode)
+					{
+						float weightRotation = 1.f - exp(-hRotation * length(quat::identity.v4 - rotation.v4));
+						float weightTranslation = 1.f - exp(-hTranslation * length(translation));
+						float weight = max(weightRotation, weightTranslation);
+
+						translation *= weight;
+						rotation = slerp(quat::identity, rotation, weight);
+					}
+
+
 
 					if (trackingDirection == tracking_direction_camera_to_render)
 					{

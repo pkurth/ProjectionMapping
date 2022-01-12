@@ -77,7 +77,14 @@ private:
 
 	bool showDepth = true;
 
-	float smoothing = 0.7f; // Higher is smoother.
+	float smoothing = 0.7f; // For simple smoothing mode. Higher is smoother.
+
+	// For old smoothing mode.
+	float hRotation = 10.f;
+	float hTranslation = 50.f;
+
+	bool oldSmoothingMode = true;
+
 	uint32 minNumCorrespondences = 5000;
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;
