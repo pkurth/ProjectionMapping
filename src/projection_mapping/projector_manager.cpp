@@ -58,6 +58,7 @@ void projector_manager::updateAndRender()
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
 				ImGui::TableSetupColumn("Depth discontinuities");
+				ImGui::TableSetupColumn("Solver intensities");
 				ImGui::TableHeadersRow();
 
 				auto hoverImage = [](const ref<dx_texture>& tex)
@@ -86,6 +87,9 @@ void projector_manager::updateAndRender()
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.depthDiscontinuitiesTexture);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.solverIntensityTexture);
 
 					++i;
 				}
