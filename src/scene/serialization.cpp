@@ -300,8 +300,12 @@ static YAML::Emitter& operator<<(YAML::Emitter& out, const raster_component& c)
 
 static YAML::Emitter& operator<<(YAML::Emitter& out, const projector_component& c)
 {
+	auto& monitor = win32_window::allConnectedMonitors[c.window.monitorIndex];
+
 	out << YAML::BeginMap
 		<< YAML::Key << "Camera" << YAML::Value << c.calibratedCamera
+		<< YAML::Key << "Monitor" << YAML::Value << monitor.uniqueID
+		<< YAML::Key << "Fullscreen" << YAML::Value << c.window.fullscreen
 		<< YAML::EndMap;
 
 	return out;
@@ -736,9 +740,31 @@ namespace YAML
 		{
 			if (!n.IsMap()) { return false; }
 
+
 			render_camera camera;
 			YAML_LOAD(n, camera, "Camera");
 			c.initialize(camera);
+
+
+			std::string monitorID;
+			YAML_LOAD(n, monitorID, "Monitor");
+
+			for (auto& monitor : win32_window::allConnectedMonitors)
+			{
+				if (monitor.uniqueID == monitorID)
+				{
+					c.window.moveToMonitor(monitor);
+				}
+			}
+
+			bool fullscreen = false;
+			YAML_LOAD(n, fullscreen, "Fullscreen");
+
+			if (fullscreen)
+			{
+				c.window.toggleFullscreen();
+			}
+
 
 			return true;
 		}
@@ -766,6 +792,9 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 	out << YAML::Key << "Rendering" << YAML::Value << rendererSettings;
 	out << YAML::Key << "Sun" << YAML::Value << scene.sun;
 	out << YAML::Key << "Environment" << (scene.environment ? scene.environment->name : fs::path());
+
+	out << YAML::Key << "Tracker position" << YAML::Value << tracker->globalCameraPosition
+		<< YAML::Key << "Tracker rotation" << YAML::Value << tracker->globalCameraRotation;
 
 	out << YAML::Key << "Entities"
 		<< YAML::Value
@@ -860,6 +889,9 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 	YAML_LOAD(n, scene.sun, "Sun");
 
 	YAML_LOAD(n, environmentName, "Environment");
+
+	YAML_LOAD(n, tracker->globalCameraPosition, "Tracker position");
+	YAML_LOAD(n, tracker->globalCameraRotation, "Tracker rotation");
 
 	auto entitiesNode = n["Entities"];
 	for (auto entityNode : entitiesNode)
