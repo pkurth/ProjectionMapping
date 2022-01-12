@@ -77,7 +77,7 @@ private:
 
 	bool showDepth = true;
 
-	float smoothing = 0.7f;
+	float smoothing = 0.7f; // Higher is smoother.
 	uint32 minNumCorrespondences = 5000;
 
 	tracking_direction trackingDirection = tracking_direction_camera_to_render;

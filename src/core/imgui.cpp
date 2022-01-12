@@ -755,6 +755,14 @@ namespace ImGui
 		post();
 		return result;
 	}
+
+	void PropertySeparator()
+	{
+		ImGui::TableNextColumn();
+		ImGui::Separator();
+		ImGui::TableNextColumn();
+		ImGui::Separator();
+	}
 }
 
 

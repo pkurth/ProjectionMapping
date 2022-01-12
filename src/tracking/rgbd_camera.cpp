@@ -44,6 +44,43 @@ void rgbd_camera::initializeCommon()
     enumerate();
 }
 
+static rgbd_camera_info getInfo(k4a_device_t device, uint32 deviceIndex)
+{
+    std::string serialnum = "";
+    size_t bufferSize = 0;
+
+    if (k4a_device_get_serialnum(device, &serialnum[0], &bufferSize) == K4A_BUFFER_RESULT_TOO_SMALL && bufferSize > 1)
+    {
+        serialnum.resize(bufferSize);
+        if (k4a_device_get_serialnum(device, &serialnum[0], &bufferSize) == K4A_BUFFER_RESULT_SUCCEEDED && serialnum[bufferSize - 1] == 0)
+        {
+            serialnum.resize(bufferSize - 1);
+        }
+    }
+
+    rgbd_camera_info info;
+    info.deviceIndex = deviceIndex;
+    info.type = rgbd_camera_type_azure;
+    info.serialNumber = serialnum;
+    info.description = "Azure camera (" + info.serialNumber + ")";
+
+    return info;
+}
+
+static rgbd_camera_info getInfo(rs2_device* dev, uint32 deviceIndex)
+{
+    rs2_error* e = 0;
+
+    rgbd_camera_info info;
+    info.deviceIndex = deviceIndex;
+    info.type = rgbd_camera_type_realsense;
+    info.serialNumber = rs2_get_device_info(dev, RS2_CAMERA_INFO_SERIAL_NUMBER, &e);
+    assertRealsenseSuccess(e);
+    info.description = "Realsense camera (" + info.serialNumber + ")";
+
+    return info;
+}
+
 std::vector<rgbd_camera_info>& rgbd_camera::enumerate()
 {
     allConnectedRGBDCameras.clear();
@@ -55,23 +92,7 @@ std::vector<rgbd_camera_info>& rgbd_camera::enumerate()
         k4a_device_open(i, &device);
         if (device)
         {
-            std::string serialnum = "";
-            size_t bufferSize = 0;
-
-            if (k4a_device_get_serialnum(device, &serialnum[0], &bufferSize) == K4A_BUFFER_RESULT_TOO_SMALL && bufferSize > 1)
-            {
-                serialnum.resize(bufferSize);
-                if (k4a_device_get_serialnum(device, &serialnum[0], &bufferSize) == K4A_BUFFER_RESULT_SUCCEEDED && serialnum[bufferSize - 1] == 0)
-                {
-                    serialnum.resize(bufferSize - 1);
-                }
-            }
-
-            rgbd_camera_info info;
-            info.deviceIndex = i;
-            info.type = rgbd_camera_type_azure;
-            info.serialNumber = serialnum;
-            info.description = "Azure camera (" + info.serialNumber + ")";
+            rgbd_camera_info info = getInfo(device, i);
             allConnectedRGBDCameras.push_back(info);
 
             k4a_device_close(device);
@@ -92,12 +113,7 @@ std::vector<rgbd_camera_info>& rgbd_camera::enumerate()
         assertRealsenseSuccess(e);
         if (dev)
         {
-            rgbd_camera_info info;
-            info.deviceIndex = i;
-            info.type = rgbd_camera_type_realsense;
-            info.serialNumber = rs2_get_device_info(dev, RS2_CAMERA_INFO_SERIAL_NUMBER, &e);
-            assertRealsenseSuccess(e);
-            info.description = "Realsense camera (" + info.serialNumber + ")";
+            rgbd_camera_info info = getInfo(dev, i);
             allConnectedRGBDCameras.push_back(info);
 
             rs2_delete_device(dev);
@@ -156,7 +172,7 @@ void rgbd_camera::operator=(rgbd_camera&& o) noexcept
     
     depthSensor = o.depthSensor;
     colorSensor = o.colorSensor;
-    type = o.type;
+    info = std::move(o.info);
 
     o.depthSensor.unprojectTable = 0;
     o.colorSensor.unprojectTable = 0;
@@ -366,8 +382,9 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
             getCalibration(calibration.color_camera_calibration, colorSensor);
         }
 
-        type = rgbd_camera_type_azure;
         depthScale = 0.001f;
+
+        info = getInfo(azure.deviceHandle, deviceIndex);
 
         return true;
     }
@@ -415,7 +432,6 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         realsense.profile = rs2_pipeline_start_with_config(realsense.pipeline, realsense.config, &e);
         assertRealsenseSuccess(e);
 
-        type = rgbd_camera_type_realsense;
 
 
         // Get intrinsics and extrinsics.
@@ -468,6 +484,7 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 
         rs2_delete_sensor_list(sensorList);
 
+        info = getInfo(realsense.device, deviceIndex);
 
         return true;
     }
@@ -490,12 +507,12 @@ bool rgbd_camera::initializeAs(rgbd_camera_type type, uint32 deviceIndex, rgbd_c
 
 void rgbd_camera::shutdown()
 {
-    if (type == rgbd_camera_type_azure && azure.deviceHandle)
+    if (info.type == rgbd_camera_type_azure && azure.deviceHandle)
     {
         k4a_device_close(azure.deviceHandle);
         azure.deviceHandle = 0;
     }
-    else if (type == rgbd_camera_type_realsense && realsense.device)
+    else if (info.type == rgbd_camera_type_realsense && realsense.device)
     {
         rs2_error* e = 0;
         rs2_pipeline_stop(realsense.pipeline, &e);
@@ -520,12 +537,12 @@ void rgbd_camera::shutdown()
         colorSensor.unprojectTable = 0;
     }
 
-    type = rgbd_camera_type_uninitialized;
+    info.type = rgbd_camera_type_uninitialized;
 }
 
 bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
 {
-    if (type == rgbd_camera_type_azure && azure.deviceHandle)
+    if (info.type == rgbd_camera_type_azure && azure.deviceHandle)
     {
         k4a_capture_t captureHandle;
 
@@ -548,7 +565,7 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
             return true;
         }
     }
-    else if (type == rgbd_camera_type_realsense && realsense.device)
+    else if (info.type == rgbd_camera_type_realsense && realsense.device)
     {
         rs2_frame* frames = 0;
         rs2_error* e = 0;
@@ -598,7 +615,7 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
 
 void rgbd_camera::releaseFrame(rgbd_frame& frame)
 {
-    if (type == rgbd_camera_type_azure)
+    if (info.type == rgbd_camera_type_azure)
     {
         if (frame.azureDepthHandle)
         {
@@ -611,7 +628,7 @@ void rgbd_camera::releaseFrame(rgbd_frame& frame)
             frame.azureColorHandle = 0;
         }
     }
-    else if (type == rgbd_camera_type_realsense)
+    else if (info.type == rgbd_camera_type_realsense)
     {
         if (frame.realsenseDepthHandle)
         {

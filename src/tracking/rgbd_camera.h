@@ -18,7 +18,7 @@ static const char* rgbdCameraTypeNames[] =
 struct rgbd_camera_info
 {
 	uint32 deviceIndex;
-	rgbd_camera_type type;
+	rgbd_camera_type type = rgbd_camera_type_uninitialized;
 	std::string serialNumber;
 	std::string description;
 };
@@ -121,9 +121,10 @@ struct rgbd_camera
 	bool getFrame(rgbd_frame& result, int32 timeOutInMilliseconds = 0); // 0: Return immediately.
 	void releaseFrame(rgbd_frame& frame);
 
-	rgbd_camera_type type = rgbd_camera_type_uninitialized;
 	azure_handle azure;
 	realsense_handle realsense;
+
+	rgbd_camera_info info;
 
 	rgbd_camera_sensor colorSensor;
 	rgbd_camera_sensor depthSensor;

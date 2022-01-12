@@ -92,11 +92,5 @@ float4 main(ps_input IN) : SV_TARGET0
 	output[index] = result;
 
 
-
-	float output = -IN.position.z;
-	output = output == output;
-
-	//return float4(length(cameraNormal).xxx, 1.f);
 	return float4(IN.normal, 1.f);
-	//return float4(1.f.xxx, 1.f);
 }

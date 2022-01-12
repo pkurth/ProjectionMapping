@@ -428,10 +428,50 @@ tracker_ui_interaction depth_tracker::drawSettings()
 {
 	tracker_ui_interaction result = tracker_ui_no_interaction;
 
+	if (ImGui::BeginTree("Cameras"))
+	{
+		if (ImGui::BeginProperties())
+		{
+			if (ImGui::PropertyButton("Refresh", ICON_FA_REDO_ALT))
+			{
+				rgbd_camera::enumerate();
+			}
+
+			auto& cameras = rgbd_camera::allConnectedRGBDCameras;
+
+			uint32 index = -1;
+			for (uint32 i = 0; i < (uint32)cameras.size(); ++i)
+			{
+				if (ImGui::PropertyButton(cameras[i].description.c_str(), "Use"))
+				{
+					index = i;
+				}
+			}
+
+			if (index != -1)
+			{
+				initialize(cameras[index].type, cameras[index].deviceIndex);
+			}
+
+			ImGui::EndProperties();
+		}
+
+		ImGui::EndTree();
+	}
+
+	ImGui::Separator();
+
 	if (cameraInitialized())
 	{
 		if (ImGui::BeginProperties())
 		{
+			ImGui::PropertyValue("Camera", camera.info.description.c_str());
+			if (ImGui::PropertyButton("Reload camera", ICON_FA_REDO))
+			{
+				initialize(camera.info.type, camera.info.deviceIndex);
+			}
+			ImGui::PropertySeparator();
+
 			bool valid = trackedEntity;
 			if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
 			{
@@ -460,37 +500,6 @@ tracker_ui_interaction depth_tracker::drawSettings()
 		}
 
 		ImGui::Image(renderedColorTexture);
-	}
-	else
-	{
-		ImGui::Text("Tracking disabled, because camera is not initialized.");
-		ImGui::Separator();
-
-		if (ImGui::BeginProperties())
-		{
-			uint32 index = -1;
-
-			if (ImGui::PropertyButton("Refresh", ICON_FA_REDO_ALT))
-			{
-				rgbd_camera::enumerate();
-			}
-
-			bool changed = ImGui::PropertyDropdown("Available cameras", [](uint32 index, void* data) -> const char*
-				{
-					auto& cameras = *(std::vector<rgbd_camera_info>*)data;
-
-					if (index == -1) { return "--"; }
-					if (index >= cameras.size()) { return 0; }
-					return cameras[index].description.c_str();
-				}, index, &rgbd_camera::allConnectedRGBDCameras);
-
-			if (changed)
-			{
-				initialize(rgbd_camera::allConnectedRGBDCameras[index].type, rgbd_camera::allConnectedRGBDCameras[index].deviceIndex);
-			}
-
-			ImGui::EndProperties();
-		}
 	}
 
 	return result;
