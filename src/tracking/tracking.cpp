@@ -429,87 +429,6 @@ static rotation_translation lieUpdate(vec6 x, float smoothing)
 	return smoothDeltaTransform(x, 1.f - smoothing);
 }
 
-tracker_ui_interaction depth_tracker::drawSettings()
-{
-	tracker_ui_interaction result = tracker_ui_no_interaction;
-
-	if (ImGui::BeginTree("Cameras"))
-	{
-		if (ImGui::BeginProperties())
-		{
-			if (ImGui::PropertyButton("Refresh", ICON_FA_REDO_ALT))
-			{
-				rgbd_camera::enumerate();
-			}
-
-			auto& cameras = rgbd_camera::allConnectedRGBDCameras;
-
-			uint32 index = -1;
-			for (uint32 i = 0; i < (uint32)cameras.size(); ++i)
-			{
-				if (ImGui::PropertyButton(cameras[i].description.c_str(), "Use"))
-				{
-					index = i;
-				}
-			}
-
-			if (index != -1)
-			{
-				initialize(cameras[index].type, cameras[index].deviceIndex);
-			}
-
-			ImGui::EndProperties();
-		}
-
-		ImGui::EndTree();
-	}
-
-	ImGui::Separator();
-
-	if (cameraInitialized())
-	{
-		if (ImGui::BeginProperties())
-		{
-			ImGui::PropertyValue("Camera", camera.info.description.c_str());
-			if (ImGui::PropertyButton("Reload camera", ICON_FA_REDO))
-			{
-				initialize(camera.info.type, camera.info.deviceIndex);
-			}
-			ImGui::PropertySeparator();
-
-			bool valid = trackedEntity;
-			if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
-			{
-				result = tracker_ui_select_tracked_entity;
-			}
-			ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
-			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
-			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
-			ImGui::PropertySlider("Smoothing (higher is smoother)", smoothing);
-			ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
-
-			ImGui::PropertyCheckbox("Visualize depth", showDepth);
-
-			ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
-			ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
-
-			if (tracking)
-			{
-				ImGui::Separator();
-				ImGui::PropertyValue("Number of correspondences", numCorrespondences);
-				//ImGui::PropertyValue("Current error", stats.error, "%.8f");
-				ImGui::PropertyValue("CG iterations", stats.numCGIterations);
-			}
-
-			ImGui::EndProperties();
-		}
-
-		ImGui::Image(renderedColorTexture);
-	}
-
-	return result;
-}
-
 void depth_tracker::update()
 {
 	numCorrespondences = 0;
@@ -856,6 +775,120 @@ void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 		renderPass->renderObject<visualize_depth_pipeline>(m, {}, {}, {},
 			visualize_depth_material{ colorCameraV, c.intrinsics, c.distortion, cameraDepthTexture, cameraUnprojectTableTexture, cameraColorTexture, camera.depthScale });
 	}
+}
+
+tracker_ui_interaction depth_tracker::drawSettings()
+{
+	tracker_ui_interaction result = tracker_ui_no_interaction;
+
+	if (ImGui::BeginTree("Cameras"))
+	{
+		if (ImGui::BeginProperties())
+		{
+			if (ImGui::PropertyButton("Refresh", ICON_FA_REDO_ALT))
+			{
+				rgbd_camera::enumerate();
+			}
+
+			auto& cameras = rgbd_camera::allConnectedRGBDCameras;
+
+			uint32 index = -1;
+			for (uint32 i = 0; i < (uint32)cameras.size(); ++i)
+			{
+				if (ImGui::PropertyButton(cameras[i].description.c_str(), "Use"))
+				{
+					index = i;
+				}
+			}
+
+			if (index != -1)
+			{
+				initialize(cameras[index].type, cameras[index].deviceIndex);
+			}
+
+			ImGui::EndProperties();
+		}
+
+		ImGui::EndTree();
+	}
+
+	ImGui::Separator();
+
+	if (cameraInitialized())
+	{
+		if (ImGui::BeginProperties())
+		{
+			ImGui::PropertyValue("Camera", camera.info.description.c_str());
+			if (ImGui::PropertyButton("Reload camera", ICON_FA_REDO))
+			{
+				initialize(camera.info.type, camera.info.deviceIndex);
+			}
+			ImGui::PropertySeparator();
+
+			bool valid = trackedEntity;
+			if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
+			{
+				result = tracker_ui_select_tracked_entity;
+			}
+			if (ImGui::PropertyDisableableButton("Export", "Copy relative 4x4 matrix to clipboard", valid, 
+				"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
+			{
+				const transform_component& transform = trackedEntity.getComponent<transform_component>();
+
+				mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
+					* createViewMatrix(globalCameraPosition, globalCameraRotation)
+					* trsToMat4(transform);
+
+				char buffer[512];
+				snprintf(buffer, sizeof(buffer),
+					"%ff, %ff, %ff, %ff, "
+					"%ff, %ff, %ff, %ff, "
+					"%ff, %ff, %ff, %ff, "
+					"%ff, %ff, %ff, %ff",
+					m.m[0], m.m[1], m.m[2], m.m[3],
+					m.m[4], m.m[5], m.m[6], m.m[7],
+					m.m[8], m.m[9], m.m[10], m.m[11],
+					m.m[12], m.m[13], m.m[14], m.m[15]);
+
+				ImGui::SetClipboardText(buffer);
+			}
+
+			ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
+			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
+			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
+
+			ImGui::PropertyCheckbox("Old smoothing mode", oldSmoothingMode);
+			if (oldSmoothingMode)
+			{
+				ImGui::PropertyDrag("Rotation smoothing", hRotation);
+				ImGui::PropertyDrag("Translation smoothing", hTranslation);
+			}
+			else
+			{
+				ImGui::PropertySlider("Smoothing (higher is smoother)", smoothing);
+			}
+			ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
+
+			ImGui::PropertyCheckbox("Visualize depth", showDepth);
+
+			ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
+			ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
+
+			if (tracking)
+			{
+				ImGui::Separator();
+				ImGui::PropertyValue("Number of correspondences", numCorrespondences);
+				//ImGui::PropertyValue("Current error", stats.error, "%.8f");
+				ImGui::PropertyValue("CG iterations", stats.numCGIterations);
+			}
+
+			ImGui::EndProperties();
+		}
+
+		ImGui::Image(renderedColorTexture);
+	}
+
+	return result;
 }
 
 
