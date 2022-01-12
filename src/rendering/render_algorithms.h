@@ -200,12 +200,22 @@ void gaussianBlur(dx_command_list* cl,
 void dilate(dx_command_list* cl,
 	ref<dx_texture> inputOutput,				// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> temp,						// UNORDERED_ACCESS
-	uint32 radius, uint32 numIterations = 1);
+	uint32 radius);
 
 void erode(dx_command_list* cl,
 	ref<dx_texture> inputOutput,				// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> temp,						// UNORDERED_ACCESS
-	uint32 radius, uint32 numIterations = 1);
+	uint32 radius);
+
+void dilateSmooth(dx_command_list* cl,
+	ref<dx_texture> inputOutput,				// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> temp,						// UNORDERED_ACCESS
+	uint32 radius);
+
+void erodeSmooth(dx_command_list* cl,
+	ref<dx_texture> inputOutput,				// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> temp,						// UNORDERED_ACCESS
+	uint32 radius);
 
 void depthSobel(dx_command_list* cl,
 	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE

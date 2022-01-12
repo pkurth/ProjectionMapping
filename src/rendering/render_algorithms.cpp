@@ -56,6 +56,9 @@ static dx_pipeline gaussianBlurFloat4Pipelines[gaussian_blur_kernel_size_count];
 static dx_pipeline dilationPipeline;
 static dx_pipeline erosionPipeline;
 
+static dx_pipeline smoothDilationPipeline;
+static dx_pipeline smoothErosionPipeline;
+
 static dx_pipeline taaPipeline;
 
 static dx_pipeline blitPipeline;
@@ -212,6 +215,9 @@ void loadCommonShaders()
 
 	dilationPipeline = createReloadablePipeline("dilation_cs");
 	erosionPipeline = createReloadablePipeline("erosion_cs");
+
+	smoothDilationPipeline = createReloadablePipeline("dilation_smooth_cs");
+	smoothErosionPipeline = createReloadablePipeline("erosion_smooth_cs");
 
 	taaPipeline = createReloadablePipeline("taa_cs");
 
@@ -1143,17 +1149,17 @@ void gaussianBlur(dx_command_list* cl,
 	}
 }
 
-static void morphologyCommon(dx_command_list* cl, dx_pipeline& pipeline, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
+static void morphologyCommon(dx_command_list* cl, dx_pipeline& pipeline, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius)
 {
-	if (radius == 0 || numIterations == 0)
+	if (radius == 0)
 	{
 		return;
 	}
 
+	uint32 numIterations = bucketize(radius, MORPHOLOGY_MAX_RADIUS);
+
 	assert(inputOutput->width == temp->width);
 	assert(inputOutput->height == temp->height);
-
-	radius = min(radius, (uint32)MORPHOLOGY_MAX_RADIUS);
 
 	cl->setPipelineState(*pipeline.pipeline);
 	cl->setComputeRootSignature(*pipeline.rootSignature);
@@ -1162,10 +1168,12 @@ static void morphologyCommon(dx_command_list* cl, dx_pipeline& pipeline, ref<dx_
 	{
 		DX_PROFILE_BLOCK(cl, "Iteration");
 
+		uint32 r = (i == numIterations - 1) ? (radius % MORPHOLOGY_MAX_RADIUS) : radius;
+
 		{
 			DX_PROFILE_BLOCK(cl, "Vertical");
 
-			cl->setCompute32BitConstants(MORPHOLOGY_RS_CB, morphology_cb{ radius, 1, inputOutput->height });
+			cl->setCompute32BitConstants(MORPHOLOGY_RS_CB, morphology_cb{ r, 1, inputOutput->height });
 			cl->setDescriptorHeapUAV(MORPHOLOGY_RS_TEXTURES, 0, temp);
 			cl->setDescriptorHeapSRV(MORPHOLOGY_RS_TEXTURES, 1, inputOutput);
 
@@ -1180,7 +1188,7 @@ static void morphologyCommon(dx_command_list* cl, dx_pipeline& pipeline, ref<dx_
 		{
 			DX_PROFILE_BLOCK(cl, "Horizontal");
 
-			cl->setCompute32BitConstants(MORPHOLOGY_RS_CB, morphology_cb{ radius, 0, inputOutput->width });
+			cl->setCompute32BitConstants(MORPHOLOGY_RS_CB, morphology_cb{ r, 0, inputOutput->width });
 			cl->setDescriptorHeapUAV(MORPHOLOGY_RS_TEXTURES, 0, inputOutput);
 			cl->setDescriptorHeapSRV(MORPHOLOGY_RS_TEXTURES, 1, temp);
 
@@ -1194,16 +1202,28 @@ static void morphologyCommon(dx_command_list* cl, dx_pipeline& pipeline, ref<dx_
 	}
 }
 
-void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
+void dilate(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius)
 {
 	DX_PROFILE_BLOCK(cl, "Dilate");
-	morphologyCommon(cl, dilationPipeline, inputOutput, temp, radius, numIterations);
+	morphologyCommon(cl, dilationPipeline, inputOutput, temp, radius);
 }
 
-void erode(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius, uint32 numIterations)
+void erode(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius)
 {
 	DX_PROFILE_BLOCK(cl, "Erode");
-	morphologyCommon(cl, erosionPipeline, inputOutput, temp, radius, numIterations);
+	morphologyCommon(cl, erosionPipeline, inputOutput, temp, radius);
+}
+
+void dilateSmooth(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius)
+{
+	DX_PROFILE_BLOCK(cl, "Dilate smooth");
+	morphologyCommon(cl, smoothDilationPipeline, inputOutput, temp, radius);
+}
+
+void erodeSmooth(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_texture> temp, uint32 radius)
+{
+	DX_PROFILE_BLOCK(cl, "Erode smooth");
+	morphologyCommon(cl, smoothErosionPipeline, inputOutput, temp, radius);
 }
 
 void depthSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, vec4 projectionParams, float threshold)

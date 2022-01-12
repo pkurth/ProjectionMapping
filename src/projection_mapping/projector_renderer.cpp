@@ -245,10 +245,8 @@ void projector_renderer::endFrame()
 			.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuityDilateRadius);
-		if (blurDepthDiscontinuities)
-		{
-			gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
-		}
+		dilateSmooth(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuitySmoothRadius);
+		gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_5x5);
 
 		ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
 
