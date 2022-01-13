@@ -409,4 +409,24 @@ struct depth_sobel_cb
 #define DEPTH_SOBEL_RS_TEXTURES     1
 
 
+
+
+// ----------------------------------------
+// COLOR SOBEL
+// ----------------------------------------
+
+struct color_sobel_cb
+{
+    float threshold;
+};
+
+#define COLOR_SOBEL_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=1, b0),"  \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
+
+#define COLOR_SOBEL_RS_CB           0
+#define COLOR_SOBEL_RS_TEXTURES     1
+
+
 #endif

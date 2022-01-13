@@ -35,8 +35,10 @@ struct projector_renderer
 
 
 	static inline float depthDiscontinuityThreshold = 0.01f;
-	static inline uint32 depthDiscontinuityDilateRadius = 1;
-	static inline uint32 depthDiscontinuitySmoothRadius = 6;
+	static inline uint32 depthDiscontinuityDilateRadius = 2;
+	static inline uint32 depthDiscontinuitySmoothRadius = 8;
+
+	static inline float colorDiscontinuityThreshold = 0.1f;
 
 	static inline bool applySolverIntensity = false;
 
@@ -65,7 +67,9 @@ private:
 	ref<dx_texture> confidenceTexture;
 
 	ref<dx_texture> depthDiscontinuitiesTexture;
-	ref<dx_texture> depthDilateTempTexture;
+	ref<dx_texture> colorDiscontinuitiesTexture;
+
+	ref<dx_texture> dilateTempTexture;
 	
 	ref<dx_texture> hdrPostProcessingTexture;
 	ref<dx_texture> ldrPostProcessingTexture;

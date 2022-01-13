@@ -76,6 +76,7 @@ static dx_pipeline tonemapPipeline;
 static dx_pipeline presentPipeline;
 
 static dx_pipeline depthSobelPipeline;
+static dx_pipeline colorSobelPipeline;
 
 static dx_pipeline visualizeSunShadowCascadesPipeline;
 
@@ -236,6 +237,7 @@ void loadCommonShaders()
 	presentPipeline = createReloadablePipeline("present_cs");
 
 	depthSobelPipeline = createReloadablePipeline("depth_sobel_cs");
+	colorSobelPipeline = createReloadablePipeline("color_sobel_cs");
 
 
 	visualizeSunShadowCascadesPipeline = createReloadablePipeline("sun_shadow_cascades_cs");
@@ -1236,6 +1238,20 @@ void depthSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> outp
 	cl->setCompute32BitConstants(DEPTH_SOBEL_RS_CB, depth_sobel_cb{ projectionParams, threshold });
 	cl->setDescriptorHeapUAV(DEPTH_SOBEL_RS_TEXTURES, 0, output);
 	cl->setDescriptorHeapSRV(DEPTH_SOBEL_RS_TEXTURES, 1, input);
+
+	cl->dispatch(bucketize(input->width, POST_PROCESSING_BLOCK_SIZE), bucketize(input->height, POST_PROCESSING_BLOCK_SIZE));
+}
+
+void colorSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, float threshold)
+{
+	DX_PROFILE_BLOCK(cl, "Color sobel");
+
+	cl->setPipelineState(*colorSobelPipeline.pipeline);
+	cl->setComputeRootSignature(*colorSobelPipeline.rootSignature);
+
+	cl->setCompute32BitConstants(COLOR_SOBEL_RS_CB, color_sobel_cb{ threshold });
+	cl->setDescriptorHeapUAV(COLOR_SOBEL_RS_TEXTURES, 0, output);
+	cl->setDescriptorHeapSRV(COLOR_SOBEL_RS_TEXTURES, 1, input);
 
 	cl->dispatch(bucketize(input->width, POST_PROCESSING_BLOCK_SIZE), bucketize(input->height, POST_PROCESSING_BLOCK_SIZE));
 }

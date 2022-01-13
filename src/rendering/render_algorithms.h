@@ -222,6 +222,11 @@ void depthSobel(dx_command_list* cl,
 	ref<dx_texture> output,						// UNORDERED_ACCESS
 	vec4 projectionParams, float threshold);
 
+void colorSobel(dx_command_list* cl,
+	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> output,						// UNORDERED_ACCESS
+	float threshold);
+
 void screenSpaceReflections(dx_command_list* cl,
 	ref<dx_texture> hdrInput,					// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> prevFrameHDR,				// NON_PIXEL_SHADER_RESOURCE

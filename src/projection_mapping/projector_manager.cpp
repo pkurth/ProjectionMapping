@@ -32,9 +32,10 @@ void projector_manager::updateAndRender()
 			ImGui::PropertyDrag("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius);
 			ImGui::PropertyDrag("Depth discontinuity smooth radius", projector_renderer::depthDiscontinuitySmoothRadius);
 
+			ImGui::PropertySlider("Color discontinuity threshold", projector_renderer::colorDiscontinuityThreshold, 0.f, 1.f);
+
 			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
 			ImGui::PropertySlider("Regularization strength", solver.regularizationStrength);
-			ImGui::PropertySlider("Depth discontinuity mask strength", solver.depthDiscontinuityMaskStrength);
 
 			ImGui::PropertyCheckbox("Simulate calibration error", solver.simulateCalibrationError);
 
@@ -53,11 +54,12 @@ void projector_manager::updateAndRender()
 	{
 		if (ImGui::Begin("Projector details", &detailWindowOpen))
 		{
-			if (ImGui::BeginTable("##Table", 4))
+			if (ImGui::BeginTable("##Table", 5))
 			{
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
 				ImGui::TableSetupColumn("Depth discontinuities");
+				ImGui::TableSetupColumn("Color discontinuities");
 				ImGui::TableSetupColumn("Solver intensities");
 				ImGui::TableHeadersRow();
 
@@ -87,6 +89,9 @@ void projector_manager::updateAndRender()
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.depthDiscontinuitiesTexture);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.colorDiscontinuitiesTexture);
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.solverIntensityTexture);

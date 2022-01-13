@@ -55,8 +55,11 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	depthDiscontinuitiesTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(depthDiscontinuitiesTexture->resource, "Depth discontinuities");
 
-	depthDilateTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	SET_NAME(depthDilateTempTexture->resource, "Depth dilate temp");
+	colorDiscontinuitiesTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(colorDiscontinuitiesTexture->resource, "Color discontinuities");
+
+	dilateTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(dilateTempTexture->resource, "Depth dilate temp");
 }
 
 void projector_renderer::shutdown()
@@ -78,7 +81,8 @@ void projector_renderer::shutdown()
 	confidenceTexture = 0;
 
 	depthDiscontinuitiesTexture = 0;
-	depthDilateTempTexture = 0;
+	colorDiscontinuitiesTexture = 0;
+	dilateTempTexture = 0;
 
 	environment = 0;
 }
@@ -116,7 +120,8 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(confidenceTexture, renderWidth, renderHeight);
 
 		resizeTexture(depthDiscontinuitiesTexture, renderWidth, renderHeight);
-		resizeTexture(depthDilateTempTexture, renderWidth, renderHeight);
+		resizeTexture(colorDiscontinuitiesTexture, renderWidth, renderHeight);
+		resizeTexture(dilateTempTexture, renderWidth, renderHeight);
 	}
 }
 
@@ -244,9 +249,9 @@ void projector_renderer::endFrame()
 			//.uav(depthDiscontinuitiesTexture)
 			.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-		dilate(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuityDilateRadius);
-		dilateSmooth(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, depthDiscontinuitySmoothRadius);
-		gaussianBlur(cl, depthDiscontinuitiesTexture, depthDilateTempTexture, 0, 0, gaussian_blur_5x5);
+		dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuityDilateRadius);
+		dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuitySmoothRadius);
+		gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
 
 		ref<dx_texture> hdrResult = hdrPostProcessingTexture; // Specular highlights have been rendered to this texture. It's in read state.
 
@@ -258,7 +263,22 @@ void projector_renderer::endFrame()
 			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
 			.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 			.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
+			.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+
+		colorSobel(cl, ldrPostProcessingTexture, colorDiscontinuitiesTexture, colorDiscontinuityThreshold);
+
+		barrier_batcher(cl)
+			//.uav(colorDiscontinuitiesTexture)
+			.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+
+		// Dilate etc
+
+		barrier_batcher(cl)
+			//.uav(colorDiscontinuitiesTexture)
+			.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 	}
 
@@ -292,8 +312,7 @@ void projector_renderer::finalizeImage(dx_command_list* cl)
 	}
 
 	barrier_batcher(cl)
-		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 	if (applySolverIntensity)
 	{
