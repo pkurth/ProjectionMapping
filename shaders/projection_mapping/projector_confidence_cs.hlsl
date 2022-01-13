@@ -41,10 +41,20 @@ void main(cs_input IN)
 	const float3 color = renderResults[index][texCoord].rgb;
 	const float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	const float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));
-	const float mask = masks[index][texCoord];
+	float depthMask = 1.f - masks[index][texCoord];
 	float3 V = projectors[index].position.xyz - P;
 	const float distance = length(V);
 	V *= rcp(distance);
+
+
+	float2 distanceFromEdge2 = min(texCoord, dimensions - texCoord);
+	float distanceFromEdge = min(distanceFromEdge2.x, distanceFromEdge2.y);
+
+	// TODO: This shouldn't probably be a hard factor. Apply this to the color mask later.
+	const float hardEdgeWidth = 5.f;
+	const float edgeTransition = 10.f;
+	float maskFactor = saturate((distanceFromEdge - hardEdgeWidth) / edgeTransition);
+	depthMask *= maskFactor;
 
 
 	// Light intensity falls off with the surface angle (cosine) and distance (quadratic). Combined we call this the attenuation.
@@ -64,5 +74,5 @@ void main(cs_input IN)
 	float maxComponent = max(color.r, max(color.g, color.b));
 	float maxCompensation = 1.f / maxComponent; // Max value for compensation to avoid clipping.
 
-	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, 1.f - mask, 0.f);
+	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, depthMask, 0.f);
 }
