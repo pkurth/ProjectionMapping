@@ -11,7 +11,8 @@ Texture2D<float4> renderResults[32]			: register(t0, space1);
 Texture2D<float2> worldNormals[32]			: register(t0, space2);
 Texture2D<float> depthTextures[32]			: register(t0, space3);
 Texture2D<float> intensities[32]			: register(t0, space4);
-Texture2D<float> masks[32]					: register(t0, space5);
+Texture2D<float> depthMasks[32]				: register(t0, space5);
+Texture2D<float> colorMasks[32]				: register(t0, space6);
 
 RWTexture2D<float4> output[32]				: register(u0, space0);
 
@@ -41,7 +42,7 @@ void main(cs_input IN)
 	const float3 color = renderResults[index][texCoord].rgb;
 	const float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	const float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));
-	float depthMask = 1.f - masks[index][texCoord];
+	float depthMask = 1.f - depthMasks[index][texCoord];
 	float3 V = projectors[index].position.xyz - P;
 	const float distance = length(V);
 	V *= rcp(distance);
@@ -52,7 +53,7 @@ void main(cs_input IN)
 
 	// TODO: This shouldn't probably be a hard factor. Apply this to the color mask later.
 	const float hardEdgeWidth = 5.f;
-	const float edgeTransition = 10.f;
+	const float edgeTransition = 100.f;
 	float maskFactor = saturate((distanceFromEdge - hardEdgeWidth) / edgeTransition);
 	depthMask *= maskFactor;
 

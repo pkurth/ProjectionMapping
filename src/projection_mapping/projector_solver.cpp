@@ -95,6 +95,7 @@ void projector_solver::prepareForFrame(const projector_component* projectors, ui
 		(depthTexturesBaseDescriptor + i).createDepthTextureSRV(p.renderer.depthStencilBuffer);
 		(realDepthTexturesBaseDescriptor + i).createDepthTextureSRV(p.renderer.realDepthStencilBuffer);
 		(depthDiscontinuitiesTexturesBaseDescriptor + i).create2DTextureSRV(p.renderer.depthDiscontinuitiesTexture);
+		(colorDiscontinuitiesTexturesBaseDescriptor + i).create2DTextureSRV(p.renderer.colorDiscontinuitiesTexture);
 		(intensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTexture);
 		(intensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTexture);
 		(tempIntensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTempTexture);
@@ -206,7 +207,8 @@ void projector_solver::solve()
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_INTENSITIES, intensitiesSRVBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_DEPTH_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_COLOR_MASKS, colorDiscontinuitiesTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_OUTPUT, confidencesUAVBaseDescriptor);
 
 			for (uint32 i = 0; i < numProjectors; ++i)

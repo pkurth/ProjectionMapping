@@ -68,13 +68,13 @@ void main(cs_input IN)
 	}
 
 	float4 c = confidenceTextures[index][texCoord];
-	float ownAtten = c.x;
+	float atten = c.x;
 	float maxCompensation = c.y;
 	float mask = USE_MASK ? c.z : 1.f;
 
-	float E = pow(ownAtten, k) * mask;
+	float E = pow(atten, k) * mask;
 	float weight = E / max(E + Esum, 0.0001f);
 
-	outIntensities[index][texCoord] = clamp(weight / ownAtten, 0.f, maxCompensation);
+	outIntensities[index][texCoord] = clamp(weight / atten, 0.f, maxCompensation);
 
 }

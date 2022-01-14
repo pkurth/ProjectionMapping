@@ -39,6 +39,7 @@ private:
 			dx_double_descriptor_handle depthTexturesBaseDescriptor;
 			dx_double_descriptor_handle realDepthTexturesBaseDescriptor; // For simulation.
 			dx_double_descriptor_handle depthDiscontinuitiesTexturesBaseDescriptor;
+			dx_double_descriptor_handle colorDiscontinuitiesTexturesBaseDescriptor;
 			   
 			dx_double_descriptor_handle intensitiesSRVBaseDescriptor;
 			dx_double_descriptor_handle intensitiesUAVBaseDescriptor;
@@ -50,7 +51,7 @@ private:
 			dx_double_descriptor_handle confidencesUAVBaseDescriptor;
 		};
 
-		dx_double_descriptor_handle descriptors[12];
+		dx_double_descriptor_handle descriptors[13];
 	};
 
 	D3D12_GPU_VIRTUAL_ADDRESS projectorsGPUAddress;

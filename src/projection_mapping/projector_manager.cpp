@@ -28,11 +28,20 @@ void projector_manager::updateAndRender()
 		if (ImGui::BeginProperties())
 		{
 			ImGui::PropertyCheckbox("Apply solver intensity", projector_renderer::applySolverIntensity);
+
+			ImGui::PropertySeparator();
+
 			ImGui::PropertySlider("Depth discontinuity threshold", projector_renderer::depthDiscontinuityThreshold, 0.f, 1.f);
 			ImGui::PropertyDrag("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius);
 			ImGui::PropertyDrag("Depth discontinuity smooth radius", projector_renderer::depthDiscontinuitySmoothRadius);
 
+			ImGui::PropertySeparator();
+
 			ImGui::PropertySlider("Color discontinuity threshold", projector_renderer::colorDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertyDrag("Color discontinuity dilate radius", projector_renderer::colorDiscontinuityDilateRadius);
+			ImGui::PropertyDrag("Color discontinuity smooth radius", projector_renderer::colorDiscontinuitySmoothRadius);
+
+			ImGui::PropertySeparator();
 
 			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
 			ImGui::PropertySlider("Regularization strength", solver.regularizationStrength);

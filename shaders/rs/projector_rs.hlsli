@@ -107,6 +107,7 @@ struct projector_confidence_cb
     "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=5, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=6, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) )"
 
 
@@ -116,8 +117,9 @@ struct projector_confidence_cb
 #define PROJECTOR_CONFIDENCE_RS_WORLD_NORMALS       3
 #define PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES      4
 #define PROJECTOR_CONFIDENCE_RS_INTENSITIES         5
-#define PROJECTOR_CONFIDENCE_RS_MASKS               6
-#define PROJECTOR_CONFIDENCE_RS_OUTPUT              7
+#define PROJECTOR_CONFIDENCE_RS_DEPTH_MASKS         6
+#define PROJECTOR_CONFIDENCE_RS_COLOR_MASKS         7
+#define PROJECTOR_CONFIDENCE_RS_OUTPUT              8
 
 
 
