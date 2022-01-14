@@ -71,7 +71,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/augustus.obj"))
 	{
 #if 1
-		mat4 tracking(0.021107f, -0.983223f, -0.184615f, 0.000000f, 0.964079f, 0.069198f, -0.258319f, 0.000000f, 0.266540f, -0.172366f, 0.948488f, 0.000000f, -0.306646f, -0.050064f, -0.782918f, 1.000000f);
+		mat4 tracking(-0.013315f, -0.968153f, -0.253011f, 0.000000f, 0.966552f, 0.052912f, -0.253336f, 0.000000f, 0.258358f, -0.247635f, 0.933987f, 0.000000f, -0.225209f, -0.021331f, -0.552007f, 1.000000f);
 		tracking = transpose(tracking);
 		trs transform = mat4ToTRS(tracking);
 #else
@@ -152,14 +152,14 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		.addComponent<projector_component>();*/
 
 	{
-		vec3 pos(0.055007f, 0.196148f, 0.434591f);
-		quat rotation = mat3ToQuaternion(transpose(mat3(0.282744f, -0.945205f, 0.163227f, 0.937646f, 0.236492f, -0.254738f, 0.202178f, 0.225075f, 0.953135f)));
+		vec3 pos(0.060838f, -0.335435f, 0.456867f);
+		quat rotation = mat3ToQuaternion(transpose(mat3(-0.071526f, -0.967211f, -0.243693f, 0.958566f, 0.000887f, -0.284868f, 0.275743f, -0.253971f, 0.927073f)));
 
 		pos = setupRotation * pos;
 		rotation = setupRotation * rotation;
 
 		render_camera projCamera;
-		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2693.083252f, 2697.005127f, 955.067932f, 1230.932617f }, 0.01f);
+		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2515.314209f, 2512.073242f, 941.565186f, 1057.121826f }, 0.01f);
 
 		scene.createEntity("Projector")
 			.addComponent<position_rotation_component>(pos, rotation)
@@ -167,14 +167,14 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	}
 
 	{
-		vec3 pos(0.120496f, -0.345038f, 0.422822f);
-		quat rotation = mat3ToQuaternion(transpose(mat3(0.137757f, -0.955817f, -0.259685f, 0.928609f, 0.215839f, -0.301827f, 0.344542f, -0.199567f, 0.917313f)));
+		vec3 pos(0.111346f, 0.220244f, 0.450862f);
+		quat rotation = mat3ToQuaternion(transpose(mat3(0.074656f, -0.979774f, 0.185660f, 0.971717f, 0.029647f, -0.234282f, 0.224039f, 0.197900f, 0.954276f)));
 
 		pos = setupRotation * pos;
 		rotation = setupRotation * rotation;
 
 		render_camera projCamera;
-		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2452.339355f, 2434.934326f, 934.435425f, 1113.670898f }, 0.01f);
+		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2732.094238f, 2749.498779f, 963.817688f, 1152.647095f }, 0.01f);
 
 		scene.createEntity("Projector")
 			.addComponent<position_rotation_component>(pos, rotation)
