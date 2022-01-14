@@ -23,19 +23,6 @@ struct rgbd_camera_info
 	std::string description;
 };
 
-enum camera_resolution
-{
-	camera_resolution_off,
-	camera_resolution_720p,
-	camera_resolution_1080p,
-	camera_resolution_1440p,
-};
-
-struct rgbd_camera_spec
-{
-	camera_resolution colorResolution = camera_resolution_720p;
-};
-
 struct color_bgra
 {
 	uint8 b, g, r, a;
@@ -101,6 +88,9 @@ struct realsense_handle
 	struct rs2_pipeline* pipeline = 0;
 	struct rs2_config* config = 0;
 	struct rs2_pipeline_profile* profile = 0;
+
+	struct rs2_processing_block* align = 0;
+	struct rs2_frame_queue* alignQueue = 0;
 };
 
 struct rgbd_camera
@@ -113,9 +103,9 @@ struct rgbd_camera
 	void operator=(const rgbd_camera&) = delete;
 	void operator=(rgbd_camera&& o) noexcept;
 
-	bool initializeAs(rgbd_camera_type type, uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
-	bool initializeAzure(uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
-	bool initializeRealsense(uint32 deviceIndex = 0, rgbd_camera_spec spec = {});
+	bool initializeAs(rgbd_camera_type type, uint32 deviceIndex = 0, bool alignDepthToColor = true);
+	bool initializeAzure(uint32 deviceIndex = 0, bool alignDepthToColor = true);
+	bool initializeRealsense(uint32 deviceIndex = 0, bool alignDepthToColor = true);
 	void shutdown();
 
 	bool getFrame(rgbd_frame& result, int32 timeOutInMilliseconds = 0); // 0: Return immediately.
@@ -130,7 +120,7 @@ struct rgbd_camera
 	rgbd_camera_sensor depthSensor;
 
 	float depthScale;
-
+	bool alignDepthToColor;
 
 	static void initializeCommon();
 	static std::vector<rgbd_camera_info>& enumerate();

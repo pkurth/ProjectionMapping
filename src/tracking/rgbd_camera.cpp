@@ -123,52 +123,15 @@ std::vector<rgbd_camera_info>& rgbd_camera::enumerate()
     return allConnectedRGBDCameras;
 }
 
-static k4a_color_resolution_t getResolution(camera_resolution res)
-{
-    switch (res)
-    {
-        case camera_resolution_off: return K4A_COLOR_RESOLUTION_OFF;
-        case camera_resolution_720p: return K4A_COLOR_RESOLUTION_720P;
-        case camera_resolution_1080p: return K4A_COLOR_RESOLUTION_1080P;
-        case camera_resolution_1440p: return K4A_COLOR_RESOLUTION_1440P;
-    }
-    assert(false);
-    return K4A_COLOR_RESOLUTION_OFF;
-}
-
-static uint32 getWidth(camera_resolution res)
-{
-    switch (res)
-    {
-        case camera_resolution_off: return 0;
-        case camera_resolution_720p: return 1280;
-        case camera_resolution_1080p: return 1920;
-        case camera_resolution_1440p: return 2560;
-    }
-    assert(false);
-    return 0;
-}
-
-static uint32 getHeight(camera_resolution res)
-{
-    switch (res)
-    {
-        case camera_resolution_off: return 0;
-        case camera_resolution_720p: return 720;
-        case camera_resolution_1080p: return 1080;
-        case camera_resolution_1440p: return 1440;
-    }
-    assert(false);
-    return 0;
-}
-
 void rgbd_camera::operator=(rgbd_camera&& o) noexcept
 {
     azure = o.azure;
-    o.azure.deviceHandle = 0;
+    o.azure = {};
 
     realsense = o.realsense;
-    o.realsense.device = 0;
+    o.realsense = {};
+
+    alignDepthToColor = o.alignDepthToColor;
     
     depthSensor = o.depthSensor;
     colorSensor = o.colorSensor;
@@ -350,14 +313,18 @@ static void getCalibration(const rs2_stream_profile* streamProfile, const rs2_st
     result.position = position;
 }
 
-bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
+bool rgbd_camera::initializeAzure(uint32 deviceIndex, bool alignDepthToColor)
 {
+    shutdown();
+
     k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     config.camera_fps = K4A_FRAMES_PER_SECOND_30;
     config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
     config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
-    config.color_resolution = getResolution(spec.colorResolution);
+    config.color_resolution = K4A_COLOR_RESOLUTION_720P;
     config.synchronized_images_only = config.color_resolution != K4A_COLOR_RESOLUTION_OFF;
+
+    this->alignDepthToColor = alignDepthToColor;
 
     k4a_device_open(deviceIndex, &azure.deviceHandle);
     if (azure.deviceHandle)
@@ -365,7 +332,7 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
         k4a_device_start_cameras(azure.deviceHandle, &config);
 
         depthSensor.active = true;
-        colorSensor.active = config.color_resolution != K4A_COLOR_RESOLUTION_OFF;
+        colorSensor.active = true;
 
         k4a_calibration_t calibration;
         k4a_device_get_calibration(azure.deviceHandle, config.depth_mode, config.color_resolution, &calibration);
@@ -380,6 +347,9 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
         if (colorSensor.active)
         {
             getCalibration(calibration.color_camera_calibration, colorSensor);
+
+            colorSensor.unprojectTable = new vec2[colorSensor.width * colorSensor.height];
+            createUnprojectTable(calibration, colorSensor.unprojectTable, false);
         }
 
         depthScale = 0.001f;
@@ -392,8 +362,12 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, rgbd_camera_spec spec)
     return false;
 }
 
-bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
+bool rgbd_camera::initializeRealsense(uint32 deviceIndex, bool alignDepthToColor)
 {
+    shutdown();
+
+    this->alignDepthToColor = alignDepthToColor;
+
     rs2_error* e = 0;
 
     rs2_device_list* deviceList = rs2_query_devices(rsContext, &e);
@@ -416,16 +390,22 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         assertRealsenseSuccess(e);
 
         depthSensor.active = true;
-        colorSensor.active = spec.colorResolution != camera_resolution_off;
+        colorSensor.active = true;
 
-        if (depthSensor.active)
-        {
-            rs2_config_enable_stream(realsense.config, RS2_STREAM_DEPTH, -1, 640, 480, RS2_FORMAT_Z16, 30, &e);
-            assertRealsenseSuccess(e);
-        }
+        uint32 colorWidth = 1280;
+        uint32 colorHeight = 720;
+
+        uint32 depthWidth = 640;
+        uint32 depthHeight = 480;
+
         if (colorSensor.active)
         {
-            rs2_config_enable_stream(realsense.config, RS2_STREAM_COLOR, -1, getWidth(spec.colorResolution), getHeight(spec.colorResolution), RS2_FORMAT_BGRA8, 30, &e);
+            rs2_config_enable_stream(realsense.config, RS2_STREAM_COLOR, -1, colorWidth, colorHeight, RS2_FORMAT_BGRA8, 30, &e);
+            assertRealsenseSuccess(e);
+        }
+        if (depthSensor.active)
+        {
+            rs2_config_enable_stream(realsense.config, RS2_STREAM_DEPTH, -1, depthWidth, depthHeight, RS2_FORMAT_Z16, 30, &e);
             assertRealsenseSuccess(e);
         }
 
@@ -451,10 +431,22 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
         {
             const rs2_stream_profile* colorStreamProfile = getStreamProfile(profileList, RS2_STREAM_COLOR);
             getCalibration(colorStreamProfile, depthStreamProfile, colorSensor);
+
+            colorSensor.unprojectTable = new vec2[colorSensor.width * colorSensor.height];
+            createUnprojectTable(colorStreamProfile, colorSensor.unprojectTable);
+
+            if (alignDepthToColor)
+            {
+                delete[] depthSensor.unprojectTable;
+
+                colorSensor.position = vec3(0.f, 0.f, 0.f);
+                colorSensor.rotation = quat::identity;
+
+                depthSensor = colorSensor;
+            }
         }
 
         rs2_delete_stream_profiles_list(profileList);
-
 
 
 
@@ -477,6 +469,7 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
             if (isDepthSensor)
             {
                 depthScale = rs2_get_depth_scale(sensor, &e);
+                assertRealsenseSuccess(e);
                 //depthScale = rs2_get_option((const rs2_options*)sensor, RS2_OPTION_DEPTH_UNITS, &e);
                 break;
             }
@@ -486,20 +479,32 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, rgbd_camera_spec spec)
 
         info = getInfo(realsense.device, deviceIndex);
 
+
+
+        if (alignDepthToColor)
+        {
+            realsense.align = rs2_create_align(RS2_STREAM_COLOR, &e);
+            assertRealsenseSuccess(e);
+            realsense.alignQueue = rs2_create_frame_queue(1, &e);
+            assertRealsenseSuccess(e);
+            rs2_start_processing_queue(realsense.align, realsense.alignQueue, &e);
+            assertRealsenseSuccess(e);
+        }
+
         return true;
     }
 
     return false;
 }
 
-bool rgbd_camera::initializeAs(rgbd_camera_type type, uint32 deviceIndex, rgbd_camera_spec spec)
+bool rgbd_camera::initializeAs(rgbd_camera_type type, uint32 deviceIndex, bool alignDepthToColor)
 {
     switch (type)
     {
         case rgbd_camera_type_azure:
-            return initializeAzure(deviceIndex, spec);
+            return initializeAzure(deviceIndex, alignDepthToColor);
         case rgbd_camera_type_realsense:
-            return initializeRealsense(deviceIndex, spec);
+            return initializeRealsense(deviceIndex, alignDepthToColor);
         default:
             return false;
     }
@@ -522,20 +527,26 @@ void rgbd_camera::shutdown()
         rs2_delete_config(realsense.config);
         rs2_delete_pipeline(realsense.pipeline);
         rs2_delete_device(realsense.device);
+        if (alignDepthToColor)
+        {
+            rs2_delete_processing_block(realsense.align);
+            rs2_delete_frame_queue(realsense.alignQueue);
+        }
         realsense.device = 0;
     }
 
     if (depthSensor.unprojectTable)
     {
         delete depthSensor.unprojectTable;
-        depthSensor.unprojectTable = 0;
     }
 
-    if (colorSensor.unprojectTable)
+    if (!alignDepthToColor && colorSensor.unprojectTable)
     {
         delete colorSensor.unprojectTable;
-        colorSensor.unprojectTable = 0;
     }
+
+    depthSensor.unprojectTable = 0;
+    colorSensor.unprojectTable = 0;
 
     info.type = rgbd_camera_type_uninitialized;
 }
@@ -583,6 +594,15 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
 
         if (newFrames)
         {
+            if (alignDepthToColor)
+            {
+                rs2_process_frame(realsense.align, frames, &e);
+                assertRealsenseSuccess(e);
+                int numAlignedFrames = rs2_poll_for_frame(realsense.alignQueue, &frames, &e);
+                assert(numAlignedFrames == 1);
+            }
+
+
             int numFrames = rs2_embedded_frames_count(frames, &e);
             assertRealsenseSuccess(e);
 
