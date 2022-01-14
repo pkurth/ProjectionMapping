@@ -135,9 +135,6 @@ void projector_manager::updateAndRender()
 
 			projector.renderer.setProjectorCamera(projector.calibratedCamera);
 			projector.renderer.setRealProjectorCamera(projector.realCamera);
-			projector.renderer.setViewerCamera(scene->camera);
-			projector.renderer.setSun(scene->sun);
-			projector.renderer.setEnvironment(scene->environment);
 
 			projector.renderer.endFrame();
 		}

@@ -83,14 +83,21 @@ void projector_renderer::shutdown()
 	depthDiscontinuitiesTexture = 0;
 	colorDiscontinuitiesTexture = 0;
 	dilateTempTexture = 0;
+}
 
+void projector_renderer::beginFrameCommon()
+{
 	environment = 0;
+
+	pointLights = 0;
+	spotLights = 0;
+	numPointLights = 0;
+	numSpotLights = 0;
 }
 
 void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 {
 	opaqueRenderPass = 0;
-	environment = 0;
 
 	active = windowWidth > 0 && windowHeight > 0;
 	if (!active)
@@ -123,6 +130,8 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(colorDiscontinuitiesTexture, renderWidth, renderHeight);
 		resizeTexture(dilateTempTexture, renderWidth, renderHeight);
 	}
+
+	culling.allocateIfNecessary(renderWidth, renderHeight);
 }
 
 void projector_renderer::setProjectorCamera(const render_camera& camera)
@@ -137,12 +146,12 @@ void projector_renderer::setRealProjectorCamera(const render_camera& camera)
 
 void projector_renderer::setViewerCamera(const render_camera& camera)
 {
-	buildCameraConstantBuffer(camera, 0.f, this->viewerCamera);
+	buildCameraConstantBuffer(camera, 0.f, viewerCamera);
 }
 
-void projector_renderer::setEnvironment(const ref<pbr_environment>& environment)
+void projector_renderer::setEnvironment(const ref<pbr_environment>& env)
 {
-	this->environment = environment;
+	environment = env;
 }
 
 void projector_renderer::setSun(const directional_light& light)
@@ -152,6 +161,20 @@ void projector_renderer::setSun(const directional_light& light)
 	sun.numShadowCascades = 0;
 }
 
+void projector_renderer::setPointLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer)
+{
+	pointLights = lights;
+	numPointLights = numLights;
+	pointLightShadowInfoBuffer = shadowInfoBuffer;
+}
+
+void projector_renderer::setSpotLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer)
+{
+	spotLights = lights;
+	numSpotLights = numLights;
+	spotLightShadowInfoBuffer = shadowInfoBuffer;
+}
+
 void projector_renderer::endFrame()
 {
 	if (!active)
@@ -159,6 +182,7 @@ void projector_renderer::endFrame()
 		return;
 	}
 
+	auto projectorCameraCBV = dxContext.uploadDynamicConstantBuffer(projectorCamera);
 	auto viewerCameraCBV = dxContext.uploadDynamicConstantBuffer(viewerCamera);
 	auto sunCBV = dxContext.uploadDynamicConstantBuffer(sun);
 
@@ -179,15 +203,15 @@ void projector_renderer::endFrame()
 	materialInfo.skyIntensity = 1.f;
 	materialInfo.aoTexture = render_resources::whiteTexture;
 	materialInfo.sssTexture = render_resources::whiteTexture;
-	materialInfo.tiledCullingGrid = 0;
-	materialInfo.tiledObjectsIndexList = 0;
-	materialInfo.pointLightBuffer = 0;
-	materialInfo.spotLightBuffer = 0;
+	materialInfo.tiledCullingGrid = culling.tiledCullingGrid;
+	materialInfo.tiledObjectsIndexList = culling.tiledObjectsIndexList;
+	materialInfo.pointLightBuffer = pointLights;
+	materialInfo.spotLightBuffer = spotLights;
 	materialInfo.decalBuffer = 0;
 	materialInfo.shadowMap = render_resources::shadowMap;
 	materialInfo.decalTextureAtlas = 0;
-	materialInfo.pointLightShadowInfoBuffer = 0;
-	materialInfo.spotLightShadowInfoBuffer = 0;
+	materialInfo.pointLightShadowInfoBuffer = pointLightShadowInfoBuffer;
+	materialInfo.spotLightShadowInfoBuffer = spotLightShadowInfoBuffer;
 	materialInfo.volumetricsTexture = 0;
 	materialInfo.cameraCBV = viewerCameraCBV;
 	materialInfo.sunCBV = sunCBV;
@@ -216,6 +240,13 @@ void projector_renderer::endFrame()
 
 		depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
 			projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
+
+
+		cl->transitionBarrier(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		lightAndDecalCulling(cl, depthStencilBuffer, pointLights, spotLights, 0, culling, numPointLights, numSpotLights, 0, projectorCameraCBV);
+		cl->transitionBarrier(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+
 
 
 		auto hdrOpaqueRenderTarget = dx_render_target(renderWidth, renderHeight)
@@ -273,8 +304,9 @@ void projector_renderer::endFrame()
 			//.uav(colorDiscontinuitiesTexture)
 			.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-
-		// Dilate etc
+		dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuityDilateRadius);
+		dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuitySmoothRadius);
+		gaussianBlur(cl, colorDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13);
 
 		barrier_batcher(cl)
 			//.uav(colorDiscontinuitiesTexture)

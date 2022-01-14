@@ -193,11 +193,6 @@ void main_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 	transparentRenderPass = 0;
 	ldrRenderPass = 0;
 
-	pointLights = 0;
-	spotLights = 0;
-	numPointLights = 0;
-	numSpotLights = 0;
-
 	environment = 0;
 }
 

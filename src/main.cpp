@@ -251,6 +251,7 @@ int main(int argc, char** argv)
 
 
 		// Update and render.
+		projector_renderer::beginFrameCommon();
 		projectorManager.beginFrame();
 
 		shadow_map_renderer::beginFrame();

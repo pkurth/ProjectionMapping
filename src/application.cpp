@@ -265,6 +265,9 @@ void application::update(const user_input& input, float dt)
 	}
 
 
+	projector_renderer::setViewerCamera(scene.camera);
+	projector_renderer::setSun(scene.sun);
+	projector_renderer::setEnvironment(scene.environment);
 
 
 
@@ -317,6 +320,7 @@ void application::update(const user_input& input, float dt)
 			unmapBuffer(pointLightShadowInfoBuffer[dxContext.bufferedFrameID], true, { 0, numPointShadowRenderPasses });
 
 			renderer->setPointLights(pointLightBuffer[dxContext.bufferedFrameID], numPointLights, pointLightShadowInfoBuffer[dxContext.bufferedFrameID]);
+			projector_renderer::setPointLights(pointLightBuffer[dxContext.bufferedFrameID], numPointLights, pointLightShadowInfoBuffer[dxContext.bufferedFrameID]);
 		}
 
 		uint32 numSpotLights = scene.numberOfComponentsOfType<spot_light_component>();
@@ -343,6 +347,7 @@ void application::update(const user_input& input, float dt)
 			unmapBuffer(spotLightShadowInfoBuffer[dxContext.bufferedFrameID], true, { 0, numSpotShadowRenderPasses });
 
 			renderer->setSpotLights(spotLightBuffer[dxContext.bufferedFrameID], numSpotLights, spotLightShadowInfoBuffer[dxContext.bufferedFrameID]);
+			projector_renderer::setSpotLights(spotLightBuffer[dxContext.bufferedFrameID], numSpotLights, spotLightShadowInfoBuffer[dxContext.bufferedFrameID]);
 		}
 
 

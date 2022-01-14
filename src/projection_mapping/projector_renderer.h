@@ -13,6 +13,7 @@ struct projector_renderer
 	void initialize(color_depth colorDepth, uint32 windowWidth, uint32 windowHeight);
 	void shutdown();
 
+	static void beginFrameCommon();
 	void beginFrame(uint32 windowWidth, uint32 windowHeight);
 	void endFrame();
 	void finalizeImage(dx_command_list* cl);
@@ -21,9 +22,14 @@ struct projector_renderer
 	// Set these with your application.
 	void setProjectorCamera(const render_camera& camera);
 	void setRealProjectorCamera(const render_camera& camera); // For simulation.
-	void setViewerCamera(const render_camera& camera);
-	void setEnvironment(const ref<pbr_environment>& environment);
-	void setSun(const directional_light& light);
+
+
+	static void setViewerCamera(const render_camera& camera);
+	static void setEnvironment(const ref<pbr_environment>& environment);
+	static void setSun(const directional_light& light);
+	static void setPointLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer);
+	static void setSpotLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer);
+
 
 	void submitRenderPass(const opaque_render_pass* renderPass) { assert(!opaqueRenderPass); opaqueRenderPass = renderPass; }
 
@@ -34,11 +40,13 @@ struct projector_renderer
 	static inline tonemap_settings tonemapSettings;
 
 
-	static inline float depthDiscontinuityThreshold = 0.01f;
+	static inline float depthDiscontinuityThreshold = 0.05f;
 	static inline uint32 depthDiscontinuityDilateRadius = 2;
 	static inline uint32 depthDiscontinuitySmoothRadius = 8;
 
-	static inline float colorDiscontinuityThreshold = 0.1f;
+	static inline float colorDiscontinuityThreshold = 0.4f;
+	static inline uint32 colorDiscontinuityDilateRadius = 8;
+	static inline uint32 colorDiscontinuitySmoothRadius = 8;
 
 	static inline bool applySolverIntensity = false;
 
@@ -74,12 +82,26 @@ private:
 	ref<dx_texture> hdrPostProcessingTexture;
 	ref<dx_texture> ldrPostProcessingTexture;
 
-	ref<pbr_environment> environment;
+
+	light_culling culling;
 
 	camera_cb projectorCamera;
 	camera_cb realProjectorCamera; // For simulation.
-	camera_cb viewerCamera;
-	directional_light_cb sun;
+
+
+
+
+
+	static inline ref<pbr_environment> environment;
+	static inline ref<dx_buffer> pointLights;
+	static inline ref<dx_buffer> spotLights;
+	static inline ref<dx_buffer> pointLightShadowInfoBuffer;
+	static inline ref<dx_buffer> spotLightShadowInfoBuffer;
+	static inline uint32 numPointLights = 0;
+	static inline uint32 numSpotLights = 0;
+
+	static inline camera_cb viewerCamera;
+	static inline directional_light_cb sun;
 
 	friend struct projector_manager;
 	friend struct projector_solver;
