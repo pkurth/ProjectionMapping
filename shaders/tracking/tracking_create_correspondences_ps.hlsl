@@ -9,7 +9,6 @@ RWStructuredBuffer<tracking_indirect> indirect		: register(u1);
 
 struct ps_input
 {
-	float2 uv				: TEXCOORDS;
 	float3 position			: POSITION;
 	float3 normal			: NORMAL;
 
@@ -24,7 +23,8 @@ float4 main(ps_input IN) : SV_TARGET0
 {
 	uint2 xy = (uint2)IN.screenPosition.xy;
 
-	float3 cameraPosition = float3(cameraUnprojectTable[xy], -1.f) * (cameraDepthTexture[xy] * cb.depthScale);
+	float cameraDepth = cameraDepthTexture[xy] * cb.depthScale;
+	float3 cameraPosition = float3(cameraUnprojectTable[xy], -1.f) * cameraDepth;
 	float3 offset = cameraPosition - IN.position;
 
 	if (dot(offset, offset) > cb.squaredPositionThreshold)
@@ -47,6 +47,19 @@ float4 main(ps_input IN) : SV_TARGET0
 	float3 cameraPositionB = float3(cameraUnprojectTable[xy + uint2(0, 1)], -1.f) * (cameraDepthTexture[xy + uint2(0, 1)] * cb.depthScale);
 	float3 cameraPositionT = float3(cameraUnprojectTable[xy - uint2(0, 1)], -1.f) * (cameraDepthTexture[xy - uint2(0, 1)] * cb.depthScale);
 
+	float3 ver = cameraPositionB - cameraPositionT;
+	float3 hor = cameraPositionR - cameraPositionL;
+
+	float3 cameraNormal = normalize(cross(ver, hor));
+
+#elif NORMAL_RECONSTRUCTION_ACCURACY == 3
+	// Warning: Does not work for aligned depth and color streams, because there, neighboring pixels are often the exact same value, which leads to incorrect normals.
+
+	float3 cameraPositionR = float3(cameraUnprojectTable[xy + uint2(1, 0)], -1.f) * (cameraDepthTexture[xy + uint2(1, 0)] * cb.depthScale);
+	float3 cameraPositionL = float3(cameraUnprojectTable[xy - uint2(1, 0)], -1.f) * (cameraDepthTexture[xy - uint2(1, 0)] * cb.depthScale);
+	float3 cameraPositionB = float3(cameraUnprojectTable[xy + uint2(0, 1)], -1.f) * (cameraDepthTexture[xy + uint2(0, 1)] * cb.depthScale);
+	float3 cameraPositionT = float3(cameraUnprojectTable[xy - uint2(0, 1)], -1.f) * (cameraDepthTexture[xy - uint2(0, 1)] * cb.depthScale);
+
 	float3 R = cameraPositionR - cameraPosition;
 	float3 L = cameraPosition - cameraPositionL;
 	float3 B = cameraPositionB - cameraPosition;
@@ -56,6 +69,7 @@ float4 main(ps_input IN) : SV_TARGET0
 	float3 ver = (abs(B.z) < abs(T.z)) ? B : T;
 
 	float3 cameraNormal = normalize(cross(ver, hor));
+
 #endif
 
 	float3 normal = normalize(IN.normal);
@@ -91,6 +105,7 @@ float4 main(ps_input IN) : SV_TARGET0
 
 	output[index] = result;
 
-
-	return float4(IN.normal, 1.f);
+	//return float4(cameraDepth.xxx, 1.f);
+	//return float4(IN.normal, 1.f);
+	return float4(cameraNormal, 1.f);
 }

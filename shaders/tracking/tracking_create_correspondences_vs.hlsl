@@ -12,7 +12,6 @@ struct vs_input
 
 struct vs_output
 {
-	float2 uv				: TEXCOORDS;
 	float3 position			: POSITION;
 	float3 normal			: NORMAL;
 
@@ -30,7 +29,6 @@ vs_output main(vs_input IN)
 	OUT.rtPosition = mul(cb.p, distorted);
 
 	OUT.normal = mul(cb.m, float4(IN.normal, 0.f)).xyz;
-	OUT.uv = IN.uv;
 
 	return OUT;
 }
