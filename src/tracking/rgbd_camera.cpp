@@ -350,6 +350,19 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, bool alignDepthToColor)
 
             colorSensor.unprojectTable = new vec2[colorSensor.width * colorSensor.height];
             createUnprojectTable(calibration, colorSensor.unprojectTable, false);
+
+
+            if (alignDepthToColor)
+            {
+                azure.alignTransform = k4a_transformation_create(&calibration);
+
+                delete[] depthSensor.unprojectTable;
+
+                colorSensor.position = vec3(0.f, 0.f, 0.f);
+                colorSensor.rotation = quat::identity;
+
+                depthSensor = colorSensor;
+            }
         }
 
         depthScale = 0.001f;
@@ -516,6 +529,11 @@ void rgbd_camera::shutdown()
     {
         k4a_device_close(azure.deviceHandle);
         azure.deviceHandle = 0;
+
+        if (alignDepthToColor)
+        {
+            k4a_transformation_destroy(azure.alignTransform);
+        }
     }
     else if (info.type == rgbd_camera_type_realsense && realsense.device)
     {
@@ -562,6 +580,18 @@ bool rgbd_camera::getFrame(rgbd_frame& result, int32 timeOutInMilliseconds)
             if (depthSensor.active)
             {
                 result.azureDepthHandle = k4a_capture_get_depth_image(captureHandle);
+
+                if (alignDepthToColor)
+                {
+                    k4a_image_t alignedDepth;
+                    k4a_image_create(K4A_IMAGE_FORMAT_DEPTH16, colorSensor.width, colorSensor.height, 0, &alignedDepth);
+
+                    k4a_transformation_depth_image_to_color_camera(azure.alignTransform, result.azureDepthHandle, alignedDepth);
+
+                    k4a_image_release(result.azureDepthHandle);
+                    result.azureDepthHandle = alignedDepth;
+                }
+
                 result.depth = (uint16*)k4a_image_get_buffer(result.azureDepthHandle);
             }
 

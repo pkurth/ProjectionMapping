@@ -143,7 +143,7 @@ depth_tracker::depth_tracker()
 
 void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)
 {
-	if (!camera.initializeAs(cameraType, deviceIndex, true))
+	if (!camera.initializeAs(cameraType, deviceIndex, false))
 	{
 		return;
 	}

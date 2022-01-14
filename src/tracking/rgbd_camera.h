@@ -80,6 +80,8 @@ struct rgbd_camera_sensor
 struct azure_handle
 {
 	struct _k4a_device_t* deviceHandle = 0;
+
+	struct _k4a_transformation_t* alignTransform;
 };
 
 struct realsense_handle
