@@ -77,17 +77,13 @@ static void reduce(uint groupIndex, uint groupID, uint globalCount, RWStructured
 	}
 	GroupMemoryBarrierWithGroupSync();
 
-
-	if (groupIndex < 21)
+	if (groupIndex == 0)
 	{
-		float m0 = g_ata[0].m[groupIndex];
-		float m1 = 1 < numValidInGroup ? g_ata[1].m[groupIndex] : 0.f;
-		outputBuffer[groupID].ata.m[groupIndex] = m0 + m1;
-	}
-	if (groupIndex < 6)
-	{
-		float m0 = g_atb[0].m[groupIndex];
-		float m1 = 1 < numValidInGroup ? g_atb[1].m[groupIndex] : 0.f;
-		outputBuffer[groupID].atb.m[groupIndex] = m0 + m1;
+		if (1 < numValidInGroup)
+		{
+			add(0, 1);
+		}
+		outputBuffer[groupID].ata = g_ata[0];
+		outputBuffer[groupID].atb = g_atb[0];
 	}
 }

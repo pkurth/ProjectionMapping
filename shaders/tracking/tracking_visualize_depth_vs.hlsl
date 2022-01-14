@@ -29,7 +29,7 @@ vs_output main(vs_input IN)
     float2 colorPixel = project(colorPos, cb.colorCameraIntrinsics, cb.colorCameraDistortion);
 
 	vs_output OUT;
-	OUT.position = mul(cb.vp, float4(pos, 1.f));
+	OUT.position = mul(cb.mvp, float4(pos, 1.f));
 	OUT.color = colorTexture[(int2)colorPixel].rgb;
 
 	return OUT;

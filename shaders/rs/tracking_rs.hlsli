@@ -8,7 +8,7 @@
 
 struct visualize_depth_cb
 {
-	mat4 vp;
+	mat4 mvp;
 	mat4 colorCameraV;
 	intrinsics_cb colorCameraIntrinsics;
 	distortion_cb colorCameraDistortion;

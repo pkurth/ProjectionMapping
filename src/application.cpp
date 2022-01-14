@@ -71,7 +71,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/augustus.obj"))
 	{
 #if 1
-		mat4 tracking(0.195956f, -0.943605f, -0.268962f, 0.000000f, 0.933901f, 0.263363f, -0.243546f, 0.000000f, 0.300453f, -0.203293f, 0.932081f, 0.000000f, -0.219280f, -0.088571f, -0.565845f, 1.000000f);
+		mat4 tracking(0.021107f, -0.983223f, -0.184615f, 0.000000f, 0.964079f, 0.069198f, -0.258319f, 0.000000f, 0.266540f, -0.172366f, 0.948488f, 0.000000f, -0.306646f, -0.050064f, -0.782918f, 1.000000f);
 		tracking = transpose(tracking);
 		trs transform = mat4ToTRS(tracking);
 #else
