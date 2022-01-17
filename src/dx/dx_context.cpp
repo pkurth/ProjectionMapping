@@ -545,6 +545,8 @@ void dx_context::endFrame(dx_command_list* cl)
 
 void dx_context::newFrame(uint64 frameID)
 {
+	CPU_PROFILE_BLOCK("New DX context frame");
+
 	this->frameID = frameID;
 
 	mutex.lock();
@@ -558,22 +560,33 @@ void dx_context::newFrame(uint64 frameID)
 	timestampQueryIndex[bufferedFrameID] = 0;
 #endif
 
-
-	textureGraveyard[bufferedFrameID].clear();
-	bufferGraveyard[bufferedFrameID].clear();
-	objectGraveyard[bufferedFrameID].clear();
-	for (auto allocation : allocationGraveyard[bufferedFrameID])
 	{
-		allocation->Release();
+		CPU_PROFILE_BLOCK("Clear graveyards");
+
+		CPU_PROFILE_STAT("Textures in graveyard", (uint32)textureGraveyard[bufferedFrameID].size());
+		CPU_PROFILE_STAT("Buffers in graveyard", (uint32)bufferGraveyard[bufferedFrameID].size());
+		CPU_PROFILE_STAT("Objects in graveyard", (uint32)objectGraveyard[bufferedFrameID].size());
+		CPU_PROFILE_STAT("Allocations in graveyard", (uint32)allocationGraveyard[bufferedFrameID].size());
+
+		textureGraveyard[bufferedFrameID].clear();
+		bufferGraveyard[bufferedFrameID].clear();
+		objectGraveyard[bufferedFrameID].clear();
+		for (auto allocation : allocationGraveyard[bufferedFrameID])
+		{
+			allocation->Release();
+		}
+		allocationGraveyard[bufferedFrameID].clear();
 	}
-	allocationGraveyard[bufferedFrameID].clear();
 
+	{
+		CPU_PROFILE_BLOCK("Reset upload buffers");
 
-	frameUploadBuffer.reset();
-	frameUploadBuffer.pagePool = &pagePools[bufferedFrameID];
+		frameUploadBuffer.reset();
+		frameUploadBuffer.pagePool = &pagePools[bufferedFrameID];
 
-	pagePools[bufferedFrameID].reset();
-	frameDescriptorAllocator.newFrame(bufferedFrameID);
+		pagePools[bufferedFrameID].reset();
+		frameDescriptorAllocator.newFrame(bufferedFrameID);
+	}
 
 	mutex.unlock();
 }

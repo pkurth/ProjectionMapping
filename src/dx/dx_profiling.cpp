@@ -43,6 +43,8 @@ void dxProfilingFrameEndMarker(dx_command_list* cl)
 
 void dxProfilingResolveTimeStamps(uint64* timestamps)
 {
+	CPU_PROFILE_BLOCK("Resolve GPU profiling");
+
 	uint32 currentFrame = profileFrameWriteIndex;
 
 	if (!pauseRecording)

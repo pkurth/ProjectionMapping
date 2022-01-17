@@ -159,6 +159,8 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 
 void main_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 {
+	CPU_PROFILE_BLOCK("Begin new main renderer frame");
+
 	pointLights = 0;
 	spotLights = 0;
 	numPointLights = 0;
