@@ -1761,6 +1761,9 @@ void visualizeSunShadowCascades(dx_command_list* cl,
 
 void light_culling::allocateIfNecessary(uint32 renderWidth, uint32 renderHeight)
 {
+	uint32 oldNumCullingTilesX = numCullingTilesX;
+	uint32 oldNumCullingTilesY = numCullingTilesY;
+
 	numCullingTilesX = bucketize(renderWidth, LIGHT_CULLING_TILE_SIZE);
 	numCullingTilesY = bucketize(renderHeight, LIGHT_CULLING_TILE_SIZE);
 
@@ -1781,7 +1784,7 @@ void light_culling::allocateIfNecessary(uint32 renderWidth, uint32 renderHeight)
 		SET_NAME(tiledObjectsIndexList->resource, "Tiled index list");
 		SET_NAME(tiledWorldSpaceFrustaBuffer->resource, "Tiled frusta");
 	}
-	else
+	else if (numCullingTilesX != oldNumCullingTilesX || numCullingTilesY != oldNumCullingTilesY)
 	{
 		resizeTexture(tiledCullingGrid, numCullingTilesX, numCullingTilesY);
 		resizeBuffer(tiledObjectsIndexList, numCullingTilesX * numCullingTilesY * MAX_NUM_INDICES_PER_TILE * 2);
