@@ -48,6 +48,7 @@ static dx_pipeline ssrMedianBlurPipeline;
 
 static dx_pipeline specularAmbientPipeline;
 
+static dx_pipeline hierarchicalDepthPipeline;
 static dx_pipeline hierarchicalLinearDepthPipeline;
 
 static dx_pipeline gaussianBlurFloatPipelines[gaussian_blur_kernel_size_count];
@@ -204,6 +205,7 @@ void loadCommonShaders()
 
 	specularAmbientPipeline = createReloadablePipeline("specular_ambient_cs");
 
+	hierarchicalDepthPipeline = createReloadablePipeline("hierarchical_depth_cs");
 	hierarchicalLinearDepthPipeline = createReloadablePipeline("hierarchical_linear_depth_cs");
 
 	gaussianBlurFloatPipelines[gaussian_blur_5x5] = createReloadablePipeline("gaussian_blur_5x5_float_cs");
@@ -1049,6 +1051,28 @@ void lightAndDecalCulling(dx_command_list* cl,
 	}
 }
 
+void depthPyramid(dx_command_list* cl, ref<dx_texture> depthStencilBuffer, ref<dx_texture> outputDepthBuffer)
+{
+	PROFILE_ALL(cl, "Depth pyramid");
+
+	cl->setPipelineState(*hierarchicalDepthPipeline.pipeline);
+	cl->setComputeRootSignature(*hierarchicalDepthPipeline.rootSignature);
+
+	float width = ceilf(depthStencilBuffer->width * 0.5f);
+	float height = ceilf(depthStencilBuffer->height * 0.5f);
+
+	cl->setCompute32BitConstants(HIERARCHICAL_DEPTH_RS_CB, hierarchical_depth_cb{ vec2(1.f / width, 1.f / height), outputDepthBuffer->numMipLevels });
+
+	cl->setDescriptorHeapUAV(HIERARCHICAL_DEPTH_RS_TEXTURES, 0, outputDepthBuffer->uavAt(0));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_DEPTH_RS_TEXTURES, 1, (outputDepthBuffer->numMipLevels >= 2) ? outputDepthBuffer->uavAt(1) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_DEPTH_RS_TEXTURES, 2, (outputDepthBuffer->numMipLevels >= 3) ? outputDepthBuffer->uavAt(2) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_DEPTH_RS_TEXTURES, 3, (outputDepthBuffer->numMipLevels >= 4) ? outputDepthBuffer->uavAt(3) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_DEPTH_RS_TEXTURES, 4, (outputDepthBuffer->numMipLevels >= 5) ? outputDepthBuffer->uavAt(4) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapSRV(HIERARCHICAL_DEPTH_RS_TEXTURES, 5, depthStencilBuffer);
+
+	cl->dispatch(bucketize(outputDepthBuffer->width, POST_PROCESSING_BLOCK_SIZE), bucketize(outputDepthBuffer->height, POST_PROCESSING_BLOCK_SIZE));
+}
+
 void linearDepthPyramid(dx_command_list* cl,
 	ref<dx_texture> depthStencilBuffer,
 	ref<dx_texture> linearDepthBuffer,
@@ -1062,13 +1086,13 @@ void linearDepthPyramid(dx_command_list* cl,
 	float width = ceilf(depthStencilBuffer->width * 0.5f);
 	float height = ceilf(depthStencilBuffer->height * 0.5f);
 
-	cl->setCompute32BitConstants(HIERARCHICAL_LINEAR_DEPTH_RS_CB, hierarchical_linear_depth_cb{ projectionParams, vec2(1.f / width, 1.f / height) });
+	cl->setCompute32BitConstants(HIERARCHICAL_LINEAR_DEPTH_RS_CB, hierarchical_linear_depth_cb{ projectionParams, vec2(1.f / width, 1.f / height), linearDepthBuffer->numMipLevels });
 	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 0, linearDepthBuffer->uavAt(0));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 1, linearDepthBuffer->uavAt(1));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 2, linearDepthBuffer->uavAt(2));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 3, linearDepthBuffer->uavAt(3));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 4, linearDepthBuffer->uavAt(4));
-	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 5, linearDepthBuffer->uavAt(5));
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 1, (linearDepthBuffer->numMipLevels >= 2) ? linearDepthBuffer->uavAt(1) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 2, (linearDepthBuffer->numMipLevels >= 3) ? linearDepthBuffer->uavAt(2) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 3, (linearDepthBuffer->numMipLevels >= 4) ? linearDepthBuffer->uavAt(3) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 4, (linearDepthBuffer->numMipLevels >= 5) ? linearDepthBuffer->uavAt(4) : render_resources::nullTextureUAV);
+	cl->setDescriptorHeapUAV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 5, (linearDepthBuffer->numMipLevels >= 6) ? linearDepthBuffer->uavAt(5) : render_resources::nullTextureUAV);
 	cl->setDescriptorHeapSRV(HIERARCHICAL_LINEAR_DEPTH_RS_TEXTURES, 6, depthStencilBuffer);
 
 	cl->dispatch(bucketize((uint32)width, POST_PROCESSING_BLOCK_SIZE), bucketize((uint32)height, POST_PROCESSING_BLOCK_SIZE));
@@ -1081,7 +1105,7 @@ void gaussianBlur(dx_command_list* cl,
 {
 	PROFILE_ALL(cl, "Gaussian Blur");
 
-	assert(inputOutput->format == temp->format);
+	assert(getNumberOfChannels(inputOutput->format) == getNumberOfChannels(temp->format));
 
 	uint32 numChannels = getNumberOfChannels(inputOutput->format);
 

@@ -131,6 +131,32 @@ struct morphology_cb
 
 
 // ----------------------------------------
+// HIERARCHICAL DEPTH
+// ----------------------------------------
+
+struct hierarchical_depth_cb
+{
+    vec2 invDimensions;
+    uint32 numMipsToWrite;
+};
+
+#define HIERARCHICAL_DEPTH_RS \
+    "RootFlags(0), " \
+    "RootConstants(b0, num32BitConstants = 3), " \
+    "DescriptorTable( UAV(u0, numDescriptors = 5), SRV(t0, numDescriptors = 1) )," \
+    "StaticSampler(s0," \
+        "addressU = TEXTURE_ADDRESS_CLAMP," \
+        "addressV = TEXTURE_ADDRESS_CLAMP," \
+        "addressW = TEXTURE_ADDRESS_CLAMP," \
+        "filter = FILTER_MIN_MAG_MIP_LINEAR)"
+
+
+#define HIERARCHICAL_DEPTH_RS_CB           0
+#define HIERARCHICAL_DEPTH_RS_TEXTURES     1
+
+
+
+// ----------------------------------------
 // HIERARCHICAL LINEAR DEPTH
 // ----------------------------------------
 
@@ -138,6 +164,7 @@ struct hierarchical_linear_depth_cb
 {
     vec4 projectionParams;
     vec2 invDimensions;
+    uint32 numMipsToWrite;
 };
 
 #define HIERARCHICAL_LINEAR_DEPTH_RS \

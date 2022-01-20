@@ -187,6 +187,10 @@ void lightAndDecalCulling(dx_command_list* cl,
 	uint32 numPointLights, uint32 numSpotLights, uint32 numDecals,
 	dx_dynamic_constant_buffer cameraCBV);
 
+void depthPyramid(dx_command_list* cl,
+	ref<dx_texture> depthStencilBuffer,			// NON_PIXEL_SHADER_RESOURCE
+	ref<dx_texture> outputDepthBuffer);			// UNORDERED_ACCESS
+
 void linearDepthPyramid(dx_command_list* cl,
 	ref<dx_texture> depthStencilBuffer,			// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> linearDepthBuffer,			// UNORDERED_ACCESS
