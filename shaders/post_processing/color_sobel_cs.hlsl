@@ -14,19 +14,19 @@ void main(cs_input IN)
 
 	const float3 lum = float3(0.21f, 0.71f, 0.08f);
 
-	float tl = dot(lum, input[xy + int2(-1, -1)].rgb);
-	float t  = dot(lum, input[xy + int2(0, -1)].rgb);
-	float tr = dot(lum, input[xy + int2(1, -1)].rgb);
-	float l  = dot(lum, input[xy + int2(-1, 0)].rgb);
-	float r  = dot(lum, input[xy + int2(1, 0)].rgb);
-	float bl = dot(lum, input[xy + int2(-1, 1)].rgb);
-	float b  = dot(lum, input[xy + int2(0, 1)].rgb);
-	float br = dot(lum, input[xy + int2(1, 1)].rgb);
+	float3 tl = input[xy + int2(-1, -1)].rgb;
+	float3 t  = input[xy + int2(0, -1)].rgb;
+	float3 tr = input[xy + int2(1, -1)].rgb;
+	float3 l  = input[xy + int2(-1, 0)].rgb;
+	float3 r  = input[xy + int2(1, 0)].rgb;
+	float3 bl = input[xy + int2(-1, 1)].rgb;
+	float3 b  = input[xy + int2(0, 1)].rgb;
+	float3 br = input[xy + int2(1, 1)].rgb;
 
-	float horizontal = abs((tl + 2.f * t + tr) - (bl + 2.f * b + br));
-	float vertical   = abs((tl + 2.f * l + bl) - (tr + 2.f * r + br));
+	float3 horizontal = abs((tl + 2.f * t + tr) - (bl + 2.f * b + br));
+	float3 vertical   = abs((tl + 2.f * l + bl) - (tr + 2.f * r + br));
 
-	float edge = (horizontal > cb.threshold || vertical > cb.threshold) ? 1.f : 0.f;
+	float edge = any(horizontal > cb.threshold || vertical > cb.threshold) ? 1.f : 0.f;
 	output[xy] = edge;
 }
 
