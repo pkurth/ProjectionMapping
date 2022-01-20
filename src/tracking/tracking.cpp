@@ -856,6 +856,7 @@ tracker_ui_interaction depth_tracker::drawSettings()
 				ImGui::SetClipboardText(buffer);
 			}
 
+			ImGui::PropertyCheckbox("Visualize depth", showDepth);
 			ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
 			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
@@ -872,7 +873,6 @@ tracker_ui_interaction depth_tracker::drawSettings()
 			}
 			ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
 
-			ImGui::PropertyCheckbox("Visualize depth", showDepth);
 
 			ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
 			ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);

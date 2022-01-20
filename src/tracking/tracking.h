@@ -75,7 +75,7 @@ private:
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);
 
-	bool showDepth = true;
+	bool showDepth = false;
 
 	float smoothing = 0.7f; // For simple smoothing mode. Higher is smoother.
 
