@@ -79,9 +79,14 @@ void projector_manager::updateAndRender()
 					ImGui::Image(tex);
 					if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Right))
 					{
+						ImVec2 mousePos = ImGui::GetIO().MousePos;
+						ImGui::GetIO().MousePos.x -= tex->width / 2;
+
 						ImGui::BeginTooltip();
 						ImGui::Image(tex, tex->width, tex->height);
 						ImGui::EndTooltip();
+
+						ImGui::GetIO().MousePos = mousePos;
 					}
 					ImGui::PopID();
 				};

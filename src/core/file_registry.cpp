@@ -21,7 +21,16 @@ static path_to_handle loadRegistryFromDisk()
 	path_to_handle loadedRegistry;
 
 	std::ifstream stream(registryPath);
-	YAML::Node n = YAML::Load(stream);
+	YAML::Node n;
+
+	try
+	{
+		n = YAML::Load(stream);
+	}
+	catch (std::exception&)
+	{
+		return loadedRegistry;
+	}
 
 	for (auto entryNode : n)
 	{

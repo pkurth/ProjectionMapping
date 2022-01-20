@@ -17,7 +17,10 @@ SamplerState depthSampler					: register(s1);
 
 static float k(float colorMask)
 {
-	return lerp(0.f, 10.f, colorMask);
+	//return 4.f;
+
+	float t = smoothstep(0.f, 1.f, colorMask);
+	return lerp(1.f, 8.f, colorMask);
 }
 
 [numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
@@ -41,7 +44,7 @@ void main(cs_input IN)
 	}
 
 	float2 invDimensions = projectors[index].invScreenDims;
-	float2 uv = (float2(texCoord)+float2(0.5f, 0.5f)) * invDimensions;
+	float2 uv = (float2(texCoord) + float2(0.5f, 0.5f)) * invDimensions;
 
 	float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 
@@ -83,7 +86,9 @@ void main(cs_input IN)
 	float colorMask = USE_COLOR_MASK ? c.w : 0.f;
 
 	float E = pow(atten, k(colorMask)) * depthMask;
-	float weight = E / max(E + Esum, 0.0001f);
+	float weight = E / (E + Esum);
 
 	outIntensities[index][texCoord] = clamp(weight / atten, 0.f, maxCompensation);
+	//outIntensities[index][texCoord] = weight / atten;
+	//outIntensities[index][texCoord] = E;
 }

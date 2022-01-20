@@ -72,38 +72,58 @@ void main(cs_input IN)
 	outputMip0[dispatchThreadID * 2 + uint2(0, 1)] = lineardepths.z;
 	outputMip0[dispatchThreadID * 2 + uint2(1, 1)] = lineardepths.w;
 
-	maxdepth = max(lineardepths.x, max(lineardepths.y, max(lineardepths.z, lineardepths.w)));
-	tile[groupThreadID.x][groupThreadID.y] = maxdepth;
-	outputMip1[dispatchThreadID] = maxdepth;
-	GroupMemoryBarrierWithGroupSync();
 
-	if (groupThreadID.x % 2 == 0 && groupThreadID.y % 2 == 0)
+	if (cb.numMipsToWrite >= 2)
 	{
-		maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 1][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 1], tile[groupThreadID.x + 1][groupThreadID.y + 1])));
+		maxdepth = max(lineardepths.x, max(lineardepths.y, max(lineardepths.z, lineardepths.w)));
 		tile[groupThreadID.x][groupThreadID.y] = maxdepth;
-		outputMip2[dispatchThreadID / 2] = maxdepth;
-	}
-	GroupMemoryBarrierWithGroupSync();
+		outputMip1[dispatchThreadID] = maxdepth;
 
-	if (groupThreadID.x % 4 == 0 && groupThreadID.y % 4 == 0)
-	{
-		maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 2][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 2], tile[groupThreadID.x + 2][groupThreadID.y + 2])));
-		tile[groupThreadID.x][groupThreadID.y] = maxdepth;
-		outputMip3[dispatchThreadID / 4] = maxdepth;
-	}
-	GroupMemoryBarrierWithGroupSync();
+		if (cb.numMipsToWrite >= 3)
+		{
+			GroupMemoryBarrierWithGroupSync();
 
-	if (groupThreadID.x % 8 == 0 && groupThreadID.y % 8 == 0)
-	{
-		maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 4][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 4], tile[groupThreadID.x + 4][groupThreadID.y + 4])));
-		tile[groupThreadID.x][groupThreadID.y] = maxdepth;
-		outputMip4[dispatchThreadID / 8] = maxdepth;
-	}
-	GroupMemoryBarrierWithGroupSync();
+			if (groupThreadID.x % 2 == 0 && groupThreadID.y % 2 == 0)
+			{
+				maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 1][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 1], tile[groupThreadID.x + 1][groupThreadID.y + 1])));
+				tile[groupThreadID.x][groupThreadID.y] = maxdepth;
+				outputMip2[dispatchThreadID / 2] = maxdepth;
+			}
 
-	if (groupThreadID.x % 16 == 0 && groupThreadID.y % 16 == 0)
-	{
-		maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 8][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 8], tile[groupThreadID.x + 8][groupThreadID.y + 8])));
-		outputMip5[dispatchThreadID / 16] = maxdepth;
+			if (cb.numMipsToWrite >= 2)
+			{
+				GroupMemoryBarrierWithGroupSync();
+
+				if (groupThreadID.x % 4 == 0 && groupThreadID.y % 4 == 0)
+				{
+					maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 2][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 2], tile[groupThreadID.x + 2][groupThreadID.y + 2])));
+					tile[groupThreadID.x][groupThreadID.y] = maxdepth;
+					outputMip3[dispatchThreadID / 4] = maxdepth;
+				}
+
+				if (cb.numMipsToWrite >= 2)
+				{
+					GroupMemoryBarrierWithGroupSync();
+
+					if (groupThreadID.x % 8 == 0 && groupThreadID.y % 8 == 0)
+					{
+						maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 4][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 4], tile[groupThreadID.x + 4][groupThreadID.y + 4])));
+						tile[groupThreadID.x][groupThreadID.y] = maxdepth;
+						outputMip4[dispatchThreadID / 8] = maxdepth;
+					}
+
+					if (cb.numMipsToWrite >= 2)
+					{
+						GroupMemoryBarrierWithGroupSync();
+
+						if (groupThreadID.x % 16 == 0 && groupThreadID.y % 16 == 0)
+						{
+							maxdepth = max(tile[groupThreadID.x][groupThreadID.y], max(tile[groupThreadID.x + 8][groupThreadID.y], max(tile[groupThreadID.x][groupThreadID.y + 8], tile[groupThreadID.x + 8][groupThreadID.y + 8])));
+							outputMip5[dispatchThreadID / 16] = maxdepth;
+						}
+					}
+				}
+			}
+		}
 	}
 }

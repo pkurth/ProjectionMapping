@@ -27,6 +27,8 @@ void main(cs_input IN)
 	float3 vertical   = abs((tl + 2.f * l + bl) - (tr + 2.f * r + br));
 
 	float edge = any(horizontal > cb.threshold || vertical > cb.threshold) ? 1.f : 0.f;
+	//float edge = (length(horizontal) + length(vertical)) / 10.f;
+
 	output[xy] = edge;
 }
 

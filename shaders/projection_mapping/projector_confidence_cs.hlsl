@@ -16,6 +16,8 @@ Texture2D<float> colorMasks[32]				: register(t0, space6);
 
 RWTexture2D<float4> output[32]				: register(u0, space0);
 
+SamplerState clampSampler					: register(s0);
+
 
 [numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
 [RootSignature(PROJECTOR_CONFIDENCE_RS)]
@@ -42,8 +44,8 @@ void main(cs_input IN)
 	const float3 color = renderResults[index][texCoord].rgb;
 	const float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	const float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));
-	float depthMask = 1.f - depthMasks[index][texCoord];
-	float colorMask = colorMasks[index][texCoord];
+	float depthMask = 1.f - depthMasks[index].SampleLevel(clampSampler, uv, 0);
+	float colorMask = 1.f - colorMasks[index].SampleLevel(clampSampler, uv, 0);
 	float3 V = projectors[index].position.xyz - P;
 	const float distance = length(V);
 	V *= rcp(distance);
@@ -53,7 +55,7 @@ void main(cs_input IN)
 	float distanceFromEdge = min(distanceFromEdge2.x, distanceFromEdge2.y);
 
 	// TODO: This shouldn't probably be a hard factor. Apply this to the color mask later.
-	const float hardEdgeWidth = 5.f;
+	const float hardEdgeWidth = 0.f;
 	const float edgeTransition = 100.f;
 	float maskFactor = saturate((distanceFromEdge - hardEdgeWidth) / edgeTransition);
 	depthMask *= maskFactor;
@@ -76,5 +78,5 @@ void main(cs_input IN)
 	float maxComponent = max(color.r, max(color.g, color.b));
 	float maxCompensation = 1.f / maxComponent; // Max value for compensation to avoid clipping.
 
-	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, depthMask, colorMask);
+	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, depthMask, 1.f - colorMask);
 }

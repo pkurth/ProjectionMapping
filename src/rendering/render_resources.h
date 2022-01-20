@@ -34,6 +34,9 @@ struct render_resources
 	static dx_cpu_descriptor_handle nullTextureSRV;
 	static dx_cpu_descriptor_handle nullBufferSRV;
 
+	static dx_cpu_descriptor_handle nullTextureUAV;
+	static dx_cpu_descriptor_handle nullBufferUAV;
+
 	static dx_rtv_descriptor_handle nullScreenVelocitiesRTV;
 	static dx_rtv_descriptor_handle nullObjectIDsRTV;
 
