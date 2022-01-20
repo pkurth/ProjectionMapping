@@ -1,27 +1,22 @@
 #include "cs.hlsli"
 #include "projector_rs.hlsli"
+
 #include "camera.hlsli"
 
-ConstantBuffer<projector_intensity_cb> cb	: register(b0, space0);
+ConstantBuffer<projector_best_mask_cb> cb	: register(b0, space0);
 StructuredBuffer<projector_cb> projectors	: register(t0, space0);
 
 Texture2D<float4> confidenceTextures[32]	: register(t0, space1);
 Texture2D<float> depthTextures[32]			: register(t0, space2);
-Texture2D<float> bestMaskTextures[32]		: register(t0, space3);
 
-RWTexture2D<float> outIntensities[32]		: register(u0, space0);
+RWTexture2D<float> outBestMasks[32]			: register(u0, space0);
 
 SamplerState borderSampler					: register(s0);
 SamplerState depthSampler					: register(s1);
 
 
-static float k(float colorMask)
-{
-	return lerp(0.f, 10.f, colorMask);
-}
-
 [numthreads(PROJECTOR_BLOCK_SIZE, PROJECTOR_BLOCK_SIZE, 1)]
-[RootSignature(PROJECTOR_INTENSITIES_RS)]
+[RootSignature(PROJECTOR_BEST_MASK_RS)]
 void main(cs_input IN)
 {
 	uint index = cb.index;
@@ -36,7 +31,7 @@ void main(cs_input IN)
 	float depth = depthTextures[index][texCoord];
 	if (depth == 1.f)
 	{
-		outIntensities[index][texCoord] = 0.f;
+		outBestMasks[index][texCoord] = 0.f;
 		return;
 	}
 
@@ -46,10 +41,9 @@ void main(cs_input IN)
 	float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 
 
-	float Esum = 0.f;
-
-#define USE_DEPTH_MASK 1
-#define USE_COLOR_MASK 1
+	float bestAtten = 0.f;
+	int bestAttenProjectorIndex = -1;
+	const float attenThreshold = 0.01f;
 
 	uint numProjectors = cb.numProjectors;
 	for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
@@ -68,22 +62,25 @@ void main(cs_input IN)
 				float4 c = confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0);
 				float atten = c.x;
 
-				float depthMask = USE_DEPTH_MASK ? c.z : 1.f;
-				float colorMask = USE_COLOR_MASK ? c.w : 0.f;
-
-				Esum += pow(atten, k(colorMask)) * depthMask;
+				if (atten > bestAtten - attenThreshold)
+				{
+					bestAtten = atten;
+					bestAttenProjectorIndex = projIndex;
+				}
 			}
 		}
 	}
 
 	float4 c = confidenceTextures[index][texCoord];
 	float atten = c.x;
-	float maxCompensation = c.y;
-	float depthMask = USE_DEPTH_MASK ? c.z : 1.f;
-	float colorMask = USE_COLOR_MASK ? c.w : 0.f;
 
-	float E = pow(atten, k(colorMask)) * depthMask;
-	float weight = E / max(E + Esum, 0.0001f);
+	float result = 0.f;
+	if ((atten > bestAtten + attenThreshold)
+		|| ((atten > bestAtten - attenThreshold) && (index > bestAttenProjectorIndex)))
+	{
+		result = 1.f;
+	}
 
-	outIntensities[index][texCoord] = clamp(weight / atten, 0.f, maxCompensation);
+	outBestMasks[index][texCoord] = result;
+
 }

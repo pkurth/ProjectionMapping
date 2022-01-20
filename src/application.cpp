@@ -151,7 +151,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		.addComponent<position_rotation_component>(vec3(-0.17f, 0.1f, 0.43f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
 		.addComponent<projector_component>();*/
 
-	for (uint32 i = 0; i < 9; ++i)
+	//for (uint32 i = 0; i < 9; ++i)
 	{
 		vec3 pos(0.060838f, -0.335435f, 0.456867f);
 		quat rotation = mat3ToQuaternion(transpose(mat3(-0.071526f, -0.967211f, -0.243693f, 0.958566f, 0.000887f, -0.284868f, 0.275743f, -0.253971f, 0.927073f)));

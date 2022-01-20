@@ -52,6 +52,9 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	confidenceTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
 	SET_NAME(confidenceTexture->resource, "Confidence");
 
+	bestMaskTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(bestMaskTexture->resource, "Best mask");
+
 	depthDiscontinuitiesTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(depthDiscontinuitiesTexture->resource, "Depth discontinuities");
 
@@ -80,6 +83,7 @@ void projector_renderer::shutdown()
 
 	confidenceTexture = 0;
 
+	bestMaskTexture = 0;
 	depthDiscontinuitiesTexture = 0;
 	colorDiscontinuitiesTexture = 0;
 	dilateTempTexture = 0;
@@ -126,6 +130,7 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 
 		resizeTexture(confidenceTexture, renderWidth, renderHeight);
 
+		resizeTexture(bestMaskTexture, renderWidth, renderHeight);
 		resizeTexture(depthDiscontinuitiesTexture, renderWidth, renderHeight);
 		resizeTexture(colorDiscontinuitiesTexture, renderWidth, renderHeight);
 		resizeTexture(dilateTempTexture, renderWidth, renderHeight);

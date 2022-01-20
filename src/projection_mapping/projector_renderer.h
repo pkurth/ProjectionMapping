@@ -74,6 +74,7 @@ private:
 
 	ref<dx_texture> confidenceTexture;
 
+	ref<dx_texture> bestMaskTexture;
 	ref<dx_texture> depthDiscontinuitiesTexture;
 	ref<dx_texture> colorDiscontinuitiesTexture;
 

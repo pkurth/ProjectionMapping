@@ -63,10 +63,11 @@ void projector_manager::updateAndRender()
 	{
 		if (ImGui::Begin("Projector details", &detailWindowOpen))
 		{
-			if (ImGui::BeginTable("##Table", 5))
+			if (ImGui::BeginTable("##Table", 6))
 			{
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
+				ImGui::TableSetupColumn("Best mask");
 				ImGui::TableSetupColumn("Depth discontinuities");
 				ImGui::TableSetupColumn("Color discontinuities");
 				ImGui::TableSetupColumn("Solver intensities");
@@ -95,6 +96,9 @@ void projector_manager::updateAndRender()
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.frameResult);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.bestMaskTexture);
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.depthDiscontinuitiesTexture);
@@ -150,8 +154,7 @@ void projector_manager::updateAndRender()
 	}
 
 
-	solver.prepareForFrame(scene->raw<projector_component>(), scene->numberOfComponentsOfType<projector_component>());
-	solver.solve();
+	solver.solve(scene->raw<projector_component>(), scene->numberOfComponentsOfType<projector_component>());
 
 
 

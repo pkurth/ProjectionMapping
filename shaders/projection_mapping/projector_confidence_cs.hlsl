@@ -43,6 +43,7 @@ void main(cs_input IN)
 	const float3 P = restoreWorldSpacePosition(projectors[index].invViewProj, uv, depth);
 	const float3 N = normalize(unpackNormal(worldNormals[index][texCoord]));
 	float depthMask = 1.f - depthMasks[index][texCoord];
+	float colorMask = colorMasks[index][texCoord];
 	float3 V = projectors[index].position.xyz - P;
 	const float distance = length(V);
 	V *= rcp(distance);
@@ -75,5 +76,5 @@ void main(cs_input IN)
 	float maxComponent = max(color.r, max(color.g, color.b));
 	float maxCompensation = 1.f / maxComponent; // Max value for compensation to avoid clipping.
 
-	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, depthMask, 0.f);
+	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, depthMask, colorMask);
 }

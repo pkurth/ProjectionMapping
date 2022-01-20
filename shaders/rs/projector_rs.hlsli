@@ -135,6 +135,7 @@ struct projector_intensity_cb
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "StaticSampler(s0," \
         "addressU = TEXTURE_ADDRESS_BORDER," \
@@ -153,7 +154,54 @@ struct projector_intensity_cb
 #define PROJECTOR_INTENSITIES_RS_PROJECTORS         1
 #define PROJECTOR_INTENSITIES_RS_CONFIDENCES        2
 #define PROJECTOR_INTENSITIES_RS_DEPTH_TEXTURES     3
-#define PROJECTOR_INTENSITIES_RS_OUT_INTENSITIES    4
+#define PROJECTOR_INTENSITIES_RS_BEST_MASKS         4
+#define PROJECTOR_INTENSITIES_RS_OUT_INTENSITIES    5
+
+
+
+struct projector_best_mask_cb
+{
+    uint32 index;
+    uint32 numProjectors;
+};
+
+#define PROJECTOR_BEST_MASK_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=2, b0),"  \
+    "SRV(t0, space=0), " \
+    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "StaticSampler(s0," \
+        "addressU = TEXTURE_ADDRESS_BORDER," \
+        "addressV = TEXTURE_ADDRESS_BORDER," \
+        "addressW = TEXTURE_ADDRESS_BORDER," \
+        "filter = FILTER_MIN_MAG_MIP_LINEAR," \
+        "borderColor = STATIC_BORDER_COLOR_OPAQUE_BLACK), " \
+    "StaticSampler(s1," \
+        "addressU = TEXTURE_ADDRESS_BORDER," \
+        "addressV = TEXTURE_ADDRESS_BORDER," \
+        "addressW = TEXTURE_ADDRESS_BORDER," \
+        "filter = FILTER_MIN_MAG_MIP_POINT," \
+        "borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
+
+#define PROJECTOR_BEST_MASK_RS_CB                   0
+#define PROJECTOR_BEST_MASK_RS_PROJECTORS           1
+#define PROJECTOR_BEST_MASK_RS_CONFIDENCES          2
+#define PROJECTOR_BEST_MASK_RS_DEPTH_TEXTURES       3
+#define PROJECTOR_BEST_MASK_RS_OUT_MASK             4
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
