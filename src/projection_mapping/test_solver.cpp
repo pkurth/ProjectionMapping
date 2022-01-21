@@ -15,7 +15,7 @@ void testProjectorSolver()
 	projector_data projectors[16];
 	uint32 numProjectors = 0;
 
-	float targetIntensity = 0.8f;
+	float targetIntensity = 0.f;
 
 	projectors[numProjectors++] = { 0.2f };
 	projectors[numProjectors++] = { 0.1f };
@@ -24,6 +24,8 @@ void testProjectorSolver()
 
 	uint32 totalNumProjectors = numProjectors; // For simulation below.
 
+
+	targetIntensity = max(targetIntensity, 0.0001f);
 
 	float ESum = 0.f;
 
@@ -42,7 +44,8 @@ void testProjectorSolver()
 
 	const uint32 numIterations = 3;
 
-	for (uint32 iteration = 0; iteration < numIterations && numProjectors > 0; ++iteration)
+	uint32 iteration = 0;
+	for (; iteration < numIterations && numProjectors > 0; ++iteration)
 	{
 		float nextESum = ESum;
 		float resultingIntensity = 0.f;
@@ -89,7 +92,7 @@ void testProjectorSolver()
 
 		std::cout << "Total intensity after iteration " << iteration << ": " << totalResultingIntensity << ". " << numProjectors << " projectors remain to distribute remaining intensity.\n";
 
-		if (resultingIntensity >= remainingIntensity)
+		if (resultingIntensity >= remainingIntensity - 0.001f)
 		{
 			break;
 		}
@@ -104,7 +107,7 @@ void testProjectorSolver()
 	}
 
 
-
+	std::cout << "Iterations: " << iteration << '\n';
 
 
 

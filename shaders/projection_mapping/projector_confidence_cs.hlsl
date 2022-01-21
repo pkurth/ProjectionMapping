@@ -76,7 +76,6 @@ void main(cs_input IN)
 	float possibleWhiteIntensity = attenuation / cb.desiredWhiteValue;
 
 	float maxComponent = max(color.r, max(color.g, color.b));
-	float maxCompensation = 1.f / maxComponent; // Max value for compensation to avoid clipping.
 
-	output[index][texCoord] = float4(possibleWhiteIntensity, maxCompensation, depthMask, 1.f - colorMask);
+	output[index][texCoord] = float4(possibleWhiteIntensity, maxComponent, depthMask, 1.f - colorMask);
 }
