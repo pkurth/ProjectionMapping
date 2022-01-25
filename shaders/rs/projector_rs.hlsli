@@ -65,11 +65,12 @@ struct projector_attenuation_cb
 struct projector_mask_cb
 {
     uint32 index;
+    float colorMaskStrength;
 };
 
 #define PROJECTOR_MASK_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=1, b0),"  \
+    "RootConstants(num32BitConstants=2, b0),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \

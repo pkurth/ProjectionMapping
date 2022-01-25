@@ -42,6 +42,10 @@ void projector_manager::updateAndRender()
 			ImGui::PropertyDrag("Color discontinuity smooth radius", solver.colorDiscontinuitySmoothRadius);
 
 			ImGui::PropertySeparator();
+			
+			ImGui::PropertySlider("Color mask strength", solver.colorMaskStrength);
+			
+			ImGui::PropertySeparator();
 
 			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
 

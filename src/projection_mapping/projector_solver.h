@@ -23,6 +23,8 @@ struct projector_solver
 	uint32 colorDiscontinuityDilateRadius = 8;
 	uint32 colorDiscontinuitySmoothRadius = 8;
 
+	float colorMaskStrength = 0.7f;
+
 	void simulateProjectors(opaque_render_pass* opaqueRenderPass,
 		const mat4& transform,
 		const dx_vertex_buffer_group_view& vertexBuffer,

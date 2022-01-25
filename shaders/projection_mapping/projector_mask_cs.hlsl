@@ -39,7 +39,7 @@ void main(cs_input IN)
 
 	
 	float depthMask = 1.f - depthMasks[index].SampleLevel(clampSampler, uv, 0); // 0 at edges, 1 everywhere else.
-	float colorMask = 1.f - colorMasks[index].SampleLevel(clampSampler, uv, 0); // 0 at edges, 1 everywhere else.
+	float colorMask = colorMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
 	float bestMask = bestMasks[index].SampleLevel(clampSampler, uv, 0); // 1 where best, 0 everywhere else.
 
 	float2 distanceFromEdge2 = min(texCoord, dimensions - texCoord);
@@ -47,13 +47,13 @@ void main(cs_input IN)
 
 	const float edgeWidth = 0.f;
 	const float edgeTransition = 100.f;
-	//float maskFactor = saturate((distanceFromEdge - edgeWidth) / edgeTransition);
 	float maskFactor = smoothstep(edgeWidth, edgeWidth + edgeTransition, distanceFromEdge);
-	float softMask = maskFactor;
+	float edgeMask = maskFactor;
 
 
+	colorMask = 1.f - lerp(colorMask * cb.colorMaskStrength, 0.f, bestMask);
 
+	float softMask = min(colorMask, edgeMask);
 
 	output[index][texCoord] = float2(depthMask, softMask);
-	//output[index][texCoord] = float2(0.f, softMask);
 }

@@ -194,7 +194,7 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 				const ref<dx_texture>& bestMaskTexture = projectors[i].renderer.bestMaskTexture;
 				const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
 
-				gaussianBlur(cl, bestMaskTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
+				gaussianBlur(cl, bestMaskTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13, 3);
 			}
 		}
 
@@ -302,6 +302,7 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 
 				projector_mask_cb cb;
 				cb.index = i;
+				cb.colorMaskStrength = colorMaskStrength;
 
 				cl->setCompute32BitConstants(PROJECTOR_MASK_RS_CB, cb);
 
