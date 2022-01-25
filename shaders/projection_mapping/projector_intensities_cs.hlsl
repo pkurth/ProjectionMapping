@@ -19,7 +19,6 @@ struct projector_data
 {
 	float attenuation;
 	float E;
-	float solverIntensity;
 	float partialSum;
 };
 
@@ -29,9 +28,8 @@ static projector_data fillOutData(float4 c)
 	float depthMask = c.z;
 	float colorMask = c.w;
 
-	float k = 4.f;
-	//float k = lerp(1.f, 8.f, colorMask);
-	projector_data result = { attenuation, pow(attenuation, k) * depthMask, 0.f, 0.f };
+	const float k = 4.f;
+	projector_data result = { attenuation, pow(attenuation, k) * depthMask, 0.f };
 	return result;
 }
 

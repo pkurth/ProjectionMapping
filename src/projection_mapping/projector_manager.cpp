@@ -61,7 +61,7 @@ void projector_manager::updateAndRender()
 
 	if (detailWindowOpen)
 	{
-		if (ImGui::Begin("Projector details", &detailWindowOpen))
+		if (ImGui::Begin("Projector details", &detailWindowOpen, ImGuiWindowFlags_NoDocking))
 		{
 			if (ImGui::BeginTable("##Table", 6))
 			{
