@@ -299,62 +299,6 @@ void projector_renderer::endFrame()
 			.transition(worldNormalsTexture, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
 			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
 			.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-
-
-
-
-		// Downsample depth and detect edges.
-		{
-			barrier_batcher(cl)
-				.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-			depthPyramid(cl, depthStencilBuffer, halfResolutionDepthBuffer);
-
-			barrier_batcher(cl)
-				//.uav(halfResolutionDepthBuffer)
-				.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-				.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-
-			depthSobel(cl, halfResolutionDepthBuffer, depthDiscontinuitiesTexture, projectorCamera.projectionParams, depthDiscontinuityThreshold);
-
-			barrier_batcher(cl)
-				//.uav(depthDiscontinuitiesTexture)
-				.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-				.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-			dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuityDilateRadius);
-			dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuitySmoothRadius);
-			gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
-
-			barrier_batcher(cl)
-				//.uav(depthDiscontinuitiesTexture)
-				.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		}
-
-		// Downsample color and detect edges.
-		{
-			blit(cl, ldrPostProcessingTexture, halfResolutionColorTexture);
-
-			barrier_batcher(cl)
-				//.uav(halfResolutionColorTexture)
-				.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-			colorSobel(cl, halfResolutionColorTexture, colorDiscontinuitiesTexture, colorDiscontinuityThreshold);
-
-			barrier_batcher(cl)
-				//.uav(colorDiscontinuitiesTexture)
-				.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-				.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-			dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuityDilateRadius);
-			dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuitySmoothRadius);
-			gaussianBlur(cl, colorDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
-
-			barrier_batcher(cl)
-				//.uav(colorDiscontinuitiesTexture)
-				.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		}
 	}
 
 	dxContext.executeCommandList(cl);

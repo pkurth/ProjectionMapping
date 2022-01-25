@@ -31,15 +31,15 @@ void projector_manager::updateAndRender()
 
 			ImGui::PropertySeparator();
 
-			ImGui::PropertySlider("Depth discontinuity threshold", projector_renderer::depthDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertyDrag("Depth discontinuity dilate radius", projector_renderer::depthDiscontinuityDilateRadius);
-			ImGui::PropertyDrag("Depth discontinuity smooth radius", projector_renderer::depthDiscontinuitySmoothRadius);
+			ImGui::PropertySlider("Depth discontinuity threshold", solver.depthDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertyDrag("Depth discontinuity dilate radius", solver.depthDiscontinuityDilateRadius);
+			ImGui::PropertyDrag("Depth discontinuity smooth radius", solver.depthDiscontinuitySmoothRadius);
 
 			ImGui::PropertySeparator();
 
-			ImGui::PropertySlider("Color discontinuity threshold", projector_renderer::colorDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertyDrag("Color discontinuity dilate radius", projector_renderer::colorDiscontinuityDilateRadius);
-			ImGui::PropertyDrag("Color discontinuity smooth radius", projector_renderer::colorDiscontinuitySmoothRadius);
+			ImGui::PropertySlider("Color discontinuity threshold", solver.colorDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertyDrag("Color discontinuity dilate radius", solver.colorDiscontinuityDilateRadius);
+			ImGui::PropertyDrag("Color discontinuity smooth radius", solver.colorDiscontinuitySmoothRadius);
 
 			ImGui::PropertySeparator();
 

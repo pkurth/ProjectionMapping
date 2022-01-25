@@ -107,8 +107,6 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 
 	dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
-	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
-
 #if 0
 
 	for (uint32 iter = 0; iter < numIterationsPerFrame; ++iter)
@@ -183,6 +181,95 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 
 	{
 		PROFILE_ALL(cl, "Projector solver");
+
+
+		{
+			PROFILE_ALL(cl, "Prepare masks");
+
+			{
+				PROFILE_ALL(cl, "Depth masks");
+
+				for (uint32 i = 0; i < numProjectors; ++i)
+				{
+					const ref<dx_texture>& depthStencilBuffer = projectors[i].renderer.depthStencilBuffer;
+					const ref<dx_texture>& halfResolutionDepthBuffer = projectors[i].renderer.halfResolutionDepthBuffer;
+					const ref<dx_texture>& depthDiscontinuitiesTexture = projectors[i].renderer.depthDiscontinuitiesTexture;
+					const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
+					vec4 projectionParams = projectors[i].renderer.projectorCamera.projectionParams;
+
+					barrier_batcher(cl)
+						.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+					depthPyramid(cl, depthStencilBuffer, halfResolutionDepthBuffer);
+
+					barrier_batcher(cl)
+						//.uav(halfResolutionDepthBuffer)
+						.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+						.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+					depthSobel(cl, halfResolutionDepthBuffer, depthDiscontinuitiesTexture, projectionParams, depthDiscontinuityThreshold);
+
+					barrier_batcher(cl)
+						//.uav(depthDiscontinuitiesTexture)
+						.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+						.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+					dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuityDilateRadius);
+					dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuitySmoothRadius);
+					gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
+
+					barrier_batcher(cl)
+						//.uav(depthDiscontinuitiesTexture)
+						.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				}
+			}
+
+			{
+				PROFILE_ALL(cl, "Color masks");
+
+				for (uint32 i = 0; i < numProjectors; ++i)
+				{
+					const ref<dx_texture>& ldrPostProcessingTexture = projectors[i].renderer.ldrPostProcessingTexture;
+					const ref<dx_texture>& halfResolutionColorTexture = projectors[i].renderer.halfResolutionColorTexture;
+					const ref<dx_texture>& colorDiscontinuitiesTexture = projectors[i].renderer.colorDiscontinuitiesTexture;
+					const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
+
+					blit(cl, ldrPostProcessingTexture, halfResolutionColorTexture);
+
+					barrier_batcher(cl)
+						//.uav(halfResolutionColorTexture)
+						.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+					colorSobel(cl, halfResolutionColorTexture, colorDiscontinuitiesTexture, colorDiscontinuityThreshold);
+
+					barrier_batcher(cl)
+						//.uav(colorDiscontinuitiesTexture)
+						.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+						.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+					dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuityDilateRadius);
+					dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuitySmoothRadius);
+					gaussianBlur(cl, colorDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
+
+					barrier_batcher(cl)
+						//.uav(colorDiscontinuitiesTexture)
+						.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				}
+			}
+
+		}
+
+
+
+
+
+
+
+
+		cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
+
+
+
 
 		{
 			barrier_batcher batch(cl);

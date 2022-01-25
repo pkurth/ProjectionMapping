@@ -19,6 +19,14 @@ struct projector_solver
 	float depthDiscontinuityMaskStrength = 1.f;
 	bool simulateCalibrationError = false;
 
+	float depthDiscontinuityThreshold = 0.05f;
+	uint32 depthDiscontinuityDilateRadius = 2;
+	uint32 depthDiscontinuitySmoothRadius = 8;
+
+	float colorDiscontinuityThreshold = 0.4f;
+	uint32 colorDiscontinuityDilateRadius = 8;
+	uint32 colorDiscontinuitySmoothRadius = 8;
+
 	void simulateProjectors(opaque_render_pass* opaqueRenderPass,
 		const mat4& transform,
 		const dx_vertex_buffer_group_view& vertexBuffer,

@@ -40,14 +40,6 @@ struct projector_renderer
 	static inline tonemap_settings tonemapSettings;
 
 
-	static inline float depthDiscontinuityThreshold = 0.05f;
-	static inline uint32 depthDiscontinuityDilateRadius = 2;
-	static inline uint32 depthDiscontinuitySmoothRadius = 8;
-
-	static inline float colorDiscontinuityThreshold = 0.4f;
-	static inline uint32 colorDiscontinuityDilateRadius = 8;
-	static inline uint32 colorDiscontinuitySmoothRadius = 8;
-
 	static inline bool applySolverIntensity = false;
 
 private:
