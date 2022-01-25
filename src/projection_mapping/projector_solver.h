@@ -13,11 +13,7 @@ struct projector_solver
 
 	void solve(const projector_component* projectors, uint32 numProjectors);
 
-	uint32 numIterationsPerFrame = 1;
 	float referenceDistance = 0.5f;
-	float regularizationStrength = 1.f;
-	float depthDiscontinuityMaskStrength = 1.f;
-	bool simulateCalibrationError = false;
 
 	float depthDiscontinuityThreshold = 0.05f;
 	uint32 depthDiscontinuityDilateRadius = 2;
@@ -44,7 +40,6 @@ private:
 			   
 			dx_double_descriptor_handle worldNormalsBaseDescriptor;
 			dx_double_descriptor_handle depthTexturesBaseDescriptor;
-			dx_double_descriptor_handle realDepthTexturesBaseDescriptor; // For simulation.
 
 			dx_double_descriptor_handle bestMaskSRVBaseDescriptor;
 			dx_double_descriptor_handle bestMaskUAVBaseDescriptor;
@@ -62,11 +57,10 @@ private:
 			dx_double_descriptor_handle confidencesUAVBaseDescriptor;
 		};
 
-		dx_double_descriptor_handle descriptors[15];
+		dx_double_descriptor_handle descriptors[14];
 	};
 
 	D3D12_GPU_VIRTUAL_ADDRESS projectorsGPUAddress;
-	D3D12_GPU_VIRTUAL_ADDRESS realProjectorsGPUAddress; // For simulation.
 
 	uint32 numProjectors;
 

@@ -27,7 +27,6 @@ struct projector_component
 
 		//calibratedCamera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{700.f, 700.f, width * 0.5f, height * 0.5f }, 0.01f);
 		calibratedCamera.initializeIngame(vec3(0.f, 0.f, 0.f), quat::identity, deg2rad(60.f), 0.01f);
-		realCamera = calibratedCamera;
 
 		static const vec4 colorTable[] =
 		{
@@ -51,7 +50,6 @@ struct projector_component
 		shutdown();
 
 		calibratedCamera = camera;
-		realCamera = calibratedCamera;
 
 		window.initialize(TEXT("Projector"), camera.width, camera.height);
 
@@ -78,7 +76,6 @@ struct projector_component
 	projector_renderer renderer;
 	dx_window window;
 	render_camera calibratedCamera;
-	render_camera realCamera; // This is used to simulate calibration errors. This represents the real intrinsics/extrinsics of the projector.
 	vec4 frustumColor;
 };
 

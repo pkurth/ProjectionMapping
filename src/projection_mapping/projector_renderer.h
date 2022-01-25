@@ -21,7 +21,6 @@ struct projector_renderer
 
 	// Set these with your application.
 	void setProjectorCamera(const render_camera& camera);
-	void setRealProjectorCamera(const render_camera& camera); // For simulation.
 
 
 	static void setViewerCamera(const render_camera& camera);
@@ -59,7 +58,6 @@ private:
 	ref<dx_texture> worldNormalsTexture;
 	ref<dx_texture> reflectanceTexture;
 	ref<dx_texture> depthStencilBuffer;
-	ref<dx_texture> realDepthStencilBuffer; // For simulation.
 
 	ref<dx_texture> solverIntensityTexture;
 	ref<dx_texture> solverIntensityTempTexture;
@@ -82,7 +80,6 @@ private:
 	light_culling culling;
 
 	camera_cb projectorCamera;
-	camera_cb realProjectorCamera; // For simulation.
 
 
 
