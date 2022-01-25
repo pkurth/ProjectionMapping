@@ -305,7 +305,7 @@ void projector_renderer::present(dx_command_list* cl,
 	cl->setDescriptorHeapUAV(PROJECTOR_PRESENT_RS_TEXTURES, 0, output);
 	cl->setDescriptorHeapSRV(PROJECTOR_PRESENT_RS_TEXTURES, 1, ldrInput);
 	cl->setDescriptorHeapSRV(PROJECTOR_PRESENT_RS_TEXTURES, 2, solverIntensity);
-	cl->setCompute32BitConstants(PROJECTOR_PRESENT_RS_CB, present_cb{ present_sdr, 0.f, sharpenSettings.strength, 0 });
+	cl->setCompute32BitConstants(PROJECTOR_PRESENT_RS_CB, present_cb{ present_sdr, 0.f, sharpenSettings.strength });
 
 	cl->dispatch(bucketize(output->width, PROJECTOR_BLOCK_SIZE), bucketize(output->height, PROJECTOR_BLOCK_SIZE));
 }

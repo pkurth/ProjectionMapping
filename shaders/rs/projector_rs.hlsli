@@ -229,44 +229,15 @@ struct present_cb
     uint32 displayMode;
     float standardNits;
     float sharpenStrength;
-    uint32 offset; // x-offset | y-offset.
 };
 
 #define PROJECTOR_PRESENT_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=4, b0),"  \
+    "RootConstants(num32BitConstants=3, b0),"  \
     "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 2) )"
 
 #define PROJECTOR_PRESENT_RS_CB               0
 #define PROJECTOR_PRESENT_RS_TEXTURES         1
-
-
-
-
-#define PROJECTOR_INTENSITY_VISUALIZATION_RS \
-    "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
-    "DENY_HULL_SHADER_ROOT_ACCESS |" \
-    "DENY_DOMAIN_SHADER_ROOT_ACCESS |" \
-    "DENY_GEOMETRY_SHADER_ROOT_ACCESS)," \
-    "RootConstants(num32BitConstants=32, b0, visibility=SHADER_VISIBILITY_VERTEX), " \
-    "RootConstants(num32BitConstants=2, b0, space=1, visibility=SHADER_VISIBILITY_PIXEL),"  \
-    "SRV(t0, space=0, visibility=SHADER_VISIBILITY_PIXEL), " \
-    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE), visibility=SHADER_VISIBILITY_PIXEL ), " \
-    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE), visibility=SHADER_VISIBILITY_PIXEL ), " \
-    "StaticSampler(s0," \
-            "addressU = TEXTURE_ADDRESS_BORDER," \
-            "addressV = TEXTURE_ADDRESS_BORDER," \
-            "addressW = TEXTURE_ADDRESS_BORDER," \
-            "filter = FILTER_MIN_MAG_MIP_LINEAR," \
-            "borderColor = STATIC_BORDER_COLOR_OPAQUE_BLACK," \
-            "visibility = SHADER_VISIBILITY_PIXEL)"
-
-
-#define PROJECTOR_INTENSITY_VISUALIZATION_RS_TRANSFORM           0
-#define PROJECTOR_INTENSITY_VISUALIZATION_RS_CB                  1
-#define PROJECTOR_INTENSITY_VISUALIZATION_RS_VIEWPROJS           2
-#define PROJECTOR_INTENSITY_VISUALIZATION_RS_DEPTH_TEXTURES      3
-#define PROJECTOR_INTENSITY_VISUALIZATION_RS_INTENSITIES         4
 
 
 

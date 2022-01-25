@@ -14,10 +14,7 @@ Texture2D<float>	intensity		: register(t1);
 [RootSignature(PROJECTOR_PRESENT_RS)]
 void main(cs_input IN)
 {
-	int xOffset = present.offset >> 16;
-	int yOffset = present.offset & 0xFFFF;
-
-	int2 center = IN.dispatchThreadID.xy - int2(xOffset, yOffset);
+	int2 center = IN.dispatchThreadID.xy;
 
 	float3 scene = input[center + int2(0, 0)].rgb;
 	scene *= intensity[center + int2(0, 0)];
