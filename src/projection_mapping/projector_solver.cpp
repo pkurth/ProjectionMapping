@@ -10,10 +10,8 @@
 #include "projector_rs.hlsli"
 #include "transform.hlsli"
 
-static dx_pipeline solverPipeline;
-static dx_pipeline regularizePipeline;
-
-static dx_pipeline confidencePipeline;
+static dx_pipeline attenuationPipeline;
+static dx_pipeline maskPipeline;
 static dx_pipeline bestMaskPipeline;
 static dx_pipeline intensitiesPipeline;
 
