@@ -18,13 +18,9 @@ struct projector_cb
 
 
 
-#ifdef HLSL
-#define clamp01 saturate
-#endif
-
 static float getAngleAttenuation(vec3 N, vec3 V)
 {
-    return clamp01(dot(N, V));
+    return saturate(dot(N, V));
 }
 
 static float getDistanceAttenuation(float distance, float referenceDistance)
@@ -33,81 +29,22 @@ static float getDistanceAttenuation(float distance, float referenceDistance)
 }
 
 
-struct projector_solver_cb
-{
-    uint32 currentIndex;
-    uint32 numProjectors;
-    float referenceDistance;
-    float maskStrength;
-};
-
-#define PROJECTOR_SOLVER_RS \
-    "RootFlags(0), " \
-    "RootConstants(num32BitConstants=4, b0),"  \
-    "SRV(t0, space=0), " \
-    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=5, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "StaticSampler(s0," \
-            "addressU = TEXTURE_ADDRESS_BORDER," \
-            "addressV = TEXTURE_ADDRESS_BORDER," \
-            "addressW = TEXTURE_ADDRESS_BORDER," \
-            "filter = FILTER_MIN_MAG_MIP_LINEAR," \
-            "borderColor = STATIC_BORDER_COLOR_OPAQUE_BLACK)"
-
-#define PROJECTOR_SOLVER_RS_CB                  0
-#define PROJECTOR_SOLVER_RS_VIEWPROJS           1
-#define PROJECTOR_SOLVER_RS_RENDER_RESULTS      2
-#define PROJECTOR_SOLVER_RS_WORLD_NORMALS       3
-#define PROJECTOR_SOLVER_RS_DEPTH_TEXTURES      4
-#define PROJECTOR_SOLVER_RS_INTENSITIES         5
-#define PROJECTOR_SOLVER_RS_MASKS               6
-#define PROJECTOR_SOLVER_RS_OUT_INTENSITIES     7
 
 
-
-struct projector_regularize_cb
-{
-    uint32 currentIndex;
-    float strength;
-};
-
-#define PROJECTOR_REGULARIZE_RS \
-    "RootFlags(0), " \
-    "RootConstants(num32BitConstants=2, b0),"  \
-    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) )"
-
-#define PROJECTOR_REGULARIZE_RS_CB                  0
-#define PROJECTOR_REGULARIZE_RS_INTENSITIES         1
-#define PROJECTOR_REGULARIZE_RS_DEPTH_TEXTURES      2
-#define PROJECTOR_REGULARIZE_RS_MASKS               3
-#define PROJECTOR_REGULARIZE_RS_OUT_INTENSITIES     4
-
-
-
-struct projector_confidence_cb
+struct projector_attenuation_cb
 {
     uint32 index;
     float referenceDistance;
     float desiredWhiteValue;
 };
 
-#define PROJECTOR_CONFIDENCE_RS \
+#define PROJECTOR_ATTENUATION_RS \
     "RootFlags(0), " \
     "RootConstants(num32BitConstants=3, b0),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=5, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=6, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "StaticSampler(s0," \
             "addressU = TEXTURE_ADDRESS_CLAMP," \
@@ -116,15 +53,44 @@ struct projector_confidence_cb
             "filter = FILTER_MIN_MAG_MIP_LINEAR)"
 
 
-#define PROJECTOR_CONFIDENCE_RS_CB                  0
-#define PROJECTOR_CONFIDENCE_RS_PROJECTORS          1
-#define PROJECTOR_CONFIDENCE_RS_RENDER_RESULTS      2
-#define PROJECTOR_CONFIDENCE_RS_WORLD_NORMALS       3
-#define PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES      4
-#define PROJECTOR_CONFIDENCE_RS_INTENSITIES         5
-#define PROJECTOR_CONFIDENCE_RS_DEPTH_MASKS         6
-#define PROJECTOR_CONFIDENCE_RS_COLOR_MASKS         7
-#define PROJECTOR_CONFIDENCE_RS_OUTPUT              8
+#define PROJECTOR_ATTENUATION_RS_CB                  0
+#define PROJECTOR_ATTENUATION_RS_PROJECTORS          1
+#define PROJECTOR_ATTENUATION_RS_RENDER_RESULTS      2
+#define PROJECTOR_ATTENUATION_RS_WORLD_NORMALS       3
+#define PROJECTOR_ATTENUATION_RS_DEPTH_TEXTURES      4
+#define PROJECTOR_ATTENUATION_RS_OUTPUT              5
+
+
+
+struct projector_mask_cb
+{
+    uint32 index;
+};
+
+#define PROJECTOR_MASK_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=1, b0),"  \
+    "SRV(t0, space=0), " \
+    "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "StaticSampler(s0," \
+            "addressU = TEXTURE_ADDRESS_CLAMP," \
+            "addressV = TEXTURE_ADDRESS_CLAMP," \
+            "addressW = TEXTURE_ADDRESS_CLAMP," \
+            "filter = FILTER_MIN_MAG_MIP_LINEAR)"
+
+
+#define PROJECTOR_MASK_RS_CB                  0
+#define PROJECTOR_MASK_RS_PROJECTORS          1
+#define PROJECTOR_MASK_RS_DEPTH_TEXTURES      2
+#define PROJECTOR_MASK_RS_DEPTH_MASKS         3
+#define PROJECTOR_MASK_RS_COLOR_MASKS         4
+#define PROJECTOR_MASK_RS_BEST_MASKS          5
+#define PROJECTOR_MASK_RS_OUTPUT              6
+
 
 
 
@@ -157,9 +123,9 @@ struct projector_intensity_cb
 
 #define PROJECTOR_INTENSITIES_RS_CB                 0
 #define PROJECTOR_INTENSITIES_RS_PROJECTORS         1
-#define PROJECTOR_INTENSITIES_RS_CONFIDENCES        2
-#define PROJECTOR_INTENSITIES_RS_DEPTH_TEXTURES     3
-#define PROJECTOR_INTENSITIES_RS_BEST_MASKS         4
+#define PROJECTOR_INTENSITIES_RS_ATTENUATIONS       2
+#define PROJECTOR_INTENSITIES_RS_MASKS              3
+#define PROJECTOR_INTENSITIES_RS_DEPTH_TEXTURES     4
 #define PROJECTOR_INTENSITIES_RS_OUT_INTENSITIES    5
 
 
@@ -168,11 +134,12 @@ struct projector_best_mask_cb
 {
     uint32 index;
     uint32 numProjectors;
+    vec2 screenDims;
 };
 
 #define PROJECTOR_BEST_MASK_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=2, b0),"  \
+    "RootConstants(num32BitConstants=4, b0),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
@@ -192,7 +159,7 @@ struct projector_best_mask_cb
 
 #define PROJECTOR_BEST_MASK_RS_CB                   0
 #define PROJECTOR_BEST_MASK_RS_PROJECTORS           1
-#define PROJECTOR_BEST_MASK_RS_CONFIDENCES          2
+#define PROJECTOR_BEST_MASK_RS_ATTENUATIONS         2
 #define PROJECTOR_BEST_MASK_RS_DEPTH_TEXTURES       3
 #define PROJECTOR_BEST_MASK_RS_OUT_MASK             4
 

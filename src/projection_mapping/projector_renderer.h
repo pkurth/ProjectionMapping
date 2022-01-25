@@ -62,7 +62,8 @@ private:
 	ref<dx_texture> solverIntensityTexture;
 	ref<dx_texture> solverIntensityTempTexture;
 
-	ref<dx_texture> confidenceTexture;
+	ref<dx_texture> attenuationTexture;
+	ref<dx_texture> maskTexture;
 
 	ref<dx_texture> halfResolutionDepthBuffer;
 	ref<dx_texture> halfResolutionColorTexture;

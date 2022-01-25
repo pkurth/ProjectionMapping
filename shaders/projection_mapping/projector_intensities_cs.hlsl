@@ -5,9 +5,9 @@
 ConstantBuffer<projector_intensity_cb> cb		: register(b0, space0);
 StructuredBuffer<projector_cb> allProjectors	: register(t0, space0);
 
-Texture2D<float4> confidenceTextures[32]		: register(t0, space1);
-Texture2D<float> depthTextures[32]				: register(t0, space2);
-Texture2D<float> bestMaskTextures[32]			: register(t0, space3);
+Texture2D<float2> attenuationTextures[32]		: register(t0, space1);
+Texture2D<float2> maskTextures[32]				: register(t0, space2);
+Texture2D<float> depthTextures[32]				: register(t0, space3);
 
 RWTexture2D<float> outIntensities[32]			: register(u0, space0);
 
@@ -19,17 +19,18 @@ struct projector_data
 {
 	float attenuation;
 	float E;
+	float maxCompensationFactor;
 	float partialSum;
 };
 
-static projector_data fillOutData(float4 c)
+static projector_data fillOutData(float2 atten, float2 masks)
 {
-	float attenuation = c.x;
-	float depthMask = c.z;
-	float colorMask = c.w;
+	float attenuation = atten.x;
+	float hardMask = masks.x;
+	float softMask = masks.y;
 
 	const float k = 4.f;
-	projector_data result = { attenuation, pow(attenuation, k) * depthMask, 0.f };
+	projector_data result = { attenuation, pow(attenuation, k) * softMask, hardMask, 0.f };
 	return result;
 }
 
@@ -62,14 +63,15 @@ void main(cs_input IN)
 
 	float ESum = 0.f;
 
-	projectors[0] = fillOutData(confidenceTextures[index][texCoord]);
+	float2 attenuationAndTargetIntensity = attenuationTextures[index][texCoord];
+	projectors[0] = fillOutData(attenuationAndTargetIntensity, maskTextures[index][texCoord]);
 	ESum += projectors[0].E;
 
 	uint myProjectorIndex = 0;
 	uint numProjectors = 1;
 
 
-	float targetIntensity = max(confidenceTextures[index][texCoord].y, 0.001f);
+	float targetIntensity = max(attenuationAndTargetIntensity.y, 0.001f);
 
 
 	for (uint projIndex = 0; projIndex < cb.numProjectors; ++projIndex)
@@ -80,14 +82,19 @@ void main(cs_input IN)
 			projected.xyz /= projected.w;
 
 			float2 projUV = projected.xy * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
-			float testDepth = projected.z;
-
-			float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
-			if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
+			if (all(projUV >= 0.f && projUV <= 1.f))
 			{
-				projectors[numProjectors] = fillOutData(confidenceTextures[projIndex].SampleLevel(borderSampler, projUV, 0));
-				ESum += projectors[numProjectors].E;
-				++numProjectors;
+				float testDepth = projected.z;
+
+				float projDepth = depthTextures[projIndex].SampleLevel(depthSampler, projUV, 0);
+				if (projDepth < 1.f && testDepth <= projDepth + 0.00005f)
+				{
+					projectors[numProjectors] = fillOutData(
+						attenuationTextures[projIndex].SampleLevel(borderSampler, projUV, 0),
+						maskTextures[projIndex].SampleLevel(borderSampler, projUV, 0));
+					ESum += projectors[numProjectors].E;
+					++numProjectors;
+				}
 			}
 		}
 	}
@@ -106,7 +113,7 @@ void main(cs_input IN)
 
 		for (uint projIndex = 0; projIndex < numProjectors; ++projIndex)
 		{
-			float maxCompensation = (1.f - projectors[projIndex].partialSum) / remainingIntensity;
+			float maxCompensation = projectors[projIndex].maxCompensationFactor * (1.f - projectors[projIndex].partialSum) / remainingIntensity;
 
 			float w = projectors[projIndex].E / ESum;
 			float g = clamp(w / projectors[projIndex].attenuation, 0.f, maxCompensation);
@@ -162,6 +169,4 @@ void main(cs_input IN)
 	projector_data myProj = projectors[myProjectorIndex];
 	float solverIntensity = myProj.partialSum / targetIntensity;
 	outIntensities[index][texCoord] = max(0.f, solverIntensity);
-
-	outIntensities[index][texCoord] = solverIntensity;
 }

@@ -20,10 +20,8 @@ static dx_pipeline simulationPipeline;
 
 void projector_solver::initialize()
 {
-	solverPipeline = createReloadablePipeline("projector_solver_cs");
-	regularizePipeline = createReloadablePipeline("projector_regularize_cs");
-
-	confidencePipeline = createReloadablePipeline("projector_confidence_cs");
+	attenuationPipeline = createReloadablePipeline("projector_attenuation_cs");
+	maskPipeline = createReloadablePipeline("projector_mask_cs");
 	bestMaskPipeline = createReloadablePipeline("projector_best_mask_cs");
 	intensitiesPipeline = createReloadablePipeline("projector_intensities_cs");
 
@@ -89,8 +87,10 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 		(intensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTexture);
 		(tempIntensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTempTexture);
 		(tempIntensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTempTexture);
-		(confidencesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.confidenceTexture);
-		(confidencesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.confidenceTexture);
+		(attenuationSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.attenuationTexture);
+		(attenuationUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.attenuationTexture);
+		(maskSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.maskTexture);
+		(maskUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.maskTexture);
 	}
 
 
@@ -104,144 +104,46 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 		PROFILE_ALL(cl, "Projector solver");
 
 
-		{
-			PROFILE_ALL(cl, "Prepare masks");
-
-			{
-				PROFILE_ALL(cl, "Depth masks");
-
-				for (uint32 i = 0; i < numProjectors; ++i)
-				{
-					const ref<dx_texture>& depthStencilBuffer = projectors[i].renderer.depthStencilBuffer;
-					const ref<dx_texture>& halfResolutionDepthBuffer = projectors[i].renderer.halfResolutionDepthBuffer;
-					const ref<dx_texture>& depthDiscontinuitiesTexture = projectors[i].renderer.depthDiscontinuitiesTexture;
-					const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
-					vec4 projectionParams = projectors[i].renderer.projectorCamera.projectionParams;
-
-					barrier_batcher(cl)
-						.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-					depthPyramid(cl, depthStencilBuffer, halfResolutionDepthBuffer);
-
-					barrier_batcher(cl)
-						//.uav(halfResolutionDepthBuffer)
-						.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-						.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-
-					depthSobel(cl, halfResolutionDepthBuffer, depthDiscontinuitiesTexture, projectionParams, depthDiscontinuityThreshold);
-
-					barrier_batcher(cl)
-						//.uav(depthDiscontinuitiesTexture)
-						.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-						.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-					dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuityDilateRadius);
-					dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuitySmoothRadius);
-					gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
-
-					barrier_batcher(cl)
-						//.uav(depthDiscontinuitiesTexture)
-						.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-				}
-			}
-
-			{
-				PROFILE_ALL(cl, "Color masks");
-
-				for (uint32 i = 0; i < numProjectors; ++i)
-				{
-					const ref<dx_texture>& ldrPostProcessingTexture = projectors[i].renderer.ldrPostProcessingTexture;
-					const ref<dx_texture>& halfResolutionColorTexture = projectors[i].renderer.halfResolutionColorTexture;
-					const ref<dx_texture>& colorDiscontinuitiesTexture = projectors[i].renderer.colorDiscontinuitiesTexture;
-					const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
-
-					blit(cl, ldrPostProcessingTexture, halfResolutionColorTexture);
-
-					barrier_batcher(cl)
-						//.uav(halfResolutionColorTexture)
-						.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-					colorSobel(cl, halfResolutionColorTexture, colorDiscontinuitiesTexture, colorDiscontinuityThreshold);
-
-					barrier_batcher(cl)
-						//.uav(colorDiscontinuitiesTexture)
-						.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-						.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-					dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuityDilateRadius);
-					dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuitySmoothRadius);
-					gaussianBlur(cl, colorDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
-
-					barrier_batcher(cl)
-						//.uav(colorDiscontinuitiesTexture)
-						.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-				}
-			}
-
-		}
-
-
-
-
-
-
-
-
 		cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
-
-
-
 
 		{
 			barrier_batcher batch(cl);
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
-				batch.transition(projectors[i].renderer.confidenceTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.attenuationTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.maskTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
 		}
 
 		{
-			PROFILE_ALL(cl, "Confidences");
+			PROFILE_ALL(cl, "Attenuations");
 
-			cl->setPipelineState(*confidencePipeline.pipeline);
-			cl->setComputeRootSignature(*confidencePipeline.rootSignature);
+			cl->setPipelineState(*attenuationPipeline.pipeline);
+			cl->setComputeRootSignature(*attenuationPipeline.rootSignature);
 
-			cl->setRootComputeSRV(PROJECTOR_CONFIDENCE_RS_PROJECTORS, projectorsGPUAddress);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_RENDER_RESULTS, linearRenderResultsBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_INTENSITIES, intensitiesSRVBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_DEPTH_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_COLOR_MASKS, colorDiscontinuitiesTexturesBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_CONFIDENCE_RS_OUTPUT, confidencesUAVBaseDescriptor);
+			cl->setRootComputeSRV(PROJECTOR_ATTENUATION_RS_PROJECTORS, projectorsGPUAddress);
+			cl->setComputeDescriptorTable(PROJECTOR_ATTENUATION_RS_RENDER_RESULTS, linearRenderResultsBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_ATTENUATION_RS_WORLD_NORMALS, worldNormalsBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_ATTENUATION_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_ATTENUATION_RS_OUTPUT, attenuationUAVBaseDescriptor);
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
 				uint32 width = projectors[i].renderer.renderWidth;
 				uint32 height = projectors[i].renderer.renderHeight;
 
-				projector_confidence_cb cb;
+				projector_attenuation_cb cb;
 				cb.index = i;
 				cb.desiredWhiteValue = 0.7f;
 				cb.referenceDistance = referenceDistance;
 
-				cl->setCompute32BitConstants(PROJECTOR_CONFIDENCE_RS_CB, cb);
+				cl->setCompute32BitConstants(PROJECTOR_ATTENUATION_RS_CB, cb);
 
 				cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
 			}
 		}
 
-		{
-			barrier_batcher batch(cl);
-			for (uint32 i = 0; i < numProjectors; ++i)
-			{
-				batch.transition(projectors[i].renderer.confidenceTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-				batch.transition(projectors[i].renderer.solverIntensityTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-				batch.transition(projectors[i].renderer.bestMaskTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE); // TODO: Delete
-			}
-		}
 
-#if 0
 		{
 			PROFILE_ALL(cl, "Best mask");
 
@@ -249,18 +151,19 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 			cl->setComputeRootSignature(*bestMaskPipeline.rootSignature);
 
 			cl->setRootComputeSRV(PROJECTOR_BEST_MASK_RS_PROJECTORS, projectorsGPUAddress);
-			cl->setComputeDescriptorTable(PROJECTOR_BEST_MASK_RS_CONFIDENCES, confidencesSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_BEST_MASK_RS_ATTENUATIONS, attenuationSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_BEST_MASK_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_BEST_MASK_RS_OUT_MASK, bestMaskUAVBaseDescriptor);
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
-				uint32 width = projectors[i].renderer.renderWidth;
-				uint32 height = projectors[i].renderer.renderHeight;
+				uint32 width = projectors[i].renderer.bestMaskTexture->width;
+				uint32 height = projectors[i].renderer.bestMaskTexture->height;
 
 				projector_best_mask_cb cb;
 				cb.index = i;
 				cb.numProjectors = numProjectors;
+				cb.screenDims = vec2((float)width, (float)height);
 
 				cl->setCompute32BitConstants(PROJECTOR_BEST_MASK_RS_CB, cb);
 
@@ -276,16 +179,146 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 			}
 		}
 
+
+
+
+		cl->resetToDynamicDescriptorHeap();
+
+
+
 		{
-			cl->resetToDynamicDescriptorHeap();
 			PROFILE_ALL(cl, "Blur best masks");
+
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
-				gaussianBlur(cl, projectors[i].renderer.bestMaskTexture, projectors[i].renderer.dilateTempTexture, 0, 0, gaussian_blur_9x9, 5);
+				const ref<dx_texture>& bestMaskTexture = projectors[i].renderer.bestMaskTexture;
+				const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
+
+				gaussianBlur(cl, bestMaskTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
 			}
-			cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
 		}
-#endif
+
+
+
+
+		{
+			PROFILE_ALL(cl, "Depth masks");
+
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				const ref<dx_texture>& depthStencilBuffer = projectors[i].renderer.depthStencilBuffer;
+				const ref<dx_texture>& halfResolutionDepthBuffer = projectors[i].renderer.halfResolutionDepthBuffer;
+				const ref<dx_texture>& depthDiscontinuitiesTexture = projectors[i].renderer.depthDiscontinuitiesTexture;
+				const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
+				vec4 projectionParams = projectors[i].renderer.projectorCamera.projectionParams;
+
+				barrier_batcher(cl)
+					.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+				depthPyramid(cl, depthStencilBuffer, halfResolutionDepthBuffer);
+
+				barrier_batcher(cl)
+					//.uav(halfResolutionDepthBuffer)
+					.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+					.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+				depthSobel(cl, halfResolutionDepthBuffer, depthDiscontinuitiesTexture, projectionParams, depthDiscontinuityThreshold);
+
+				barrier_batcher(cl)
+					//.uav(depthDiscontinuitiesTexture)
+					.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+					.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+				dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuityDilateRadius);
+				dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuitySmoothRadius);
+				gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
+
+				barrier_batcher(cl)
+					//.uav(depthDiscontinuitiesTexture)
+					.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			}
+		}
+
+		{
+			PROFILE_ALL(cl, "Color masks");
+
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				const ref<dx_texture>& ldrPostProcessingTexture = projectors[i].renderer.ldrPostProcessingTexture;
+				const ref<dx_texture>& halfResolutionColorTexture = projectors[i].renderer.halfResolutionColorTexture;
+				const ref<dx_texture>& colorDiscontinuitiesTexture = projectors[i].renderer.colorDiscontinuitiesTexture;
+				const ref<dx_texture>& dilateTempTexture = projectors[i].renderer.dilateTempTexture;
+
+				blit(cl, ldrPostProcessingTexture, halfResolutionColorTexture);
+
+				barrier_batcher(cl)
+					//.uav(halfResolutionColorTexture)
+					.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+				colorSobel(cl, halfResolutionColorTexture, colorDiscontinuitiesTexture, colorDiscontinuityThreshold);
+
+				barrier_batcher(cl)
+					//.uav(colorDiscontinuitiesTexture)
+					.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+					.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+				dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuityDilateRadius);
+				dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuitySmoothRadius);
+				gaussianBlur(cl, colorDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
+
+				barrier_batcher(cl)
+					//.uav(colorDiscontinuitiesTexture)
+					.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			}
+		}
+
+
+
+
+
+
+
+
+		cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
+
+
+		{
+			PROFILE_ALL(cl, "Masks");
+
+			cl->setPipelineState(*maskPipeline.pipeline);
+			cl->setComputeRootSignature(*maskPipeline.rootSignature);
+
+			cl->setRootComputeSRV(PROJECTOR_MASK_RS_PROJECTORS, projectorsGPUAddress);
+			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_DEPTH_MASKS, depthDiscontinuitiesTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_COLOR_MASKS, colorDiscontinuitiesTexturesBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_BEST_MASKS, bestMaskSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_OUTPUT, maskUAVBaseDescriptor);
+
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				uint32 width = projectors[i].renderer.renderWidth;
+				uint32 height = projectors[i].renderer.renderHeight;
+
+				projector_mask_cb cb;
+				cb.index = i;
+
+				cl->setCompute32BitConstants(PROJECTOR_MASK_RS_CB, cb);
+
+				cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
+			}
+		}
+
+		{
+			barrier_batcher batch(cl);
+			for (uint32 i = 0; i < numProjectors; ++i)
+			{
+				batch.transition(projectors[i].renderer.attenuationTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+				batch.transition(projectors[i].renderer.maskTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+				batch.transition(projectors[i].renderer.solverIntensityTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.bestMaskTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			}
+		}
 
 		{
 			PROFILE_ALL(cl, "Intensities");
@@ -294,9 +327,9 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 			cl->setComputeRootSignature(*intensitiesPipeline.rootSignature);
 
 			cl->setRootComputeSRV(PROJECTOR_INTENSITIES_RS_PROJECTORS, projectorsGPUAddress);
-			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_CONFIDENCES, confidencesSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_ATTENUATIONS, attenuationSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_MASKS, maskSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
-			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_BEST_MASKS, bestMaskSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_INTENSITIES_RS_OUT_INTENSITIES, intensitiesUAVBaseDescriptor);
 
 			for (uint32 i = 0; i < numProjectors; ++i)
@@ -319,7 +352,6 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
 				batch.transition(projectors[i].renderer.solverIntensityTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-				batch.transition(projectors[i].renderer.bestMaskTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); // TODO: Delete
 			}
 		}
 	}

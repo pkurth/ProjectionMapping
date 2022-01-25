@@ -15,7 +15,7 @@ struct projector_solver
 
 	float referenceDistance = 0.5f;
 
-	float depthDiscontinuityThreshold = 0.05f;
+	float depthDiscontinuityThreshold = 0.09f;
 	uint32 depthDiscontinuityDilateRadius = 2;
 	uint32 depthDiscontinuitySmoothRadius = 8;
 
@@ -53,11 +53,14 @@ private:
 			dx_double_descriptor_handle tempIntensitiesSRVBaseDescriptor;
 			dx_double_descriptor_handle tempIntensitiesUAVBaseDescriptor;
 
-			dx_double_descriptor_handle confidencesSRVBaseDescriptor;
-			dx_double_descriptor_handle confidencesUAVBaseDescriptor;
+			dx_double_descriptor_handle attenuationSRVBaseDescriptor;
+			dx_double_descriptor_handle attenuationUAVBaseDescriptor;
+
+			dx_double_descriptor_handle maskSRVBaseDescriptor;
+			dx_double_descriptor_handle maskUAVBaseDescriptor;
 		};
 
-		dx_double_descriptor_handle descriptors[14];
+		dx_double_descriptor_handle descriptors[16];
 	};
 
 	D3D12_GPU_VIRTUAL_ADDRESS projectorsGPUAddress;

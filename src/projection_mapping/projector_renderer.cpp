@@ -46,8 +46,11 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	solverIntensityTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
 	SET_NAME(solverIntensityTempTexture->resource, "Solver intensity temp");
 
-	confidenceTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
-	SET_NAME(confidenceTexture->resource, "Confidence");
+	attenuationTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	SET_NAME(attenuationTexture->resource, "Attenuation");
+
+	maskTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	SET_NAME(maskTexture->resource, "Mask");
 
 	halfResolutionDepthBuffer = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(halfResolutionDepthBuffer->resource, "Half resolution depth buffer");
@@ -83,7 +86,8 @@ void projector_renderer::shutdown()
 	solverIntensityTexture = 0;
 	solverIntensityTempTexture = 0;
 
-	confidenceTexture = 0;
+	attenuationTexture = 0;
+	maskTexture = 0;
 
 	halfResolutionDepthBuffer = 0;
 	halfResolutionColorTexture = 0;
@@ -132,7 +136,8 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(solverIntensityTexture, renderWidth, renderHeight);
 		resizeTexture(solverIntensityTempTexture, renderWidth, renderHeight);
 
-		resizeTexture(confidenceTexture, renderWidth, renderHeight);
+		resizeTexture(attenuationTexture, renderWidth, renderHeight);
+		resizeTexture(maskTexture, renderWidth, renderHeight);
 
 		resizeTexture(halfResolutionDepthBuffer, renderWidth / 2, renderHeight / 2);
 		resizeTexture(halfResolutionColorTexture, renderWidth / 2, renderHeight / 2);
