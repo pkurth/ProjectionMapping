@@ -15,6 +15,9 @@ struct network_address
 #endif
 };
 
+bool operator==(const network_address& a, const network_address& b);
+inline bool operator!=(const network_address& a, const network_address& b) { return !(a == b); }
+
 struct network_socket
 {
 	bool initialize(uint32 port); // Pass 0 if you don't care.

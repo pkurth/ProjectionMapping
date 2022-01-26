@@ -24,8 +24,39 @@ bool startNetworkClient(const char* serverIP, uint32 serverPort, const network_m
         return false;
     }
 
+
+	std::thread thread([callback]()
+	{
+		while (true)
+		{
+			char buffer[NETWORK_BUFFER_SIZE];
+
+			network_address address;
+			uint32 bytesReceived = clientSocket.receive(address, buffer, NETWORK_BUFFER_SIZE);
+
+			if (bytesReceived != 0)
+			{
+				if (address == serverAddress)
+				{
+					if (callback)
+					{
+						callback(buffer, bytesReceived);
+					}
+				}
+			}
+		}
+	});
+	thread.detach();
+
+	LOG_MESSAGE("Client created");
+
     serverAddress = address;
     clientSocket = socket;
 
     return true;
+}
+
+bool sendToServer(const char* data, uint32 size)
+{
+	return clientSocket.send(serverAddress, data, size);
 }

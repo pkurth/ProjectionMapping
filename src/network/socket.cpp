@@ -31,6 +31,11 @@ bool network_address::initialize(const char* ip, uint32 port)
 	return true;
 }
 
+bool operator==(const network_address& a, const network_address& b)
+{
+	return memcmp(&a.addr, &b.addr, sizeof(a.addr)) == 0;
+}
+
 bool network_socket::initialize(uint32 port)
 {
 	SOCKET s = ::socket(NETWORK_FAMILY, SOCK_DGRAM, IPPROTO_UDP);
