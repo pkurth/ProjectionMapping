@@ -224,7 +224,7 @@ struct projector_visualization_cb
 #define present_hdr 1
 
 
-struct present_cb
+struct projector_present_cb
 {
     uint32 displayMode;
     float standardNits;

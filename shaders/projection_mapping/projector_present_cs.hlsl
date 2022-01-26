@@ -3,10 +3,10 @@
 #include "color.hlsli"
 
 
-ConstantBuffer<present_cb> present	: register(b0);
-RWTexture2D<float4> output			: register(u0);
-Texture2D<float4>	input			: register(t0);
-Texture2D<float>	intensity		: register(t1);
+ConstantBuffer<projector_present_cb> present	: register(b0);
+RWTexture2D<float4> output						: register(u0);
+Texture2D<float4>	input						: register(t0);
+Texture2D<float>	intensity					: register(t1);
 
 
 
