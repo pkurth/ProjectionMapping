@@ -4,6 +4,7 @@
 #include "core/random.h"
 #include "core/color.h"
 #include "core/imgui.h"
+#include "core/log.h"
 #include "dx/dx_context.h"
 #include "dx/dx_profiling.h"
 #include "physics/physics.h"
@@ -14,6 +15,7 @@
 #include "rendering/shadow_map_renderer.h"
 #include "rendering/debug_visualization.h"
 
+#include "network/server.h"
 
 struct raytrace_component
 {
@@ -51,6 +53,23 @@ void application::loadCustomShaders()
 	}
 }
 
+static void updateClientProjectors(game_scene& scene)
+{
+	struct projector_transmission
+	{
+		float x, y, z;
+	};
+
+	std::vector<projector_transmission> transmissions;
+
+	for (auto [entityHandle, projector, transform] : scene.group(entt::get<projector_component, position_rotation_component>).each())
+	{
+		transmissions.push_back({ transform.position.x, transform.position.y, transform.position.z });
+	}
+
+	broadcastMessageToClients(transmissions.data(), transmissions.size() * sizeof(projector_transmission));
+}
+
 void application::initialize(main_renderer* renderer, projector_manager* projectorManager, depth_tracker* tracker)
 {
 	this->renderer = renderer;
@@ -61,6 +80,13 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	{
 		raytracingTLAS.initialize();
 	}
+
+	startNetworkServer(27015, [this](const char* data, uint32 size)
+		{
+			LOG_MESSAGE("Received message %.*s", size, data);
+
+			updateClientProjectors(scene);
+		});
 
 	scene.camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 
@@ -181,6 +207,9 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 			.addComponent<position_rotation_component>(pos, rotation)
 			.addComponent<projector_component>(projCamera);
 	}
+
+
+
 #endif
 
 

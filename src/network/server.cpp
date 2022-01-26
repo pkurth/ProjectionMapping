@@ -6,245 +6,239 @@
 #include <winsock2.h>
 
 
-#define RECEIVE_BUFFER_SIZE 512
-
-network_server::network_server()
-    : listenSocket(INVALID_SOCKET)
+struct active_connection
 {
-}
+	SOCKET socket;
+};
 
-bool network_server::initialize(uint32 port)
+static std::vector<active_connection> connections;
+static std::mutex mutex;
+
+bool startNetworkServer(uint32 port, const network_message_callback& callback)
 {
-    addrinfo* addrResult = 0,
-        hints;
-
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
-
-
-    char portString[16];
-    snprintf(portString, sizeof(portString), "%u", port);
-
-    int result = getaddrinfo(NULL, portString, &hints, &addrResult);
-    if (result != 0) 
-    {
-        LOG_ERROR("Failed to get address info: %d\n", result);
-        return false;
-    }
-
-    listenSocket = socket(addrResult->ai_family, addrResult->ai_socktype, addrResult->ai_protocol);
-
-    if (listenSocket == INVALID_SOCKET) 
-    {
-        LOG_ERROR("Failed to create socket: %d\n", WSAGetLastError());
-        freeaddrinfo(addrResult);
-        return false;
-    }
-
-    result = bind(listenSocket, addrResult->ai_addr, (int)addrResult->ai_addrlen);
-    if (result == SOCKET_ERROR) 
-    {
-        LOG_ERROR("Failed to bind socket: %d\n", WSAGetLastError());
-        freeaddrinfo(addrResult);
-        closesocket(listenSocket);
-        listenSocket = INVALID_SOCKET;
-        return false;
-    }
-
-    this->port = port;
-
-
-
-#if 1
-	char ac[80];
-	if (gethostname(ac, sizeof(ac)) == SOCKET_ERROR) 
+	SOCKET listenSocket = socket(NETWORK_FAMILY, SOCK_STREAM, IPPROTO_TCP);
+	if (listenSocket == INVALID_SOCKET)
 	{
-		LOG_ERROR("Failed to get local host name");
-		freeaddrinfo(addrResult);
-		closesocket(listenSocket);
-		listenSocket = INVALID_SOCKET;
+		LOG_ERROR("Failed to create socket: %d\n", WSAGetLastError());
 		return false;
 	}
 
-	struct hostent* phe = gethostbyname(ac);
-	if (phe == 0) 
-	{
-		LOG_ERROR("Failed to look up host name");
-		freeaddrinfo(addrResult);
-		closesocket(listenSocket);
-		listenSocket = INVALID_SOCKET;
-		return false;
-	}
-
-	if (!phe->h_addr_list[0])
-	{
-		LOG_ERROR("Failed to get address list");
-		freeaddrinfo(addrResult);
-		closesocket(listenSocket);
-		listenSocket = INVALID_SOCKET;
-		return false;
-	}
-	
-	struct in_addr addr;
-	memcpy(&addr, phe->h_addr_list[0], sizeof(struct in_addr));
-
-	char serverAddress[64];
-	inet_ntop(AF_INET, &addr, serverAddress, sizeof(serverAddress));
+#if NETWORK_FAMILY == AF_INET
+	sockaddr_in addr = {};
+	addr.sin_family = NETWORK_FAMILY;
+	addr.sin_port = htons(port); // Convert to network order.
 #else
-	sockaddr_in* addrIn = (sockaddr_in*)addrResult->ai_addr;
-
-	char serverAddress[64];
-	inet_ntop(AF_INET, &addrIn, serverAddress, sizeof(serverAddress));
+	sockaddr_in6 addr = {};
+	addr.sin6_family = NETWORK_FAMILY;
+	addr.sin6_port = htons(port); // Convert to network order.
 #endif
 
-	LOG_MESSAGE("Server created, IP: %s, port %u", serverAddress, port);
-	
-	freeaddrinfo(addrResult);
-
-    return true;
-}
-
-void network_server::shutdown()
-{
-    for (auto& con : connections)
-    {
-        closesocket(con.socket);
-    }
-    connections.clear();
-
-    if (listenSocket != INVALID_SOCKET)
-    {
-        closesocket(listenSocket);
-    }
-    listenSocket = INVALID_SOCKET;
-
-	serverThread.join();
-}
-
-bool network_server::run()
-{
-    if (listenSocket == INVALID_SOCKET)
-    {
-        return false;
-    }
-
-    if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR) 
-    {
-        LOG_ERROR("Failed to listen on port %u: %d\n", port, WSAGetLastError());
-        return false;
-    }
-
-   serverThread = std::thread([this]()
+	if (bind(listenSocket, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
 	{
-		fd_set readfds = {};
+		LOG_ERROR("Failed to bind socket: %d\n", WSAGetLastError());
+		closesocket(listenSocket);
+		return false;
+	}
 
-		while (true)
+
+
+
+	char ac[80];
+	if (gethostname(ac, sizeof(ac)) == SOCKET_ERROR)
+	{
+		LOG_ERROR("Failed to get local host name");
+		closesocket(listenSocket);
+		return false;
+	}
+
+	addrinfo* addrInfo;
+	int err = getaddrinfo(ac, 0, 0, &addrInfo);
+	if (err != 0)
+	{
+		LOG_ERROR("Failed to get address info: %s\n", gai_strerrorA(err));
+		closesocket(listenSocket);
+		return false;
+	}
+
+	char serverAddress[128];
+	bool addressFound = false;
+
+	for (addrinfo* p = addrInfo; p != 0; p = p->ai_next)
+	{
+		in_addr* addr;
+		if (p->ai_family == NETWORK_FAMILY)
 		{
-			FD_ZERO(&readfds);
-			FD_SET(listenSocket, &readfds);
-
-			for (auto& con : connections)
+			if (p->ai_family == AF_INET)
 			{
-				FD_SET(con.socket, &readfds);
+				sockaddr_in* ipv = (sockaddr_in*)p->ai_addr;
+				addr = &(ipv->sin_addr);
+			}
+			else
+			{
+				struct sockaddr_in6* ipv6 = (struct sockaddr_in6*)p->ai_addr;
+				addr = (in_addr*)&(ipv6->sin6_addr);
 			}
 
+			inet_ntop(p->ai_family, addr, serverAddress, sizeof(serverAddress));
 
-			int activity = select(0, &readfds, NULL, NULL, NULL);
-			if (activity == SOCKET_ERROR)
+			addressFound = true;
+			break;
+		}
+	}
+
+	if (!addressFound)
+	{
+		LOG_ERROR("Failed to retrieve own address");
+		closesocket(listenSocket);
+		return false;
+	}
+
+	freeaddrinfo(addrInfo);
+
+
+	LOG_MESSAGE("Server created, IP: %s, port %u", serverAddress, port);
+
+
+
+	if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
+	{
+		LOG_ERROR("Failed to listen on port %u: %d\n", port, WSAGetLastError());
+		return false;
+	}
+
+	std::thread serverThread = std::thread([listenSocket, callback]()
+		{
+			fd_set readfds = {};
+
+			while (true)
 			{
-				LOG_ERROR("Failed to select : %d", WSAGetLastError());
-				return false;
-			}
+				FD_ZERO(&readfds);
+				FD_SET(listenSocket, &readfds);
 
-			if (FD_ISSET(listenSocket, &readfds))
-			{
-				sockaddr_in address;
-				int addrlen = (int)sizeof(address);
-
-				SOCKET clientSocket = accept(listenSocket, (struct sockaddr*)&address, &addrlen);
-				if (clientSocket == INVALID_SOCKET)
+				for (auto& con : connections)
 				{
-					LOG_ERROR("Failed to accept connection: %d", WSAGetLastError());
+					FD_SET(con.socket, &readfds);
+				}
+
+
+				int activity = select(0, &readfds, NULL, NULL, NULL);
+				if (activity == SOCKET_ERROR)
+				{
+					LOG_ERROR("Failed to select : %d", WSAGetLastError());
 					return false;
 				}
 
-				char clientAddress[64];
-				inet_ntop(AF_INET, &address.sin_addr, clientAddress, sizeof(clientAddress));
-				LOG_MESSAGE("New client connected, IP: %s, port %d", clientAddress, ntohs(address.sin_port));
-
-				connections.push_back({ clientSocket });
-
-				////send new connection greeting message
-				//if (send(new_socket, message, strlen(message), 0) != strlen(message))
-				//{
-				//    perror("send failed");
-				//}
-
-				//puts("Welcome message sent successfully");
-			}
-
-
-			// Check for messages.
-			for (uint32 i = 0; i < (uint32)connections.size(); ++i)
-			{
-				active_connection& con = connections[i];
-				SOCKET s = con.socket;
-
-				if (FD_ISSET(s, &readfds))
+				if (FD_ISSET(listenSocket, &readfds))
 				{
+#if NETWORK_FAMILY == AF_INET
 					sockaddr_in address;
+#else
+					sockaddr_in6 address;
+#endif
 					int addrlen = (int)sizeof(address);
 
-					// Get details of the client.
-					getpeername(s, (struct sockaddr*)&address, (int*)&addrlen);
-
-
-					char buffer[RECEIVE_BUFFER_SIZE];
-					int bufferLength = RECEIVE_BUFFER_SIZE;
-
-					//Check if it was for closing , and also read the incoming message
-					//recv does not place a null terminator at the end of the string (whilst printf %s assumes there is one).
-					int bytesReceived = recv(s, buffer, bufferLength, 0);
-
-					if (bytesReceived == 0)
+					SOCKET clientSocket = accept(listenSocket, (struct sockaddr*)&address, &addrlen);
+					if (clientSocket == INVALID_SOCKET)
 					{
-						char clientAddress[64];
-						inet_ntop(AF_INET, &address.sin_addr, clientAddress, sizeof(clientAddress));
-						LOG_MESSAGE("Client disconnected, IP: %s, port %d", clientAddress, ntohs(address.sin_port));
-						closesocket(s);
-						connections[i] = connections.back();
-						connections.pop_back();
-						--i;
-						continue;
+						LOG_ERROR("Failed to accept connection: %d", WSAGetLastError());
+						return false;
 					}
 
-					if (bytesReceived == SOCKET_ERROR)
-					{
-						LOG_ERROR("Failed to receive data: %d\n", WSAGetLastError());
-						closesocket(s);
-						connections[i] = connections.back();
-						connections.pop_back();
-						--i;
-						continue;
-					}
+#if NETWORK_FAMILY == AF_INET
+					const void* sinAddr = &address.sin_addr;
+					uint32 port = ntohs(address.sin_port);
+#else
+					const void* sinAddr = &address.sin6_addr;
+					uint32 port = ntohs(address.sin6_port);
+#endif
 
-					assert(bytesReceived > 0);
 
-					LOG_MESSAGE("Bytes received: %d\n", bytesReceived);
-					if (callback)
-					{
-						callback(buffer, bytesReceived);
-					}
+					char clientAddress[128];
+					inet_ntop(NETWORK_FAMILY, sinAddr, clientAddress, sizeof(clientAddress));
+					LOG_MESSAGE("New client connected, IP: %s, port %d", clientAddress, port);
 
+					mutex.lock();
+					connections.push_back({ clientSocket });
+					mutex.unlock();
+
+					////send new connection greeting message
+					//if (send(new_socket, message, strlen(message), 0) != strlen(message))
+					//{
+					//    perror("send failed");
+					//}
+
+					//puts("Welcome message sent successfully");
 				}
+				else
+				{
+					// Check for messages.
+					for (uint32 i = 0; i < (uint32)connections.size(); ++i)
+					{
+						active_connection& con = connections[i];
+						SOCKET s = con.socket;
 
+						if (FD_ISSET(s, &readfds))
+						{
+							char buffer[NETWORK_BUFFER_SIZE];
+
+							int bytesReceived = recv(s, buffer, NETWORK_BUFFER_SIZE, 0);
+
+							if (bytesReceived <= 0)
+							{
+								LOG_MESSAGE("Client disconnected");
+
+								mutex.lock();
+								closesocket(s);
+								connections[i] = connections.back();
+								connections.pop_back();
+								mutex.unlock();
+
+								--i;
+								continue;
+							}
+
+							LOG_MESSAGE("Bytes received: %d\n", bytesReceived);
+
+							if (callback)
+							{
+								callback(buffer, bytesReceived);
+							}
+
+						}
+
+					}
+				}
 			}
-		}
-	});
-    
 
-    return true;
+			LOG_MESSAGE("Closing server");
+		});
+
+	serverThread.detach();
+
+	return true;
+}
+
+bool broadcastMessageToClients(const void* data, uint64 size)
+{
+	bool result = true;
+
+	mutex.lock();
+
+	LOG_MESSAGE("Broadcasting message to %u clients", (uint32)connections.size());
+
+	for (uint32 i = 0; i < (uint32)connections.size(); ++i)
+	{
+		active_connection& con = connections[i];
+		SOCKET s = con.socket;
+
+		int result = send(s, (const char*)data, (uint32)size, 0);
+		if (result == SOCKET_ERROR)
+		{
+			LOG_ERROR("Failed to send: %d\n", WSAGetLastError());
+			result = false;
+		}
+	}
+	mutex.unlock();
+
+	return result;
 }
