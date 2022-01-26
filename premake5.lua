@@ -242,6 +242,7 @@ project "D3D12ProjectionMapping"
 		"assimp",
 		"yaml-cpp",
 		"DirectXTex_Desktop_2019_Win10",
+		"Ws2_32.lib",
 		"k4a.lib",
 		"realsense2.lib",
 	}
