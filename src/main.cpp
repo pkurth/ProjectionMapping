@@ -19,6 +19,7 @@
 #include "projection_mapping/projector_manager.h"
 #include "tracking/tracking.h"
 
+//#include "network/server.h"
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui/imgui_internal.h>
@@ -133,6 +134,16 @@ int main(int argc, char** argv)
 	initializeRenderUtils();
 
 	initializeImGui(window);
+
+	//initializeNetwork();
+
+	//network_server server;
+	//server.initialize(27015);
+	//server.registerReceiveFunction([](void* data, uint32 size)
+	//	{
+	//		std::cout << size << '\n';
+	//	});
+	//server.run();
 
 	renderer_spec spec;
 	spec.allowObjectPicking = true;
@@ -281,6 +292,8 @@ int main(int argc, char** argv)
 	dxContext.flushApplication();
 
 	dxContext.quit();
+
+	//shutdownNetwork();
 
 	return EXIT_SUCCESS;
 }
