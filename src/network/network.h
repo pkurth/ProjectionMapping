@@ -21,3 +21,5 @@ enum network_message_type
 
 bool initializeNetwork();
 void shutdownNetwork();
+
+bool getLocalIPAddress(char out[128]);
