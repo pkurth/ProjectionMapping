@@ -27,7 +27,7 @@ static projector_solver_settings oldSolverSettings;
 static float timeSinceLastUpdate = 0.f;
 static const float updateTime = 1.f / 30.f;
 
-enum message_type
+enum message_type : uint16
 {
 	message_hello_from_client,
 	message_object_info,
@@ -39,7 +39,8 @@ enum message_type
 struct message_header
 {
 	message_type type;
-	uint32 clientID;
+	uint16 clientID;
+	uint32 messageID; // Used to ignore out-of-order tracking info.
 };
 
 struct monitor_message
@@ -86,11 +87,12 @@ static auto getObjectGroup()
 
 namespace server
 {
-	static uint32 runningClientID = 0;
+	static uint16 runningClientID = 0;
+	static uint32 runningTrackingMessageID = 0;
 
 	struct client_connection
 	{
-		uint32 id;
+		uint16 id;
 		network_address address;
 	};
 
@@ -107,6 +109,7 @@ namespace server
 
 		header->type = message_object_info;
 		header->clientID = connection.id;
+		header->messageID = 0;
 
 		uint32 id = 0;
 		for (auto [entityHandle, raster, transform] : objectGroup.each())
@@ -157,10 +160,12 @@ namespace server
 			++id;
 		}
 
+		header->type = message_tracking;
+		header->messageID = runningTrackingMessageID++;
+
 		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
-			header->type = message_tracking;
 			header->clientID = connection.id;
 
 			sendTo(connection.address, (const char*)header, size);
@@ -179,11 +184,13 @@ namespace server
 
 		ALLOCATE_ARRAY_MESSAGE(projector_solver_settings, 1);
 		*message = solver->settings;
-		
+
+		header->type = message_solver_settings;
+		header->messageID = 0;
+
 		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
-			header->type = message_solver_settings;
 			header->clientID = connection.id;
 
 			sendTo(connection.address, (const char*)header, size);
@@ -229,7 +236,7 @@ namespace server
 				}
 
 
-				uint32 clientID = runningClientID++;
+				uint16 clientID = runningClientID++;
 				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
 				client_connection connection = { clientID, clientAddress };
@@ -258,6 +265,7 @@ namespace server
 namespace client
 {
 	static uint32 clientID = -1;
+	static uint32 latestTrackingMessageID = 0;
 
 	static std::vector<scene_entity> trackedObjects;
 
@@ -269,6 +277,7 @@ namespace client
 
 		header->type = message_hello_from_client;
 		header->clientID = 0; // No client ID has been assigned yet.
+		header->messageID = 0;
 
 		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 		{
@@ -306,7 +315,7 @@ namespace client
 
 		if (clientID != header->clientID)
 		{
-			LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u. Ignoring message", clientID, header->clientID);
+			LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u. Ignoring message", clientID, (uint32)header->clientID);
 			return;
 		}
 
@@ -358,6 +367,14 @@ namespace client
 					LOG_ERROR("Message size is not evenly divisible by sizeof(tracking_message). Expected multiple of %u, got %u", (uint32)sizeof(tracking_message), size);
 					return;
 				}
+
+				if (header->messageID < latestTrackingMessageID)
+				{
+					// Ignore out-of-order tracking messages.
+					return;
+				}
+
+				latestTrackingMessageID = header->messageID;
 
 				uint32 numObjects = size / (uint32)sizeof(tracking_message);
 				const tracking_message* objects = (tracking_message*)data;
