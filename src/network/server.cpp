@@ -18,7 +18,7 @@ static network_socket serverSocket;
 static std::vector<udp_connection> activeConnections;
 static std::mutex mutex;
 
-bool startNetworkServer(uint32 port, const network_message_callback& callback)
+bool startNetworkServer(uint32 port, const server_message_callback& callback)
 {
 	network_socket socket;
 	if (!socket.initialize(port))
@@ -45,7 +45,7 @@ bool startNetworkServer(uint32 port, const network_message_callback& callback)
 			network_address clientAddress;
 			uint32 bytesReceived = serverSocket.receive(clientAddress, buffer, NETWORK_BUFFER_SIZE);
 
-			if (bytesReceived != 0)
+			if (bytesReceived != -1 && bytesReceived != 0)
 			{
 				bool addressKnown = false;
 				for (auto& con : activeConnections)
@@ -66,7 +66,7 @@ bool startNetworkServer(uint32 port, const network_message_callback& callback)
 
 				if (callback)
 				{
-					callback(buffer, bytesReceived);
+					callback(buffer, bytesReceived, clientAddress, addressKnown);
 				}
 			}
 		}
@@ -76,6 +76,11 @@ bool startNetworkServer(uint32 port, const network_message_callback& callback)
 	LOG_MESSAGE("Server created, IP: %s, port %u", serverAddress, port);
 
 	return true;
+}
+
+bool sendTo(const network_address& address, const char* data, uint32 size)
+{
+	return serverSocket.send(address, data, size);
 }
 
 bool broadcastToClients(const char* data, uint32 size)

@@ -1,26 +1,10 @@
 #pragma once
 
-#include "network.h"
-
-#include <winsock2.h>
-
-struct network_address
-{
-	bool initialize(const char* ip, uint32 port);
-
-#if NETWORK_FAMILY == AF_INET
-	sockaddr_in addr = {};
-#else
-	sockaddr_in6 addr = {};
-#endif
-};
-
-bool operator==(const network_address& a, const network_address& b);
-inline bool operator!=(const network_address& a, const network_address& b) { return !(a == b); }
+#include "address.h"
 
 struct network_socket
 {
-	bool initialize(uint32 port); // Pass 0 if you don't care.
+	bool initialize(uint32 port, bool blocking = true); // Pass 0 as port if you don't care.
 	void close();
 
 	bool isOpen();

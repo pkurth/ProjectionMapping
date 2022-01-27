@@ -15,8 +15,7 @@
 #include "rendering/shadow_map_renderer.h"
 #include "rendering/debug_visualization.h"
 
-#include "network/server.h"
-#include "network/client.h"
+#include "network/projector_network_protocol.h"
 
 struct raytrace_component
 {
@@ -82,14 +81,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		raytracingTLAS.initialize();
 	}
 
-	//startNetworkServer(27015, [this](const char* data, uint32 size)
-	//	{
-	//		LOG_MESSAGE("Received message %.*s", size, data);
-	//
-	//		updateClientProjectors(scene);
-	//	});
-
-	startNetworkClient("192.168.178.33", 27015, 0);
+	startProjectorNetworkProtocol(true);
 
 	scene.camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 
@@ -181,35 +173,35 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		.addComponent<projector_component>();*/
 
 	//for (uint32 i = 0; i < 9; ++i)
-	{
-		vec3 pos(0.059607f, -0.365440f, 0.533256f);
-		quat rotation = mat3ToQuaternion(transpose(mat3(-0.069518f, -0.967943f, -0.241359f, 0.960249f, 0.000640f, -0.279144f, 0.270350f, -0.251171f, 0.929421f)));
-
-		pos = setupRotation * pos;
-		rotation = setupRotation * rotation;
-
-		render_camera projCamera;
-		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2717.140869f, 2714.319580f, 974.937622f, 1095.246460f }, 0.01f);
-
-		scene.createEntity("Projector")
-			.addComponent<position_rotation_component>(pos, rotation)
-			.addComponent<projector_component>(projCamera);
-	}
-
-	{
-		vec3 pos(0.105580f, 0.209924f, 0.440254f);
-		quat rotation = mat3ToQuaternion(transpose(mat3(0.075530f, -0.979857f, 0.184866f, 0.981546f, 0.040397f, -0.186910f, 0.175677f, 0.195572f, 0.964826f)));
-
-		pos = setupRotation * pos;
-		rotation = setupRotation * rotation;
-
-		render_camera projCamera;
-		projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2690.001709f, 2693.022949f, 979.055237f, 991.163513f }, 0.01f);
-
-		scene.createEntity("Projector")
-			.addComponent<position_rotation_component>(pos, rotation)
-			.addComponent<projector_component>(projCamera);
-	}
+	//{
+	//	vec3 pos(0.059607f, -0.365440f, 0.533256f);
+	//	quat rotation = mat3ToQuaternion(transpose(mat3(-0.069518f, -0.967943f, -0.241359f, 0.960249f, 0.000640f, -0.279144f, 0.270350f, -0.251171f, 0.929421f)));
+	//
+	//	pos = setupRotation * pos;
+	//	rotation = setupRotation * rotation;
+	//
+	//	render_camera projCamera;
+	//	projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2717.140869f, 2714.319580f, 974.937622f, 1095.246460f }, 0.01f);
+	//
+	//	scene.createEntity("Projector")
+	//		.addComponent<position_rotation_component>(pos, rotation)
+	//		.addComponent<projector_component>(projCamera);
+	//}
+	//
+	//{
+	//	vec3 pos(0.105580f, 0.209924f, 0.440254f);
+	//	quat rotation = mat3ToQuaternion(transpose(mat3(0.075530f, -0.979857f, 0.184866f, 0.981546f, 0.040397f, -0.186910f, 0.175677f, 0.195572f, 0.964826f)));
+	//
+	//	pos = setupRotation * pos;
+	//	rotation = setupRotation * rotation;
+	//
+	//	render_camera projCamera;
+	//	projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2690.001709f, 2693.022949f, 979.055237f, 991.163513f }, 0.01f);
+	//
+	//	scene.createEntity("Projector")
+	//		.addComponent<position_rotation_component>(pos, rotation)
+	//		.addComponent<projector_component>(projCamera);
+	//}
 
 
 
