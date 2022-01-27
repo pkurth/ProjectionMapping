@@ -43,6 +43,11 @@ struct message_header
 	uint32 messageID; // Used to ignore out-of-order tracking info.
 };
 
+struct hostname_message
+{
+	char hostname[32];
+};
+
 struct monitor_message
 {
 	char name[32];
@@ -69,10 +74,26 @@ struct tracking_message
 };
 
 
-#define ALLOCATE_ARRAY_MESSAGE(message_t, count) \
-	uint32 size = (uint32)(sizeof(message_header) + sizeof(message_t) * count); \
-	message_header* header = (message_header*)alloca(size); \
-	message_t* message = (message_t*)(header + 1);
+struct message_buffer
+{
+	uint32 size = sizeof(message_header);
+
+	template <typename T>
+	T* push(uint32 count)
+	{
+		assert(size + count * sizeof(T) <= NETWORK_BUFFER_SIZE);
+		T* result = (T*)(buffer + size);
+		size += count * (uint32)sizeof(T);
+		return result;
+	}
+
+	union
+	{
+		message_header header;
+		char buffer[NETWORK_BUFFER_SIZE];
+	};
+
+};
 
 
 static auto getObjectGroup()
@@ -92,7 +113,8 @@ namespace server
 
 	struct client_connection
 	{
-		uint16 id;
+		std::string name;
+		uint16 clientID;
 		network_address address;
 	};
 
@@ -105,16 +127,17 @@ namespace server
 		auto objectGroup = getObjectGroup();
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
-		ALLOCATE_ARRAY_MESSAGE(object_message, numObjectsInScene);
+		message_buffer messageBuffer;
+		messageBuffer.header.type = message_object_info;
+		messageBuffer.header.clientID = connection.clientID;
+		messageBuffer.header.messageID = 0;
 
-		header->type = message_object_info;
-		header->clientID = connection.id;
-		header->messageID = 0;
+		object_message* messages = messageBuffer.push<object_message>(numObjectsInScene);
 
 		uint32 id = 0;
 		for (auto [entityHandle, raster, transform] : objectGroup.each())
 		{
-			object_message& msg = message[id];
+			object_message& msg = messages[id];
 
 			std::string path = getPathFromAssetHandle(raster.mesh->handle).string();
 
@@ -127,7 +150,7 @@ namespace server
 			++id;
 		}
 
-		sendTo(connection.address, (const char*)header, size);
+		sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 	}
 
 	// Do not call the following functions from callback!
@@ -146,12 +169,16 @@ namespace server
 		auto objectGroup = getObjectGroup();
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
-		ALLOCATE_ARRAY_MESSAGE(tracking_message, numObjectsInScene);
+		message_buffer messageBuffer;
+		messageBuffer.header.type = message_tracking;
+		messageBuffer.header.messageID = runningTrackingMessageID++;
+
+		tracking_message* messages = messageBuffer.push<tracking_message>(numObjectsInScene);
 
 		uint32 id = 0;
 		for (auto [entityHandle, raster, transform] : objectGroup.each())
 		{
-			tracking_message& msg = message[id];
+			tracking_message& msg = messages[id];
 
 			memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
 			memcpy(msg.position, transform.position.data, sizeof(vec3));
@@ -160,15 +187,12 @@ namespace server
 			++id;
 		}
 
-		header->type = message_tracking;
-		header->messageID = runningTrackingMessageID++;
 
 		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
-			header->clientID = connection.id;
-
-			sendTo(connection.address, (const char*)header, size);
+			messageBuffer.header.clientID = connection.clientID;
+			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
 		mutex.unlock();
 	}
@@ -182,18 +206,18 @@ namespace server
 	{
 		LOG_MESSAGE("Sending solver settings");
 
-		ALLOCATE_ARRAY_MESSAGE(projector_solver_settings, 1);
-		*message = solver->settings;
+		message_buffer messageBuffer;
+		messageBuffer.header.type = message_solver_settings;
+		messageBuffer.header.messageID = 0;
 
-		header->type = message_solver_settings;
-		header->messageID = 0;
+		projector_solver_settings* message = messageBuffer.push<projector_solver_settings>(1);
+		*message = solver->settings;
 
 		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
-			header->clientID = connection.id;
-
-			sendTo(connection.address, (const char*)header, size);
+			messageBuffer.header.clientID = connection.clientID;
+			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
 		mutex.unlock();
 	}
@@ -220,6 +244,18 @@ namespace server
 					return;
 				}
 
+				if (size < sizeof(hostname_message))
+				{
+					LOG_ERROR("Message is smaller than sizeof(hostname_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(hostname_message), size);
+					return;
+				}
+
+				hostname_message* hostname = (hostname_message*)data;
+				data = (const char*)(hostname + 1);
+				size -= sizeof(hostname_message);
+
+				LOG_MESSAGE("Received message identifies client as '%s'", hostname->hostname);
+
 				if (size % sizeof(monitor_message) != 0)
 				{
 					LOG_ERROR("Message size is not evenly divisible by sizeof(monitor_message). Expected multiple of %u, got %u", (uint32)sizeof(monitor_message), size);
@@ -239,7 +275,7 @@ namespace server
 				uint16 clientID = runningClientID++;
 				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
-				client_connection connection = { clientID, clientAddress };
+				client_connection connection = { hostname->hostname, clientID, clientAddress };
 				mutex.lock();
 				clientConnections.push_back(connection);
 				mutex.unlock();
@@ -273,15 +309,19 @@ namespace client
 	{
 		std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
 
-		ALLOCATE_ARRAY_MESSAGE(monitor_message, monitors.size());
+		message_buffer messageBuffer;
+		messageBuffer.header.type = message_hello_from_client;
+		messageBuffer.header.clientID = 0; // No client ID has been assigned yet.
+		messageBuffer.header.messageID = 0;
 
-		header->type = message_hello_from_client;
-		header->clientID = 0; // No client ID has been assigned yet.
-		header->messageID = 0;
+		hostname_message* hostname = messageBuffer.push<hostname_message>(1);
+		gethostname(hostname->hostname, sizeof(hostname->hostname));
+
+		monitor_message* messages = messageBuffer.push<monitor_message>((uint32)monitors.size());
 
 		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 		{
-			monitor_message& msg = message[i];
+			monitor_message& msg = messages[i];
 			monitor_info& mon = monitors[i];
 
 			strncpy_s(msg.name, mon.name.c_str(), sizeof(msg.name));
@@ -291,7 +331,7 @@ namespace client
 			msg.probablyProjector = mon.probablyProjector;
 		}
 
-		sendToServer((const char*)header, size);
+		sendToServer(messageBuffer.buffer, messageBuffer.size);
 	}
 
 	static void messageCallback(const char* data, uint32 size)
