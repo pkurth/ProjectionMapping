@@ -13,7 +13,7 @@ projector_manager::projector_manager(game_scene& scene)
 	this->scene = &scene;
 	solver.initialize();
 
-	startProjectorNetworkProtocol(true);
+	startProjectorNetworkProtocol(scene, true);
 }
 
 void projector_manager::beginFrame()
@@ -24,9 +24,9 @@ void projector_manager::beginFrame()
 	}
 }
 
-void projector_manager::updateAndRender()
+void projector_manager::updateAndRender(float dt)
 {
-	updateProjectorNetworkProtocol();
+	updateProjectorNetworkProtocol(dt);
 
 	if (ImGui::Begin("Projectors"))
 	{

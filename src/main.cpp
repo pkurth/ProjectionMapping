@@ -264,7 +264,7 @@ int main(int argc, char** argv)
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();
-		projectorManager.updateAndRender();
+		projectorManager.updateAndRender(dt);
 		renderer.endFrame(input);
 
 		fileBrowser.draw(meshEditor);

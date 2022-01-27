@@ -7,6 +7,7 @@
 
 #include "core/log.h"
 #include "window/window.h"
+#include "core/file_registry.h"
 
 static const uint32 SERVER_PORT = 27015;
 
@@ -15,6 +16,11 @@ static const char* SERVER_IP = "131.188.49.110";
 #else
 static const char* SERVER_IP = "fe80::96b:37d3:ee41:b0a";
 #endif
+
+
+static bool isServer;
+static game_scene* scene;
+static float timeSinceLastPositionUpdate = 0.f;
 
 
 enum message_type
@@ -38,6 +44,20 @@ struct monitor_message
 	bool probablyProjector;
 };
 
+struct object_message
+{
+	char filename[32];
+	float rotation[4];
+	float position[3];
+	float scale[3];
+	uint32 id;
+};
+
+
+#define ALLOCATE_ARRAY_MESSAGE(message_t, count) \
+	uint32 size = (uint32)(sizeof(message_header) + sizeof(message_t) * count); \
+	message_header* header = (message_header*)alloca(size); \
+	message_t* message = (message_t*)(header + 1);
 
 
 // ----------------------------------------
@@ -46,10 +66,19 @@ struct monitor_message
 
 namespace server
 {
-	static uint32 runningClientID = 1;
+	static uint32 runningClientID = 0;
+
+	struct client_connection
+	{
+		uint32 id;
+		network_address address;
+	};
+
+	static std::vector<client_connection> clientConnections;
 
 	static void callback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
 	{
+#ifndef TEST_CLIENT
 		if (size < sizeof(message_header))
 		{
 			LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), size);
@@ -85,15 +114,40 @@ namespace server
 					LOG_MESSAGE("Monitor %u: %s (%ux%u pixels)", i, monitors[i].name, monitors[i].width, monitors[i].height);
 				}
 
-				uint32 clientID = runningClientID++;
 
+				uint32 clientID = runningClientID++;
 				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
-				message_header response;
-				response.type = message_hello_from_server;
-				response.clientID = clientID;
+				clientConnections.push_back({ clientID, clientAddress });
 
-				sendTo(clientAddress, (const char*)&response, sizeof(message_header));
+				// Response.
+				{
+					auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
+					uint32 numObjectsInScene = (uint32)objectGroup.size();
+
+					ALLOCATE_ARRAY_MESSAGE(object_message, numObjectsInScene);
+
+					header->type = message_hello_from_server;
+					header->clientID = clientID;
+
+					uint32 id = 0;
+					for (auto [entityHandle, raster, transform] : objectGroup.each())
+					{
+						object_message& msg = message[id];
+
+						std::string path = getPathFromAssetHandle(raster.mesh->handle).string();
+
+						strncpy_s(msg.filename, path.c_str(), sizeof(msg.filename));
+						memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
+						memcpy(msg.position, transform.position.data, sizeof(vec3));
+						memcpy(msg.scale, transform.scale.data, sizeof(vec3));
+						msg.id = id;
+
+						++id;
+					}
+
+					sendTo(clientAddress, (const char*)header, size);
+				}
 			} break;
 
 			default:
@@ -102,6 +156,7 @@ namespace server
 			} break;
 		}
 
+#endif
 	}
 }
 
@@ -119,10 +174,7 @@ namespace client
 	{
 		std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
 
-		uint32 size = (uint32)(sizeof(message_header) + sizeof(monitor_message) * monitors.size());
-
-		message_header* header = (message_header*)alloca(size);
-		monitor_message* message = (monitor_message*)(header + 1);
+		ALLOCATE_ARRAY_MESSAGE(monitor_message, monitors.size());
 
 		header->type = message_hello_from_client;
 		header->clientID = 0; // No client ID has been assigned yet.
@@ -167,8 +219,26 @@ namespace client
 					}
 					return;
 				}
+
+				if (size % sizeof(object_message) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(object_message). Expected multiple of %u, got %u", (uint32)sizeof(object_message), size);
+					return;
+				}
+
 				LOG_MESSAGE("Received 'hello' from server. Our client ID is %u", header->clientID);
 				clientID = header->clientID;
+
+
+				uint32 numObjects = size / (uint32)sizeof(object_message);
+				const object_message* objects = (object_message*)data;
+
+				LOG_MESSAGE("Received message containing %u objects", numObjects);
+				for (uint32 i = 0; i < numObjects; ++i)
+				{
+					LOG_MESSAGE("Object %u: %s", objects[i].id, objects[i].filename);
+				}
+
 			} break;
 
 			default:
@@ -179,10 +249,7 @@ namespace client
 	}
 }
 
-
-static bool isServer;
-
-bool startProjectorNetworkProtocol(bool isServer)
+bool startProjectorNetworkProtocol(game_scene& scene, bool isServer)
 {
 	bool result = false;
 
@@ -201,12 +268,21 @@ bool startProjectorNetworkProtocol(bool isServer)
 	}
 
 	::isServer = isServer;
+	::scene = &scene;
 	return result;
 }
 
-bool updateProjectorNetworkProtocol()
+bool updateProjectorNetworkProtocol(float dt)
 {
+#ifndef TEST_CLIENT
+	if (isServer)
+	{
+		for (auto [entityHandle, raster, transform] : scene->group(entt::get<raster_component, transform_component>).each())
+		{
 
+		}
+	}
+#endif
 
 	return true;
 }

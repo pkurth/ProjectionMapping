@@ -9,7 +9,7 @@ struct projector_manager
 	projector_manager(game_scene& scene);
 
 	void beginFrame();
-	void updateAndRender();
+	void updateAndRender(float dt);
 
 	projector_solver solver;
 
