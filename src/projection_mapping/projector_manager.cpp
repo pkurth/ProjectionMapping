@@ -173,7 +173,7 @@ void projector_manager::updateAndRender(float dt)
 		dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
 		bool shouldPresent = projector.shouldPresent();
-		projector.renderer.finalizeImage(cl, shouldPresent);
+		projector.renderer.finalizeImage(cl);
 
 		if (shouldPresent)
 		{

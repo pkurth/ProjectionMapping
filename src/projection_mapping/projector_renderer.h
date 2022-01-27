@@ -16,7 +16,7 @@ struct projector_renderer
 	static void beginFrameCommon();
 	void beginFrame();
 	void endFrame();
-	void finalizeImage(dx_command_list* cl, bool shouldPresent);
+	void finalizeImage(dx_command_list* cl);
 
 
 	// Set these with your application.

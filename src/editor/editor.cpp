@@ -111,7 +111,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 
 	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 	{
-		if (!projector.window.open)
+		if (!projector.window.open && !projector.headless())
 		{
 			scene_entity entity = { entityHandle, *scene };
 			scene->deleteEntity(entity);

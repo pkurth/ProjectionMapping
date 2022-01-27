@@ -526,7 +526,7 @@ namespace YAML
 		{
 			if (!n.IsMap()) { return false; }
 
-			int32 computerID;
+			int32 computerID = -1;
 			YAML_LOAD(n, computerID, "Computer");
 
 			std::string monitorID;

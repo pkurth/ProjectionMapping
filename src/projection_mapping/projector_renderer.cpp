@@ -301,21 +301,18 @@ void projector_renderer::present(dx_command_list* cl,
 	cl->dispatch(bucketize(output->width, PROJECTOR_BLOCK_SIZE), bucketize(output->height, PROJECTOR_BLOCK_SIZE));
 }
 
-void projector_renderer::finalizeImage(dx_command_list* cl, bool shouldPresent)
+void projector_renderer::finalizeImage(dx_command_list* cl)
 {
 	barrier_batcher(cl)
 		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	if (shouldPresent)
+	if (applySolverIntensity)
 	{
-		if (applySolverIntensity)
-		{
-			present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
-		}
-		else
-		{
-			::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
-		}
+		present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
+	}
+	else
+	{
+		::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
 	}
 
 	barrier_batcher(cl)
