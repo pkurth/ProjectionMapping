@@ -288,7 +288,7 @@ struct game_scene
 	template <typename context_t>
 	void deleteContextVariable()
 	{
-		registry.unset<context_T>();
+		registry.unset<context_t>();
 	}
 
 	entt::registry registry;

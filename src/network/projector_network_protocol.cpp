@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "projector_network_protocol.h"
 
+#include "network.h"
 #include "client.h"
 #include "server.h"
 
@@ -36,6 +37,7 @@ struct monitor_message
 	uint16 height;
 	bool probablyProjector;
 };
+
 
 
 // ----------------------------------------
@@ -84,6 +86,8 @@ namespace server
 				}
 
 				uint32 clientID = runningClientID++;
+
+				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
 				message_header response;
 				response.type = message_hello_from_server;
@@ -176,18 +180,33 @@ namespace client
 }
 
 
+static bool isServer;
 
-
-void startProjectorNetworkProtocol(bool isServer)
+bool startProjectorNetworkProtocol(bool isServer)
 {
+	bool result = false;
+
 	if (isServer)
 	{
-		startNetworkServer(SERVER_PORT, server::callback);
+		result = startNetworkServer(SERVER_PORT, server::callback);
 	}
 	else
 	{
-		startNetworkClient(SERVER_IP, SERVER_PORT, client::callback);
+		result = startNetworkClient(SERVER_IP, SERVER_PORT, client::callback);
 		
-		client::sendHello();
+		if (result)
+		{
+			client::sendHello();
+		}
 	}
+
+	::isServer = isServer;
+	return result;
+}
+
+bool updateProjectorNetworkProtocol()
+{
+
+
+	return true;
 }

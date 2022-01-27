@@ -6,11 +6,14 @@
 
 #include "post_processing_rs.hlsli"
 
+#include "network/projector_network_protocol.h"
 
 projector_manager::projector_manager(game_scene& scene)
 {
 	this->scene = &scene;
 	solver.initialize();
+
+	startProjectorNetworkProtocol(true);
 }
 
 void projector_manager::beginFrame()
@@ -23,6 +26,8 @@ void projector_manager::beginFrame()
 
 void projector_manager::updateAndRender()
 {
+	updateProjectorNetworkProtocol();
+
 	if (ImGui::Begin("Projectors"))
 	{
 		if (ImGui::BeginProperties())

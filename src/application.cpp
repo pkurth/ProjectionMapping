@@ -15,7 +15,6 @@
 #include "rendering/shadow_map_renderer.h"
 #include "rendering/debug_visualization.h"
 
-#include "network/projector_network_protocol.h"
 
 struct raytrace_component
 {
@@ -53,23 +52,6 @@ void application::loadCustomShaders()
 	}
 }
 
-static void updateClientProjectors(game_scene& scene)
-{
-	struct projector_transmission
-	{
-		float x, y, z;
-	};
-
-	std::vector<projector_transmission> transmissions;
-
-	for (auto [entityHandle, projector, transform] : scene.group(entt::get<projector_component, position_rotation_component>).each())
-	{
-		transmissions.push_back({ transform.position.x, transform.position.y, transform.position.z });
-	}
-
-	//broadcastMessageToClients(transmissions.data(), transmissions.size() * sizeof(projector_transmission));
-}
-
 void application::initialize(main_renderer* renderer, projector_manager* projectorManager, depth_tracker* tracker)
 {
 	this->renderer = renderer;
@@ -80,8 +62,6 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	{
 		raytracingTLAS.initialize();
 	}
-
-	startProjectorNetworkProtocol(true);
 
 	scene.camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 

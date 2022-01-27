@@ -113,6 +113,7 @@ int main(int argc, char** argv)
 	initializeJobSystem();
 	initializeMessageLog();
 	initializeFileRegistry();
+	initializeNetwork();
 
 	audio::initialize();
 
@@ -134,8 +135,6 @@ int main(int argc, char** argv)
 	initializeRenderUtils();
 
 	initializeImGui(window);
-
-	initializeNetwork();
 
 	renderer_spec spec;
 	spec.allowObjectPicking = true;

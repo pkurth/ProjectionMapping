@@ -5,9 +5,9 @@ extern bool logWindowOpen;
 #if ENABLE_MESSAGE_LOG
 
 #ifdef MESSAGE_LOG_TO_STDOUT
-#define LOG_MESSAGE(message, ...) printf(message, __VA_ARGS__)
-#define LOG_WARNING(message, ...) printf(message, __VA_ARGS__)
-#define LOG_ERROR(message, ...) printf(message, __VA_ARGS__)
+#define LOG_MESSAGE(message, ...) printf(message, __VA_ARGS__); printf("\n")
+#define LOG_WARNING(message, ...) printf(message, __VA_ARGS__); printf("\n")
+#define LOG_ERROR(message, ...) printf(message, __VA_ARGS__); printf("\n")
 #else
 
 enum log_message_type
