@@ -9,13 +9,14 @@
 #include "window/window.h"
 #include "core/file_registry.h"
 
-static const uint32 SERVER_PORT = 27015;
 
 #if NETWORK_FAMILY == AF_INET
-static const char* SERVER_IP = "131.188.49.110";
+char SERVER_IP[128] = "131.188.49.110";
 #else
-static const char* SERVER_IP = "fe80::96b:37d3:ee41:b0a";
+char SERVER_IP[128] = "fe80::96b:37d3:ee41:b0a";
 #endif
+
+uint32 SERVER_PORT = 27015;
 
 bool projectorNetworkInitialized = false;
 static bool isServer;
@@ -244,7 +245,7 @@ namespace client
 		sendToServer((const char*)header, size);
 	}
 
-	static void callback(const char* data, uint32 size)
+	static void messageCallback(const char* data, uint32 size)
 	{
 		if (size < sizeof(message_header))
 		{
@@ -313,7 +314,7 @@ namespace client
 				uint32 numObjects = size / (uint32)sizeof(tracking_message);
 				const tracking_message* objects = (tracking_message*)data;
 
-				LOG_MESSAGE("Received message containing %u objects", numObjects);
+				//LOG_MESSAGE("Received message containing %u objects", numObjects);
 
 				for (uint32 i = 0; i < numObjects; ++i)
 				{
@@ -335,6 +336,12 @@ namespace client
 			} break;
 		}
 	}
+
+	static void closeCallback()
+	{
+		LOG_MESSAGE("Connection closed");
+		projectorNetworkInitialized = false;
+	}
 }
 
 bool startProjectorNetworkProtocol(game_scene& scene, bool isServer)
@@ -344,10 +351,11 @@ bool startProjectorNetworkProtocol(game_scene& scene, bool isServer)
 	if (isServer)
 	{
 		result = startNetworkServer(SERVER_PORT, server::callback);
+		getLocalIPAddress(SERVER_IP);
 	}
 	else
 	{
-		result = startNetworkClient(SERVER_IP, SERVER_PORT, client::callback);
+		result = startNetworkClient(SERVER_IP, SERVER_PORT, client::messageCallback, client::closeCallback);
 		
 		if (result)
 		{

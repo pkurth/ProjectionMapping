@@ -29,9 +29,21 @@ void projector_manager::updateAndRender(float dt)
 		if (ImGui::BeginProperties())
 		{
 			ImGui::PropertyDisableableCheckbox("Server", isServer, !projectorNetworkInitialized);
+			if (!isServer)
+			{
+				ImGui::PropertyInputText("Server IP", SERVER_IP, sizeof(SERVER_IP));
+				ImGui::PropertyInput("Server port", SERVER_PORT);
+			}
+
 			if (ImGui::PropertyDisableableButton("Network", "Start", !projectorNetworkInitialized))
 			{
 				startProjectorNetworkProtocol(*scene, isServer);
+			}
+
+			if (projectorNetworkInitialized && isServer)
+			{
+				ImGui::PropertyInputText("Server IP", SERVER_IP, sizeof(SERVER_IP), true);
+				ImGui::PropertyValue("Server port", SERVER_PORT);
 			}
 
 			ImGui::PropertySeparator();

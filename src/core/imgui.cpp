@@ -756,6 +756,26 @@ namespace ImGui
 		return result;
 	}
 
+	bool PropertyInputText(const char* label, char* buffer, uint32 bufferSize, bool disableInput)
+	{
+		pre(label);
+
+		if (disableInput)
+		{
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.6f);
+		}
+
+		bool result = ImGui::InputText("", buffer, bufferSize, disableInput ? ImGuiInputTextFlags_ReadOnly : 0);
+
+		if (disableInput)
+		{
+			ImGui::PopStyleVar();
+		}
+
+		post();
+		return result;
+	}
+
 	void PropertySeparator()
 	{
 		ImGui::TableNextColumn();

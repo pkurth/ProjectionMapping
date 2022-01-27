@@ -10,7 +10,7 @@
 static network_socket clientSocket;
 static network_address serverAddress;
 
-bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_message_callback& callback)
+bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_message_callback& messageCallback, const client_close_callback& closeCallback)
 {
     network_address address;
     if (!address.initialize(serverIP, serverPort))
@@ -25,7 +25,7 @@ bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_me
     }
 
 
-	std::thread thread([callback]()
+	std::thread thread([messageCallback, closeCallback]()
 	{
 		while (true)
 		{
@@ -34,17 +34,28 @@ bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_me
 			network_address address;
 			uint32 bytesReceived = clientSocket.receive(address, buffer, NETWORK_BUFFER_SIZE);
 
+			if (bytesReceived == -1)
+			{
+				if (closeCallback)
+				{
+					closeCallback();
+				}
+				break;
+			}
+
 			if (bytesReceived != 0)
 			{
 				if (address == serverAddress)
 				{
-					if (callback)
+					if (messageCallback)
 					{
-						callback(buffer, bytesReceived);
+						messageCallback(buffer, bytesReceived);
 					}
 				}
 			}
 		}
+
+		clientSocket.close();
 	});
 	thread.detach();
 
