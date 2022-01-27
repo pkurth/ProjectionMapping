@@ -9,6 +9,8 @@
 
 struct projector_solver_settings
 {
+	bool applySolverIntensity = false;
+
 	float referenceDistance = 0.5f;
 
 	float depthDiscontinuityThreshold = 0.09f;

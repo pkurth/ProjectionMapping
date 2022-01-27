@@ -48,7 +48,7 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::PropertySeparator();
 
-			ImGui::PropertyCheckbox("Apply solver intensity", projector_renderer::applySolverIntensity);
+			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
 
 			ImGui::PropertySeparator();
 
@@ -72,6 +72,8 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::EndProperties();
 		}
+
+		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
 
 		if (ImGui::Button("Detailed view"))
 		{
