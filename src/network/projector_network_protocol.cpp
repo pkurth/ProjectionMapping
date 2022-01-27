@@ -26,7 +26,9 @@ static float timeSinceLastPositionUpdate = 0.f;
 enum message_type
 {
 	message_hello_from_client,
-	message_hello_from_server,
+	message_object_info,
+	message_projector_info,
+	message_tracking_info,
 };
 
 struct message_header
@@ -76,9 +78,45 @@ namespace server
 
 	static std::vector<client_connection> clientConnections;
 
-	static void callback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
+
+	static void sendObjectInformation(const client_connection& connection)
 	{
 #ifndef TEST_CLIENT
+		auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
+		uint32 numObjectsInScene = (uint32)objectGroup.size();
+
+		ALLOCATE_ARRAY_MESSAGE(object_message, numObjectsInScene);
+
+		header->type = message_object_info;
+		header->clientID = connection.id;
+
+		uint32 id = 0;
+		for (auto [entityHandle, raster, transform] : objectGroup.each())
+		{
+			object_message& msg = message[id];
+
+			std::string path = getPathFromAssetHandle(raster.mesh->handle).string();
+
+			strncpy_s(msg.filename, path.c_str(), sizeof(msg.filename));
+			memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
+			memcpy(msg.position, transform.position.data, sizeof(vec3));
+			memcpy(msg.scale, transform.scale.data, sizeof(vec3));
+			msg.id = id;
+
+			++id;
+		}
+
+		sendTo(connection.address, (const char*)header, size);
+#endif
+	}
+
+	static void sendProjectorInformation()
+	{
+
+	}
+
+	static void callback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
+	{
 		if (size < sizeof(message_header))
 		{
 			LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), size);
@@ -118,36 +156,10 @@ namespace server
 				uint32 clientID = runningClientID++;
 				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
-				clientConnections.push_back({ clientID, clientAddress });
+				client_connection connection = clientConnections.emplace_back(client_connection{ clientID, clientAddress });
 
 				// Response.
-				{
-					auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
-					uint32 numObjectsInScene = (uint32)objectGroup.size();
-
-					ALLOCATE_ARRAY_MESSAGE(object_message, numObjectsInScene);
-
-					header->type = message_hello_from_server;
-					header->clientID = clientID;
-
-					uint32 id = 0;
-					for (auto [entityHandle, raster, transform] : objectGroup.each())
-					{
-						object_message& msg = message[id];
-
-						std::string path = getPathFromAssetHandle(raster.mesh->handle).string();
-
-						strncpy_s(msg.filename, path.c_str(), sizeof(msg.filename));
-						memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
-						memcpy(msg.position, transform.position.data, sizeof(vec3));
-						memcpy(msg.scale, transform.scale.data, sizeof(vec3));
-						msg.id = id;
-
-						++id;
-					}
-
-					sendTo(clientAddress, (const char*)header, size);
-				}
+				sendObjectInformation(connection);
 			} break;
 
 			default:
@@ -155,8 +167,6 @@ namespace server
 				LOG_ERROR("Received message which we don't understand: %u", (uint32)header->type);
 			} break;
 		}
-
-#endif
 	}
 }
 
@@ -168,7 +178,7 @@ namespace server
 
 namespace client
 {
-	static uint32 clientID = 0;
+	static uint32 clientID = -1;
 
 	static void sendHello()
 	{
@@ -206,29 +216,26 @@ namespace client
 		data = (const char*)(header + 1);
 		size -= sizeof(message_header);
 
+		if (clientID == -1)
+		{
+			LOG_MESSAGE("Received first message from server. Assigning client ID %u", header->clientID);
+			clientID = header->clientID;
+		}
+
+		if (clientID != header->clientID)
+		{
+			LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u", clientID, header->clientID);
+		}
+
 		switch (header->type)
 		{
-			case message_hello_from_server:
+			case message_object_info:
 			{
-				if (clientID != 0)
-				{
-					LOG_MESSAGE("Received duplicate 'hello' from server. Ignoring message");
-					if (clientID != header->clientID)
-					{
-						LOG_ERROR("Duplicate 'hello' assigns us a different client ID. This should not happen!");
-					}
-					return;
-				}
-
 				if (size % sizeof(object_message) != 0)
 				{
 					LOG_ERROR("Message size is not evenly divisible by sizeof(object_message). Expected multiple of %u, got %u", (uint32)sizeof(object_message), size);
 					return;
 				}
-
-				LOG_MESSAGE("Received 'hello' from server. Our client ID is %u", header->clientID);
-				clientID = header->clientID;
-
 
 				uint32 numObjects = size / (uint32)sizeof(object_message);
 				const object_message* objects = (object_message*)data;
