@@ -88,9 +88,9 @@ std::vector<rgbd_camera_info>& rgbd_camera::enumerate()
     uint32 numAzureDevices = k4a_device_get_installed_count();
     for (uint32 i = 0; i < numAzureDevices; ++i)
     {
-        k4a_device_t device;
-        k4a_device_open(i, &device);
-        if (device)
+        k4a_device_t device = 0;
+        k4a_result_t result = k4a_device_open(i, &device);
+        if (result == K4A_RESULT_SUCCEEDED && device)
         {
             rgbd_camera_info info = getInfo(device, i);
             allConnectedRGBDCameras.push_back(info);
