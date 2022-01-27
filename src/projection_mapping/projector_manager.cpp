@@ -6,7 +6,7 @@
 
 #include "post_processing_rs.hlsli"
 
-#include "network/projector_network_protocol.h"
+#include "projector_network_protocol.h"
 
 projector_manager::projector_manager(game_scene& scene)
 {

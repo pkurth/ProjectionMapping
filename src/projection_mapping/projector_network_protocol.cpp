@@ -1,9 +1,9 @@
 #include "pch.h"
 #include "projector_network_protocol.h"
 
-#include "network.h"
-#include "client.h"
-#include "server.h"
+#include "network/network.h"
+#include "network/client.h"
+#include "network/server.h"
 
 #include "core/log.h"
 #include "window/window.h"
