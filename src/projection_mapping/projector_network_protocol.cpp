@@ -305,7 +305,8 @@ namespace client
 
 		if (clientID != header->clientID)
 		{
-			LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u", clientID, header->clientID);
+			LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u. Ignoring message", clientID, header->clientID);
+			return;
 		}
 
 		switch (header->type)
