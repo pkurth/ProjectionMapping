@@ -7,12 +7,8 @@
 #include "rendering/material.h"
 #include "projector.h"
 
-struct projector_solver
+struct projector_solver_settings
 {
-	void initialize();
-
-	void solve(const projector_component* projectors, uint32 numProjectors);
-
 	float referenceDistance = 0.5f;
 
 	float depthDiscontinuityThreshold = 0.09f;
@@ -24,6 +20,15 @@ struct projector_solver
 	uint32 colorDiscontinuitySmoothRadius = 8;
 
 	float colorMaskStrength = 0.7f;
+};
+
+struct projector_solver
+{
+	void initialize();
+
+	void solve(const projector_component* projectors, uint32 numProjectors);
+
+	projector_solver_settings settings;
 
 	void simulateProjectors(opaque_render_pass* opaqueRenderPass,
 		const mat4& transform,

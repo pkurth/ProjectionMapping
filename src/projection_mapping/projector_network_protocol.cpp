@@ -21,6 +21,9 @@ uint32 SERVER_PORT = 27015;
 bool projectorNetworkInitialized = false;
 static bool isServer;
 static game_scene* scene;
+static projector_solver* solver;
+static projector_solver_settings oldSolverSettings;
+
 static float timeSinceLastPositionUpdate = 0.f;
 static const float trackingUpdateTime = 1.f / 30.f;
 
@@ -29,7 +32,8 @@ enum message_type
 	message_hello_from_client,
 	message_object_info,
 	message_projector_info,
-	message_tracking_info,
+	message_tracking,
+	message_solver_settings,
 };
 
 struct message_header
@@ -84,13 +88,12 @@ namespace server
 		network_address address;
 	};
 
-	// TODO: Protect this with mutex!
 	static std::vector<client_connection> clientConnections;
+	static std::mutex mutex;
 
 
 	static void sendObjectInformation(const client_connection& connection)
 	{
-#ifndef TEST_CLIENT
 		auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
@@ -116,12 +119,11 @@ namespace server
 		}
 
 		sendTo(connection.address, (const char*)header, size);
-#endif
 	}
 
+	// Do not call this from callback!
 	static void sendTrackingInformation()
 	{
-#ifndef TEST_CLIENT
 		auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
@@ -139,19 +141,38 @@ namespace server
 			++id;
 		}
 
+		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
-			header->type = message_tracking_info;
+			header->type = message_tracking;
 			header->clientID = connection.id;
 
 			sendTo(connection.address, (const char*)header, size);
 		}
-#endif
+		mutex.unlock();
 	}
 
 	static void sendProjectorInformation()
 	{
 
+	}
+
+	static void sendSolverSettings()
+	{
+		LOG_MESSAGE("Sending solver settings");
+
+		ALLOCATE_ARRAY_MESSAGE(projector_solver_settings, 1);
+		*message = solver->settings;
+		
+		mutex.lock();
+		for (const client_connection& connection : clientConnections)
+		{
+			header->type = message_solver_settings;
+			header->clientID = connection.id;
+
+			sendTo(connection.address, (const char*)header, size);
+		}
+		mutex.unlock();
 	}
 
 	static void messageCallback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
@@ -195,7 +216,10 @@ namespace server
 				uint32 clientID = runningClientID++;
 				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
-				client_connection connection = clientConnections.emplace_back(client_connection{ clientID, clientAddress });
+				client_connection connection = { clientID, clientAddress };
+				mutex.lock();
+				clientConnections.push_back(connection);
+				mutex.unlock();
 
 				// Response.
 				sendObjectInformation(connection);
@@ -303,7 +327,7 @@ namespace client
 
 			} break;
 
-			case message_tracking_info:
+			case message_tracking:
 			{
 				if (size % sizeof(tracking_message) != 0)
 				{
@@ -330,6 +354,19 @@ namespace client
 
 			} break;
 
+			case message_solver_settings:
+			{
+				if (size != sizeof(projector_solver_settings))
+				{
+					LOG_ERROR("Message size does not equal sizeof(projector_solver_settings). Expected %u, got %u", (uint32)sizeof(projector_solver_settings), size);
+					return;
+				}
+
+				LOG_MESSAGE("Updating solver settings");
+
+				solver->settings = *(const projector_solver_settings*)data;
+			} break;
+
 			default:
 			{
 				LOG_ERROR("Received message which we don't understand: %u", (uint32)header->type);
@@ -344,9 +381,14 @@ namespace client
 	}
 }
 
-bool startProjectorNetworkProtocol(game_scene& scene, bool isServer)
+bool startProjectorNetworkProtocol(game_scene& scene, projector_solver& solver, bool isServer)
 {
 	bool result = false;
+
+	::isServer = isServer;
+	::scene = &scene;
+	::solver = &solver;
+	::oldSolverSettings = solver.settings;
 
 	if (isServer)
 	{
@@ -362,9 +404,6 @@ bool startProjectorNetworkProtocol(game_scene& scene, bool isServer)
 			client::sendHello();
 		}
 	}
-
-	::isServer = isServer;
-	::scene = &scene;
 
 	projectorNetworkInitialized = true;
 
@@ -387,6 +426,12 @@ bool updateProjectorNetworkProtocol(float dt)
 			server::sendTrackingInformation();
 			
 			timeSinceLastPositionUpdate -= trackingUpdateTime;
+		}
+
+		if (memcmp(&solver->settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
+		{
+			oldSolverSettings = solver->settings;
+			server::sendSolverSettings();
 		}
 	}
 

@@ -37,7 +37,7 @@ void projector_manager::updateAndRender(float dt)
 
 			if (ImGui::PropertyDisableableButton("Network", "Start", !projectorNetworkInitialized))
 			{
-				startProjectorNetworkProtocol(*scene, isServer);
+				startProjectorNetworkProtocol(*scene, solver, isServer);
 			}
 
 			if (projectorNetworkInitialized && isServer)
@@ -52,23 +52,23 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::PropertySeparator();
 
-			ImGui::PropertySlider("Depth discontinuity threshold", solver.depthDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertyDrag("Depth discontinuity dilate radius", solver.depthDiscontinuityDilateRadius);
-			ImGui::PropertyDrag("Depth discontinuity smooth radius", solver.depthDiscontinuitySmoothRadius);
+			ImGui::PropertySlider("Depth discontinuity threshold", solver.settings.depthDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertyDrag("Depth discontinuity dilate radius", solver.settings.depthDiscontinuityDilateRadius);
+			ImGui::PropertyDrag("Depth discontinuity smooth radius", solver.settings.depthDiscontinuitySmoothRadius);
 
 			ImGui::PropertySeparator();
 
-			ImGui::PropertySlider("Color discontinuity threshold", solver.colorDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertyDrag("Color discontinuity dilate radius", solver.colorDiscontinuityDilateRadius);
-			ImGui::PropertyDrag("Color discontinuity smooth radius", solver.colorDiscontinuitySmoothRadius);
+			ImGui::PropertySlider("Color discontinuity threshold", solver.settings.colorDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertyDrag("Color discontinuity dilate radius", solver.settings.colorDiscontinuityDilateRadius);
+			ImGui::PropertyDrag("Color discontinuity smooth radius", solver.settings.colorDiscontinuitySmoothRadius);
 
 			ImGui::PropertySeparator();
 			
-			ImGui::PropertySlider("Color mask strength", solver.colorMaskStrength);
+			ImGui::PropertySlider("Color mask strength", solver.settings.colorMaskStrength);
 			
 			ImGui::PropertySeparator();
 
-			ImGui::PropertySlider("Reference distance", solver.referenceDistance, 0.f, 5.f);
+			ImGui::PropertySlider("Reference distance", solver.settings.referenceDistance, 0.f, 5.f);
 
 			ImGui::EndProperties();
 		}

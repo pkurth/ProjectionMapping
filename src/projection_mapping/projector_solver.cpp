@@ -135,7 +135,7 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 				projector_attenuation_cb cb;
 				cb.index = i;
 				cb.desiredWhiteValue = 0.7f;
-				cb.referenceDistance = referenceDistance;
+				cb.referenceDistance = settings.referenceDistance;
 
 				cl->setCompute32BitConstants(PROJECTOR_ATTENUATION_RS_CB, cb);
 
@@ -222,15 +222,15 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 					.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
 					.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
-				depthSobel(cl, halfResolutionDepthBuffer, depthDiscontinuitiesTexture, projectionParams, depthDiscontinuityThreshold);
+				depthSobel(cl, halfResolutionDepthBuffer, depthDiscontinuitiesTexture, projectionParams, settings.depthDiscontinuityThreshold);
 
 				barrier_batcher(cl)
 					//.uav(depthDiscontinuitiesTexture)
 					.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
 					.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-				dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuityDilateRadius);
-				dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, depthDiscontinuitySmoothRadius);
+				dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, settings.depthDiscontinuityDilateRadius);
+				dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, settings.depthDiscontinuitySmoothRadius);
 				gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
 
 				barrier_batcher(cl)
@@ -255,15 +255,15 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 					//.uav(halfResolutionColorTexture)
 					.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-				colorSobel(cl, halfResolutionColorTexture, colorDiscontinuitiesTexture, colorDiscontinuityThreshold);
+				colorSobel(cl, halfResolutionColorTexture, colorDiscontinuitiesTexture, settings.colorDiscontinuityThreshold);
 
 				barrier_batcher(cl)
 					//.uav(colorDiscontinuitiesTexture)
 					.transition(halfResolutionColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 					.transition(colorDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-				dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuityDilateRadius);
-				dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, colorDiscontinuitySmoothRadius);
+				dilate(cl, colorDiscontinuitiesTexture, dilateTempTexture, settings.colorDiscontinuityDilateRadius);
+				dilateSmooth(cl, colorDiscontinuitiesTexture, dilateTempTexture, settings.colorDiscontinuitySmoothRadius);
 				gaussianBlur(cl, colorDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_13x13, 4);
 
 				barrier_batcher(cl)
@@ -302,7 +302,7 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 
 				projector_mask_cb cb;
 				cb.index = i;
-				cb.colorMaskStrength = colorMaskStrength;
+				cb.colorMaskStrength = settings.colorMaskStrength;
 
 				cl->setCompute32BitConstants(PROJECTOR_MASK_RS_CB, cb);
 
@@ -405,7 +405,7 @@ PIPELINE_RENDER_IMPL(simulate_projectors_pipeline)
 	cl->setDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, heap.descriptorHeap);
 
 	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_TRANSFORM, transform_cb{ viewProj * rc.transform, rc.transform });
-	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.referenceDistance });
+	cl->setGraphics32BitConstants(PROJECTOR_SIMULATION_RS_CB, projector_visualization_cb{ solver.numProjectors, solver.settings.referenceDistance });
 	cl->setRootGraphicsSRV(PROJECTOR_SIMULATION_RS_VIEWPROJS, solver.projectorsGPUAddress);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_RENDER_RESULTS, solver.srgbRenderResultsBaseDescriptor);
 	cl->setGraphicsDescriptorTable(PROJECTOR_SIMULATION_RS_DEPTH_TEXTURES, solver.depthTexturesBaseDescriptor);
