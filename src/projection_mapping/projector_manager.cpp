@@ -12,8 +12,6 @@ projector_manager::projector_manager(game_scene& scene)
 {
 	this->scene = &scene;
 	solver.initialize();
-
-	startProjectorNetworkProtocol(scene, true);
 }
 
 void projector_manager::beginFrame()
@@ -26,12 +24,18 @@ void projector_manager::beginFrame()
 
 void projector_manager::updateAndRender(float dt)
 {
-	updateProjectorNetworkProtocol(dt);
-
 	if (ImGui::Begin("Projectors"))
 	{
 		if (ImGui::BeginProperties())
 		{
+			ImGui::PropertyDisableableCheckbox("Server", isServer, !projectorNetworkInitialized);
+			if (ImGui::PropertyDisableableButton("Network", "Start", !projectorNetworkInitialized))
+			{
+				startProjectorNetworkProtocol(*scene, isServer);
+			}
+
+			ImGui::PropertySeparator();
+
 			ImGui::PropertyCheckbox("Apply solver intensity", projector_renderer::applySolverIntensity);
 
 			ImGui::PropertySeparator();
@@ -63,6 +67,8 @@ void projector_manager::updateAndRender(float dt)
 		}
 	}
 	ImGui::End();
+
+	updateProjectorNetworkProtocol(dt);
 
 
 	if (detailWindowOpen)

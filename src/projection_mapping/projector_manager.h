@@ -17,4 +17,6 @@ private:
 	game_scene* scene;
 
 	bool detailWindowOpen = false;
+
+	bool isServer = true;
 };
