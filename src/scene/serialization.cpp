@@ -532,22 +532,27 @@ namespace YAML
 			std::string monitorID;
 			YAML_LOAD(n, monitorID, "Monitor");
 
+			bool movedToCorrectMonitor = false;
 			for (auto& monitor : win32_window::allConnectedMonitors)
 			{
 				if (monitor.uniqueID == monitorID)
 				{
 					c.window.moveToMonitor(monitor);
+					movedToCorrectMonitor = true;
+					break;
 				}
 			}
 
-			bool fullscreen = false;
-			YAML_LOAD(n, fullscreen, "Fullscreen");
-
-			if (fullscreen)
+			if (movedToCorrectMonitor)
 			{
-				c.window.toggleFullscreen();
-			}
+				bool fullscreen = false;
+				YAML_LOAD(n, fullscreen, "Fullscreen");
 
+				if (fullscreen)
+				{
+					c.window.toggleFullscreen();
+				}
+			}
 
 			return true;
 		}

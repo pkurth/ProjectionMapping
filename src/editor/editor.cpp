@@ -82,11 +82,12 @@ void scene_editor::setSelectedEntityNoUndo(scene_entity entity)
 	updateSelectedEntityUIRotation();
 }
 
-void scene_editor::initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker)
+void scene_editor::initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker, projector_manager* projectorManager)
 {
 	this->scene = scene;
 	this->renderer = renderer;
 	this->tracker = tracker;
+	this->projectorManager = projectorManager;
 	cameraController.initialize(&scene->camera);
 
 	systemInfo = getSystemInfo();
@@ -942,6 +943,8 @@ bool scene_editor::deserializeFromFile()
 	{
 		setSelectedEntityNoUndo({});
 		setEnvironment(environmentName);
+
+		projectorManager->onSceneLoad();
 
 		return true;
 	}

@@ -192,3 +192,8 @@ void projector_manager::updateAndRender(float dt)
 	}
 }
 
+void projector_manager::onSceneLoad()
+{
+	notifyProjectorNetworkOnSceneLoad();
+}
+

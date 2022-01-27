@@ -11,6 +11,8 @@ struct projector_manager
 	void beginFrame();
 	void updateAndRender(float dt);
 
+	void onSceneLoad();
+
 	projector_solver solver;
 
 private:

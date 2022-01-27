@@ -11,3 +11,4 @@ extern bool projectorNetworkInitialized;
 bool startProjectorNetworkProtocol(game_scene& scene, projector_solver& solver, bool isServer);
 bool updateProjectorNetworkProtocol(float dt);
 
+bool notifyProjectorNetworkOnSceneLoad();

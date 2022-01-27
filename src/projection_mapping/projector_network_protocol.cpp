@@ -24,8 +24,8 @@ static game_scene* scene;
 static projector_solver* solver;
 static projector_solver_settings oldSolverSettings;
 
-static float timeSinceLastPositionUpdate = 0.f;
-static const float trackingUpdateTime = 1.f / 30.f;
+static float timeSinceLastUpdate = 0.f;
+static const float updateTime = 1.f / 30.f;
 
 enum message_type
 {
@@ -74,6 +74,12 @@ struct tracking_message
 	message_t* message = (message_t*)(header + 1);
 
 
+static auto getObjectGroup()
+{
+	auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
+	return objectGroup;
+}
+
 // ----------------------------------------
 // SERVER
 // ----------------------------------------
@@ -94,7 +100,7 @@ namespace server
 
 	static void sendObjectInformation(const client_connection& connection)
 	{
-		auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
+		auto objectGroup = getObjectGroup();
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
 		ALLOCATE_ARRAY_MESSAGE(object_message, numObjectsInScene);
@@ -121,10 +127,20 @@ namespace server
 		sendTo(connection.address, (const char*)header, size);
 	}
 
-	// Do not call this from callback!
+	// Do not call the following functions from callback!
+	static void sendObjectInformation()
+	{
+		mutex.lock();
+		for (const client_connection& connection : clientConnections)
+		{
+			sendObjectInformation(connection);
+		}
+		mutex.unlock();
+	}
+
 	static void sendTrackingInformation()
 	{
-		auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
+		auto objectGroup = getObjectGroup();
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
 		ALLOCATE_ARRAY_MESSAGE(tracking_message, numObjectsInScene);
@@ -302,6 +318,12 @@ namespace client
 					return;
 				}
 
+				// Delete objects in scene.
+				auto objectGroup = getObjectGroup();
+				scene->registry.destroy(objectGroup.begin(), objectGroup.end());
+				trackedObjects.clear();
+
+				// Populate with received objects.
 				uint32 numObjects = size / (uint32)sizeof(object_message);
 				const object_message* objects = (object_message*)data;
 
@@ -419,20 +441,35 @@ bool updateProjectorNetworkProtocol(float dt)
 
 	if (isServer)
 	{
-		timeSinceLastPositionUpdate += dt;
+		timeSinceLastUpdate += dt;
 
-		if (timeSinceLastPositionUpdate >= trackingUpdateTime)
+		if (timeSinceLastUpdate >= updateTime)
 		{
 			server::sendTrackingInformation();
-			
-			timeSinceLastPositionUpdate -= trackingUpdateTime;
-		}
 
-		if (memcmp(&solver->settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
-		{
-			oldSolverSettings = solver->settings;
-			server::sendSolverSettings();
+			if (memcmp(&solver->settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
+			{
+				oldSolverSettings = solver->settings;
+				server::sendSolverSettings();
+			}
+			
+			timeSinceLastUpdate -= updateTime;
 		}
+	}
+
+	return true;
+}
+
+bool notifyProjectorNetworkOnSceneLoad()
+{
+	if (!projectorNetworkInitialized)
+	{
+		return false;
+	}
+
+	if (isServer)
+	{
+		server::sendObjectInformation();
 	}
 
 	return true;

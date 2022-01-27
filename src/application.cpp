@@ -63,7 +63,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	scene.camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 
-	editor.initialize(&scene, renderer, tracker);
+	editor.initialize(&scene, renderer, tracker, projectorManager);
 
 	quat setupRotation = quat::identity;
 

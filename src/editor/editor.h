@@ -7,10 +7,11 @@
 #include "transformation_gizmo.h"
 #include "rendering/main_renderer.h"
 #include "tracking/tracking.h"
+#include "projection_mapping/projector_manager.h"
 
 struct scene_editor
 {
-	void initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker);
+	void initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker, projector_manager* projectorManager);
 
 	bool update(const user_input& input, ldr_render_pass* ldrRenderPass, float dt);
 
@@ -37,6 +38,7 @@ private:
 	game_scene* scene;
 	main_renderer* renderer;
 	depth_tracker* tracker;
+	projector_manager* projectorManager;
 
 	undo_stack undoStack;
 	transformation_gizmo gizmo;
