@@ -35,41 +35,7 @@ static LRESULT CALLBACK windowCallBack(
 	_In_ LPARAM lParam
 );
 
-static void setFullscreen(HWND windowHandle, bool fullscreen, WINDOWPLACEMENT& windowPosition)
-{
-	DWORD style = GetWindowLong(windowHandle, GWL_STYLE);
-
-	if (fullscreen)
-	{
-		if (style & WS_OVERLAPPEDWINDOW)
-		{
-			MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
-			if (GetWindowPlacement(windowHandle, &windowPosition) &&
-				GetMonitorInfo(MonitorFromWindow(windowHandle, MONITOR_DEFAULTTOPRIMARY), &monitorInfo))
-			{
-				SetWindowLong(windowHandle, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
-				SetWindowPos(windowHandle, HWND_TOP,
-					monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
-					monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
-					monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
-					SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-			}
-		}
-	}
-	else
-	{
-		if (!(style & WS_OVERLAPPEDWINDOW))
-		{
-			SetWindowLong(windowHandle, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
-			SetWindowPlacement(windowHandle, &windowPosition);
-			SetWindowPos(windowHandle, 0, 0, 0, 0, 0,
-				SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-				SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-		}
-	}
-}
-
-static int dpiScale(int value, UINT dpi) 
+static int dpiScale(int value, UINT dpi)
 {
 	return (int)((float)value * dpi / 96);
 }
@@ -84,7 +50,7 @@ static int getDefaultTitleBarHeight(HWND handle)
 	CloseThemeData(theme);
 
 	int height = dpiScale(titleBarSize.cy, dpi) + topAndBottomBorders;
-	
+
 	return height;
 }
 
@@ -96,7 +62,7 @@ static RECT getTitleBarRect(HWND handle, int32 titleBarHeight)
 	return rect;
 }
 
-static void centerRectInRect(RECT& to_center, const RECT& outer_rect) 
+static void centerRectInRect(RECT& to_center, const RECT& outer_rect)
 {
 	int toWidth = to_center.right - to_center.left;
 	int toHeight = to_center.bottom - to_center.top;
@@ -112,7 +78,7 @@ static void centerRectInRect(RECT& to_center, const RECT& outer_rect)
 	to_center.bottom = to_center.top + toHeight;
 }
 
-struct custom_titlebar_button_rects 
+struct custom_titlebar_button_rects
 {
 	RECT close;
 	RECT maximize;
@@ -127,7 +93,7 @@ enum titlebar_button_name
 	titlebar_button_maximize,
 };
 
-static custom_titlebar_button_rects getTitleBarButtonRects(HWND handle, int32 buttonHeight) 
+static custom_titlebar_button_rects getTitleBarButtonRects(HWND handle, int32 buttonHeight)
 {
 	UINT dpi = GetDpiForWindow(handle);
 	custom_titlebar_button_rects result;
@@ -301,6 +267,7 @@ win32_window& win32_window::operator=(win32_window&& o)
 	std::swap(clientHeight, o.clientHeight);
 	std::swap(windowPosition, o.windowPosition);
 	std::swap(fullscreen, o.fullscreen);
+	std::swap(disableResizing, o.disableResizing);
 
 	if (windowHandle && open)
 	{
@@ -385,6 +352,7 @@ bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clie
 
 	open = true;
 	this->visible = visible;
+	this->disableResizing = disableResizing;
 	if (visible)
 	{
 		ShowWindow(windowHandle, SW_SHOW);
@@ -409,8 +377,49 @@ void win32_window::shutdown()
 
 void win32_window::toggleFullscreen()
 {
-	fullscreen = !fullscreen;
-	setFullscreen(windowHandle, fullscreen, windowPosition);
+	DWORD style = GetWindowLong(windowHandle, GWL_STYLE);
+
+	if (!fullscreen)
+	{
+		if (style & WS_OVERLAPPEDWINDOW)
+		{
+			WINDOWPLACEMENT windowPosition = {};
+
+			MONITORINFO monitorInfo = { sizeof(MONITORINFO) };
+			if (GetWindowPlacement(windowHandle, &windowPosition) &&
+				GetMonitorInfo(MonitorFromWindow(windowHandle, MONITOR_DEFAULTTOPRIMARY), &monitorInfo))
+			{
+				int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+				int monitorHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+
+				if (!disableResizing || (monitorWidth == clientWidth && monitorHeight == clientHeight))
+				{
+					fullscreen = true;
+					this->windowPosition = windowPosition;
+
+					SetWindowLong(windowHandle, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+					SetWindowPos(windowHandle, HWND_TOP,
+						monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
+						monitorWidth,
+						monitorHeight,
+						SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+				}
+			}
+		}
+	}
+	else
+	{
+		if (!(style & WS_OVERLAPPEDWINDOW))
+		{
+			fullscreen = false;
+
+			SetWindowLong(windowHandle, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+			SetWindowPlacement(windowHandle, &windowPosition);
+			SetWindowPos(windowHandle, 0, 0, 0, 0, 0,
+				SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+				SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+		}
+	}
 }
 
 void win32_window::setFileDropCallback(std::function<void(const fs::path&)> cb)
@@ -590,18 +599,18 @@ static HMONITOR monitorHandleFromName(const std::string& deviceName)
 	cb_data data = { deviceName, 0 };
 
 	EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMonitor, HDC hDC, LPRECT rc, LPARAM inData)
-	{
-		cb_data& data = *(cb_data*)inData;
-
-		MONITORINFOEXA mi;
-		mi.cbSize = sizeof(mi);
-		if (GetMonitorInfoA(hMonitor, &mi) && data.deviceName.find(mi.szDevice) != std::string::npos)
 		{
-			data.result = hMonitor;
-			return FALSE;
-		}
-		return TRUE;
-	}, (LPARAM)&data);
+			cb_data& data = *(cb_data*)inData;
+
+			MONITORINFOEXA mi;
+			mi.cbSize = sizeof(mi);
+			if (GetMonitorInfoA(hMonitor, &mi) && data.deviceName.find(mi.szDevice) != std::string::npos)
+			{
+				data.result = hMonitor;
+				return FALSE;
+			}
+			return TRUE;
+		}, (LPARAM)&data);
 
 	return data.result;
 }
@@ -749,7 +758,7 @@ static LRESULT CALLBACK windowCallBack(
 
 	win32_window* window = (win32_window*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
-	if ((msg == WM_MOUSELEAVE || msg == WM_NCMOUSELEAVE || msg == WM_MOUSEMOVE) 
+	if ((msg == WM_MOUSELEAVE || msg == WM_NCMOUSELEAVE || msg == WM_MOUSEMOVE)
 		&& window && window->customWindowStyle)
 	{
 		if (window->hoveredButton != titlebar_button_none)
@@ -839,14 +848,14 @@ static LRESULT CALLBACK windowCallBack(
 				win32_window::allConnectedMonitors = getAllDisplayDevices();
 
 				EnumThreadWindows(GetCurrentThreadId(), [](HWND hwnd, LPARAM lParam)
-				{
-					RECT rect;
-					GetWindowRect(hwnd, &rect);
-					SetWindowPos(hwnd, HWND_TOP, rect.left - 1, rect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);	// Move a bit.
-					SetWindowPos(hwnd, HWND_TOP, rect.left, rect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);		// Move back.
+					{
+						RECT rect;
+						GetWindowRect(hwnd, &rect);
+						SetWindowPos(hwnd, HWND_TOP, rect.left - 1, rect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);	// Move a bit.
+						SetWindowPos(hwnd, HWND_TOP, rect.left, rect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);		// Move back.
 
-					return TRUE;
-				}, 0);
+						return TRUE;
+					}, 0);
 			}
 		} break;
 
@@ -926,7 +935,7 @@ static LRESULT CALLBACK windowCallBack(
 		case WM_GETMINMAXINFO:
 		{
 			MINMAXINFO* info = (MINMAXINFO*)lParam;
-		
+
 			if (window)
 			{
 				if (window->minimumWidth != -1) { info->ptMinTrackSize.x = window->minimumWidth; }
@@ -989,7 +998,7 @@ static LRESULT CALLBACK windowCallBack(
 
 			// Minimize button.
 			{
-				if (window->hoveredButton == titlebar_button_minimize) 
+				if (window->hoveredButton == titlebar_button_minimize)
 				{
 					FillRect(hdc, &buttonRects.minimize, hoverBrush);
 				}
@@ -1003,7 +1012,7 @@ static LRESULT CALLBACK windowCallBack(
 			// Maximize button.
 			{
 				HBRUSH frontBrush = titleBarBrush;
-				if (window->hoveredButton == titlebar_button_maximize) 
+				if (window->hoveredButton == titlebar_button_maximize)
 				{
 					FillRect(hdc, &buttonRects.maximize, hoverBrush);
 					frontBrush = hoverBrush;
@@ -1068,7 +1077,7 @@ static LRESULT CALLBACK windowCallBack(
 			// Draw window title.
 			LOGFONT logicalFont;
 			HFONT oldFont = NULL;
-			if (SUCCEEDED(GetThemeSysFont(theme, TMT_CAPTIONFONT, &logicalFont))) 
+			if (SUCCEEDED(GetThemeSysFont(theme, TMT_CAPTIONFONT, &logicalFont)))
 			{
 				HFONT themeFont = CreateFontIndirect(&logicalFont);
 				oldFont = (HFONT)SelectObject(hdc, themeFont);
@@ -1102,9 +1111,9 @@ static LRESULT CALLBACK windowCallBack(
 
 			// Draw window icon.
 			HICON icon = window->customIcon;
-			if (!icon) 
-			{ 
-				icon = LoadIcon(NULL, IDI_APPLICATION); 
+			if (!icon)
+			{
+				icon = LoadIcon(NULL, IDI_APPLICATION);
 			}
 
 			if (icon)
@@ -1133,13 +1142,13 @@ static LRESULT CALLBACK windowCallBack(
 			return hitTest(point, window);
 		} break;
 
-		case WM_NCCALCSIZE: 
+		case WM_NCCALCSIZE:
 		{
 			if (!window || !window->customWindowStyle)
 			{
 				return DefWindowProc(hwnd, msg, wParam, lParam);
 			}
-			
+
 			RECT* rect = (RECT*)lParam;
 			if (rect->top > -10000) // Minimized windows seem to have a top of -32000.
 			{
@@ -1158,7 +1167,7 @@ static LRESULT CALLBACK windowCallBack(
 			}
 		} break;
 
-		case WM_NCMOUSEMOVE: 
+		case WM_NCMOUSEMOVE:
 		{
 			if (window && window->customWindowStyle)
 			{
@@ -1179,7 +1188,7 @@ static LRESULT CALLBACK windowCallBack(
 				{
 					hoveredButton = titlebar_button_minimize;
 				}
-				
+
 				if (hoveredButton != window->hoveredButton)
 				{
 					window->hoveredButton = hoveredButton;
@@ -1203,11 +1212,11 @@ static LRESULT CALLBACK windowCallBack(
 			return DefWindowProc(hwnd, msg, wParam, lParam);
 		}
 
-		case WM_NCLBUTTONDOWN: 
+		case WM_NCLBUTTONDOWN:
 		{
 			// Clicks on buttons will be handled in WM_NCLBUTTONUP, but we still need
 			// to remove default handling of the click to avoid it counting as drag.
-			if (window && window->customWindowStyle && window->hoveredButton != titlebar_button_none) 
+			if (window && window->customWindowStyle && window->hoveredButton != titlebar_button_none)
 			{
 				return 0;
 			}
@@ -1215,23 +1224,23 @@ static LRESULT CALLBACK windowCallBack(
 			return DefWindowProc(hwnd, msg, wParam, lParam);
 		}
 
-		case WM_NCLBUTTONUP: 
+		case WM_NCLBUTTONUP:
 		{
 			if (window && window->customWindowStyle)
 			{
-				if (window->hoveredButton == titlebar_button_close) 
+				if (window->hoveredButton == titlebar_button_close)
 				{
 					window->hoveredButton = titlebar_button_none;
 					PostMessage(hwnd, WM_CLOSE, 0, 0);
 					return 0;
 				}
-				else if (window->hoveredButton == titlebar_button_minimize) 
+				else if (window->hoveredButton == titlebar_button_minimize)
 				{
 					window->hoveredButton = titlebar_button_none;
 					ShowWindow(hwnd, SW_MINIMIZE);
 					return 0;
 				}
-				else if (window->hoveredButton == titlebar_button_maximize) 
+				else if (window->hoveredButton == titlebar_button_maximize)
 				{
 					window->hoveredButton = titlebar_button_none;
 					int mode = IsZoomed(hwnd) ? SW_NORMAL : SW_MAXIMIZE;

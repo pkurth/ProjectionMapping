@@ -7,55 +7,49 @@
 
 struct projector_component
 {
-	projector_component()
+	projector_component() { }
+
+	projector_component(const render_camera& camera, int32 computerID, const std::string& monitorID, bool fullscreen)
 	{
-		initialize();
+		initialize(camera, computerID, monitorID, fullscreen);
 	}
 
-	projector_component(const render_camera& camera)
-	{
-		initialize(camera);
-	}
-
-	void initialize()
+	void initialize(const render_camera& camera, int32 computerID, const std::string& monitorID, bool fullscreen)
 	{
 		shutdown();
 
-		uint32 width = 1920;
-		uint32 height = 1080;
-		window.initialize(TEXT("Projector"), width, height);
-
-		//calibratedCamera.initializeCalibrated(vec3(0.f, 0.f, 0.f), quat::identity, width, height, camera_intrinsics{700.f, 700.f, width * 0.5f, height * 0.5f }, 0.01f);
-		calibratedCamera.initializeIngame(vec3(0.f, 0.f, 0.f), quat::identity, deg2rad(60.f), 0.01f);
-
-		static const vec4 colorTable[] =
-		{
-			vec4(1.f, 0.f, 0.f, 1.f),
-			vec4(0.f, 1.f, 0.f, 1.f),
-			vec4(0.f, 0.f, 1.f, 1.f),
-			vec4(1.f, 1.f, 0.f, 1.f),
-			vec4(0.f, 1.f, 1.f, 1.f),
-			vec4(1.f, 0.f, 1.f, 1.f),
-		};
-		static uint32 index = 0;
-
-		frustumColor = colorTable[index];
-		index = (index + 1) % arraysize(colorTable);
-
-		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
-	}
-
-	void initialize(const render_camera& camera)
-	{
-		shutdown();
+		this->computerID = computerID;
+		this->monitorID = monitorID;
 
 		calibratedCamera = camera;
 
-		window.initialize(TEXT("Projector"), camera.width, camera.height);
+		if (!headless())
+		{
+			window.initialize(TEXT("Projector"), camera.width, camera.height, color_depth_8, false, true);
 
-		frustumColor = vec4(1.f, 0.f, 0.f, 1.f);
+			bool movedToCorrectMonitor = false;
+			for (auto& monitor : win32_window::allConnectedMonitors)
+			{
+				if (monitor.uniqueID == monitorID)
+				{
+					window.moveToMonitor(monitor);
+					movedToCorrectMonitor = true;
+					break;
+				}
+			}
 
-		renderer.initialize(color_depth_8, window.clientWidth, window.clientHeight);
+			if (movedToCorrectMonitor)
+			{
+				if (fullscreen)
+				{
+					window.toggleFullscreen();
+				}
+			}
+		}
+
+		frustumColor = frustumColors[computerID + 1]; // Computer ID is -1 based.
+
+		renderer.initialize(color_depth_8, camera.width, camera.height);
 	}
 
 	void shutdown()
@@ -73,9 +67,26 @@ struct projector_component
 		shutdown();
 	}
 
+	inline bool headless() { return computerID != myComputerID; }
+	inline bool shouldPresent() { return !headless() && window.open && window.clientWidth > 0 && window.clientHeight > 0; }
+
+	static inline int32 myComputerID = -1; // Server is -1;
+
+	int32 computerID;
+	std::string monitorID;
+
 	projector_renderer renderer;
 	dx_window window;
 	render_camera calibratedCamera;
 	vec4 frustumColor;
+
+	static inline vec4 frustumColors[] =
+	{
+		{ 1.f, 0.f, 0.f, 1.f },
+		{ 0.f, 1.f, 0.f, 1.f },
+		{ 0.f, 0.f, 1.f, 1.f },
+		{ 1.f, 1.f, 0.f, 1.f },
+		{ 0.f, 1.f, 1.f, 1.f },
+	};
 };
 

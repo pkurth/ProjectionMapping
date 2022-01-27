@@ -301,6 +301,7 @@ namespace client
 		{
 			LOG_MESSAGE("Received first message from server. Assigning client ID %u", header->clientID);
 			clientID = header->clientID;
+			//projector_component::myComputerID = (int32)header->clientID;
 		}
 
 		if (clientID != header->clientID)

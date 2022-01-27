@@ -256,6 +256,9 @@ namespace YAML
 				YAML_LOAD(n, camera.height, "Height");
 			}
 
+			camera.setViewport(camera.width, camera.height);
+			camera.updateMatrices();
+
 			return true; 
 		}
 	};
@@ -523,36 +526,19 @@ namespace YAML
 		{
 			if (!n.IsMap()) { return false; }
 
-
-			render_camera camera;
-			YAML_LOAD(n, camera, "Camera");
-			c.initialize(camera);
-
+			int32 computerID;
+			YAML_LOAD(n, computerID, "Computer");
 
 			std::string monitorID;
 			YAML_LOAD(n, monitorID, "Monitor");
 
-			bool movedToCorrectMonitor = false;
-			for (auto& monitor : win32_window::allConnectedMonitors)
-			{
-				if (monitor.uniqueID == monitorID)
-				{
-					c.window.moveToMonitor(monitor);
-					movedToCorrectMonitor = true;
-					break;
-				}
-			}
+			render_camera camera;
+			YAML_LOAD(n, camera, "Camera");
 
-			if (movedToCorrectMonitor)
-			{
-				bool fullscreen = false;
-				YAML_LOAD(n, fullscreen, "Fullscreen");
+			bool fullscreen = false;
+			YAML_LOAD(n, fullscreen, "Fullscreen");
 
-				if (fullscreen)
-				{
-					c.window.toggleFullscreen();
-				}
-			}
+			c.initialize(camera, computerID, monitorID, fullscreen);
 
 			return true;
 		}

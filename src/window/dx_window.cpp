@@ -213,7 +213,7 @@ dx_window::~dx_window()
 
 bool dx_window::initialize(const TCHAR* name, uint32 requestedClientWidth, uint32 requestedClientHeight, color_depth colorDepth, bool exclusiveFullscreen, bool disableResizing)
 {
-	if (!win32_window::initialize(name, requestedClientWidth, requestedClientHeight))
+	if (!win32_window::initialize(name, requestedClientWidth, requestedClientHeight, true, disableResizing))
 	{
 		return false;
 	}

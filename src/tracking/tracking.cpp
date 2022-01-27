@@ -138,7 +138,7 @@ depth_tracker::depth_tracker()
 {
 	initializePipelines();
 
-	initialize(rgbd_camera_type_realsense, 0);
+	initialize(rgbd_camera_type_azure, 0);
 }
 
 void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)

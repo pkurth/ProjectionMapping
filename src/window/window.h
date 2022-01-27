@@ -62,6 +62,7 @@ struct win32_window
 	bool open = false;
 	bool fullscreen = false;
 	bool visible = false;
+	bool disableResizing = false;
 
 	uint32 monitorIndex = -1; // References into allConnectedMonitors.
 

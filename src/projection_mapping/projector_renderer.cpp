@@ -108,16 +108,11 @@ void projector_renderer::beginFrameCommon()
 	numSpotLights = 0;
 }
 
-void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
+void projector_renderer::beginFrame()
 {
 	opaqueRenderPass = 0;
 
-	active = windowWidth > 0 && windowHeight > 0;
-	if (!active)
-	{
-		return;
-	}
-
+#if 0
 	if (this->renderWidth != windowWidth || this->renderHeight != windowHeight)
 	{
 		this->renderWidth = windowWidth;
@@ -147,6 +142,7 @@ void projector_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
 		resizeTexture(colorDiscontinuitiesTexture, renderWidth / 2, renderHeight / 2);
 		resizeTexture(dilateTempTexture, renderWidth / 2, renderHeight / 2);
 	}
+#endif
 
 	culling.allocateIfNecessary(renderWidth, renderHeight);
 }
@@ -189,11 +185,6 @@ void projector_renderer::setSpotLights(const ref<dx_buffer>& lights, uint32 numL
 
 void projector_renderer::endFrame()
 {
-	if (!active)
-	{
-		return;
-	}
-
 	auto projectorCameraCBV = dxContext.uploadDynamicConstantBuffer(projectorCamera);
 	auto viewerCameraCBV = dxContext.uploadDynamicConstantBuffer(viewerCamera);
 	auto sunCBV = dxContext.uploadDynamicConstantBuffer(sun);
@@ -310,23 +301,21 @@ void projector_renderer::present(dx_command_list* cl,
 	cl->dispatch(bucketize(output->width, PROJECTOR_BLOCK_SIZE), bucketize(output->height, PROJECTOR_BLOCK_SIZE));
 }
 
-void projector_renderer::finalizeImage(dx_command_list* cl)
+void projector_renderer::finalizeImage(dx_command_list* cl, bool shouldPresent)
 {
-	if (!active)
-	{
-		return;
-	}
-
 	barrier_batcher(cl)
 		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	if (applySolverIntensity)
+	if (shouldPresent)
 	{
-		present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
-	}
-	else
-	{
-		::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
+		if (applySolverIntensity)
+		{
+			present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
+		}
+		else
+		{
+			::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
+		}
 	}
 
 	barrier_batcher(cl)

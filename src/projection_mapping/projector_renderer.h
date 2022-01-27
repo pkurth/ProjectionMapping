@@ -14,9 +14,9 @@ struct projector_renderer
 	void shutdown();
 
 	static void beginFrameCommon();
-	void beginFrame(uint32 windowWidth, uint32 windowHeight);
+	void beginFrame();
 	void endFrame();
-	void finalizeImage(dx_command_list* cl);
+	void finalizeImage(dx_command_list* cl, bool shouldPresent);
 
 
 	// Set these with your application.
@@ -42,8 +42,6 @@ struct projector_renderer
 	static inline bool applySolverIntensity = false;
 
 private:
-
-	bool active = true;
 
 	static void present(dx_command_list* cl,
 		ref<dx_texture> ldrInput,

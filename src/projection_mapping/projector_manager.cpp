@@ -18,7 +18,7 @@ void projector_manager::beginFrame()
 {
 	for (auto& [entityHandle, projector] : scene->view<projector_component>().each())
 	{
-		projector.renderer.beginFrame(projector.window.clientWidth, projector.window.clientHeight);
+		projector.renderer.beginFrame();
 	}
 }
 
@@ -153,17 +153,13 @@ void projector_manager::updateAndRender(float dt)
 
 	for (auto [entityHandle, projector, transform] : scene->group(entt::get<projector_component, position_rotation_component>).each())
 	{
-		if (projector.renderer.active)
-		{
-			projector.calibratedCamera.position = transform.position;
-			projector.calibratedCamera.rotation = transform.rotation;
-			projector.calibratedCamera.setViewport(projector.window.clientWidth, projector.window.clientHeight);
-			projector.calibratedCamera.updateMatrices();
+		projector.calibratedCamera.position = transform.position;
+		projector.calibratedCamera.rotation = transform.rotation;
+		projector.calibratedCamera.updateMatrices();
 
-			projector.renderer.setProjectorCamera(projector.calibratedCamera);
+		projector.renderer.setProjectorCamera(projector.calibratedCamera);
 
-			projector.renderer.endFrame();
-		}
+		projector.renderer.endFrame();
 	}
 
 
@@ -174,19 +170,23 @@ void projector_manager::updateAndRender(float dt)
 
 	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 	{
-		if (projector.renderer.active)
+		dx_command_list* cl = dxContext.getFreeRenderCommandList();
+
+		bool shouldPresent = projector.shouldPresent();
+		projector.renderer.finalizeImage(cl, shouldPresent);
+
+		if (shouldPresent)
 		{
-			dx_command_list* cl = dxContext.getFreeRenderCommandList();
-
-			projector.renderer.finalizeImage(cl);
-
 			dx_resource backbuffer = projector.window.backBuffers[projector.window.currentBackbufferIndex];
 			cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 			cl->copyResource(projector.renderer.frameResult->resource, backbuffer);
 			cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+		}
 
-			dxContext.executeCommandList(cl);
+		dxContext.executeCommandList(cl);
 
+		if (shouldPresent)
+		{
 			projector.window.swapBuffers();
 		}
 	}
