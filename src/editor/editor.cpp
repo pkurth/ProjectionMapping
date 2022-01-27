@@ -7,9 +7,6 @@
 #include "scene/components.h"
 #include "animation/animation.h"
 #include "geometry/mesh.h"
-#include "physics/physics.h"
-#include "physics/ragdoll.h"
-#include "physics/vehicle.h"
 #include "scene/serialization.h"
 #include "projection_mapping/projector.h"
 #include "rendering/debug_visualization.h"
@@ -563,416 +560,6 @@ bool scene_editor::drawSceneHierarchy()
 						}
 					});
 
-					drawComponent<rigid_body_component>(selectedEntity, "RIGID BODY", [this, &scene](rigid_body_component& rb)
-					{
-						if (ImGui::BeginProperties())
-						{
-							bool kinematic = rb.invMass == 0;
-							if (ImGui::PropertyCheckbox("Kinematic", kinematic))
-							{
-								if (kinematic)
-								{
-									rb.invMass = 0.f;
-									rb.invInertia = mat3::zero;
-									rb.linearVelocity = vec3(0.f);
-									rb.angularVelocity = vec3(0.f);
-									rb.forceAccumulator = vec3(0.f);
-									rb.torqueAccumulator = vec3(0.f);
-								}
-								else
-								{
-									rb.invMass = 1.f;
-									rb.invInertia = mat3::identity;
-
-									if (physics_reference_component* ref = selectedEntity.getComponentIfExists<physics_reference_component>())
-									{
-										rb.recalculateProperties(&scene.registry, *ref);
-									}
-								}
-							}
-
-							if (!kinematic)
-							{
-								ImGui::PropertyValue("Mass", 1.f / rb.invMass, "%.3fkg");
-							}
-							ImGui::PropertySlider("Linear velocity damping", rb.linearDamping);
-							ImGui::PropertySlider("Angular velocity damping", rb.angularDamping);
-							ImGui::PropertySlider("Gravity factor", rb.gravityFactor);
-
-							//ImGui::PropertyValue("Linear velocity", rb.linearVelocity);
-							//ImGui::PropertyValue("Angular velocity", rb.angularVelocity);
-
-							ImGui::EndProperties();
-						}
-					});
-
-					drawComponent<physics_reference_component>(selectedEntity, "COLLIDERS", [this, &scene](physics_reference_component& reference)
-					{
-						bool dirty = false;
-
-						for (scene_entity colliderEntity : collider_entity_iterator(selectedEntity))
-						{
-							ImGui::PushID((int)colliderEntity.handle);
-
-							drawComponent<collider_component>(colliderEntity, "Collider", [&colliderEntity, &dirty, this](collider_component& collider)
-							{
-								switch (collider.type)
-								{
-									case collider_type_sphere:
-									{
-										if (ImGui::BeginTree("Shape: Sphere"))
-										{
-											if (ImGui::BeginProperties())
-											{
-												dirty |= ImGui::PropertyInput("Local center", collider.sphere.center);
-												dirty |= ImGui::PropertyInput("Radius", collider.sphere.radius);
-												ImGui::EndProperties();
-											}
-											ImGui::EndTree();
-										}
-									} break;
-									case collider_type_capsule:
-									{
-										if (ImGui::BeginTree("Shape: Capsule"))
-										{
-											if (ImGui::BeginProperties())
-											{
-												dirty |= ImGui::PropertyInput("Local point A", collider.capsule.positionA);
-												dirty |= ImGui::PropertyInput("Local point B", collider.capsule.positionB);
-												dirty |= ImGui::PropertyInput("Radius", collider.capsule.radius);
-												ImGui::EndProperties();
-											}
-											ImGui::EndTree();
-										}
-									} break;
-									case collider_type_aabb:
-									{
-										if (ImGui::BeginTree("Shape: AABB"))
-										{
-											if (ImGui::BeginProperties())
-											{
-												dirty |= ImGui::PropertyInput("Local min", collider.aabb.minCorner);
-												dirty |= ImGui::PropertyInput("Local max", collider.aabb.maxCorner);
-												ImGui::EndProperties();
-											}
-											ImGui::EndTree();
-										}
-									} break;
-
-									// TODO: UI for remaining collider types.
-								}
-
-								if (ImGui::BeginProperties())
-								{
-									ImGui::PropertySlider("Restitution", collider.properties.restitution);
-									ImGui::PropertySlider("Friction", collider.properties.friction);
-									dirty |= ImGui::PropertyInput("Density", collider.properties.density);
-
-									ImGui::EndProperties();
-								}
-							});
-
-							ImGui::PopID();
-						}
-
-						if (dirty)
-						{
-							if (rigid_body_component* rb = selectedEntity.getComponentIfExists<rigid_body_component>())
-							{
-								rb->recalculateProperties(&scene.registry, reference);
-							}
-						}
-					});
-
-					drawComponent<physics_reference_component>(selectedEntity, "CONSTRAINTS", [this](physics_reference_component& reference)
-					{
-						for (auto [constraintEntity, constraintType] : constraint_entity_iterator(selectedEntity))
-						{
-							ImGui::PushID((int)constraintEntity.handle);
-
-							switch (constraintType)
-							{
-								case constraint_type_distance:
-								{
-									drawComponent<distance_constraint>(constraintEntity, "Distance constraint", [this, constraintEntity = constraintEntity](distance_constraint& constraint)
-									{
-										if (ImGui::BeginProperties())
-										{
-											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
-											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
-											{
-												setSelectedEntity(otherEntity);
-											}
-
-											ImGui::PropertySlider("Length", constraint.globalLength);
-											ImGui::EndProperties();
-										}
-									});
-								} break;
-
-								case constraint_type_ball:
-								{
-									drawComponent<ball_constraint>(constraintEntity, "Ball constraint", [this, constraintEntity = constraintEntity](ball_constraint& constraint)
-									{
-										if (ImGui::BeginProperties())
-										{
-											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
-											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
-											{
-												setSelectedEntity(otherEntity);
-											}
-
-											ImGui::EndProperties();
-										}
-									});
-								} break;
-
-								case constraint_type_fixed:
-								{
-									drawComponent<fixed_constraint>(constraintEntity, "Fixed constraint", [this, constraintEntity = constraintEntity](fixed_constraint& constraint)
-									{
-										if (ImGui::BeginProperties())
-										{
-											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
-											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
-											{
-												setSelectedEntity(otherEntity);
-											}
-
-											ImGui::EndProperties();
-										}
-									});
-								} break;
-
-								case constraint_type_hinge:
-								{
-									drawComponent<hinge_constraint>(constraintEntity, "Hinge constraint", [this, constraintEntity = constraintEntity](hinge_constraint& constraint)
-									{
-										if (ImGui::BeginProperties())
-										{
-											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
-											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
-											{
-												setSelectedEntity(otherEntity);
-											}
-
-											bool minLimitActive = constraint.minRotationLimit <= 0.f;
-											if (ImGui::PropertyCheckbox("Lower limit active", minLimitActive))
-											{
-												constraint.minRotationLimit = -constraint.minRotationLimit;
-											}
-											if (minLimitActive)
-											{
-												float minLimit = -constraint.minRotationLimit;
-												ImGui::PropertySliderAngle("Lower limit", minLimit, 0.f, 180.f, "-%.0f deg");
-												constraint.minRotationLimit = -minLimit;
-											}
-
-											bool maxLimitActive = constraint.maxRotationLimit >= 0.f;
-											if (ImGui::PropertyCheckbox("Upper limit active", maxLimitActive))
-											{
-												constraint.maxRotationLimit = -constraint.maxRotationLimit;
-											}
-											if (maxLimitActive)
-											{
-												ImGui::PropertySliderAngle("Upper limit", constraint.maxRotationLimit, 0.f, 180.f);
-											}
-
-											bool motorActive = constraint.maxMotorTorque > 0.f;
-											if (ImGui::PropertyCheckbox("Motor active", motorActive))
-											{
-												constraint.maxMotorTorque = -constraint.maxMotorTorque;
-											}
-											if (motorActive)
-											{
-												ImGui::PropertyDropdown("Motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)constraint.motorType);
-
-												if (constraint.motorType == constraint_velocity_motor)
-												{
-													ImGui::PropertySliderAngle("Motor velocity", constraint.motorVelocity, -1000.f, 1000.f);
-												}
-												else
-												{
-													float lo = minLimitActive ? constraint.minRotationLimit : -M_PI;
-													float hi = maxLimitActive ? constraint.maxRotationLimit : M_PI;
-													ImGui::PropertySliderAngle("Motor target angle", constraint.motorTargetAngle, rad2deg(lo), rad2deg(hi));
-												}
-
-												ImGui::PropertySlider("Max motor torque", constraint.maxMotorTorque, 0.001f, 10000.f);
-											}
-											ImGui::EndProperties();
-										}
-									});
-								} break;
-
-								case constraint_type_cone_twist:
-								{
-									drawComponent<cone_twist_constraint>(constraintEntity, "Cone twist constraint", [this, constraintEntity = constraintEntity](cone_twist_constraint& constraint)
-									{
-										if (ImGui::BeginProperties())
-										{
-											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
-											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
-											{
-												setSelectedEntity(otherEntity);
-											}
-
-											bool swingLimitActive = constraint.swingLimit >= 0.f;
-											if (ImGui::PropertyCheckbox("Swing limit active", swingLimitActive))
-											{
-												constraint.swingLimit = -constraint.swingLimit;
-											}
-											if (swingLimitActive)
-											{
-												ImGui::PropertySliderAngle("Swing limit", constraint.swingLimit, 0.f, 180.f);
-											}
-
-											bool twistLimitActive = constraint.twistLimit >= 0.f;
-											if (ImGui::PropertyCheckbox("Twist limit active", twistLimitActive))
-											{
-												constraint.twistLimit = -constraint.twistLimit;
-											}
-											if (twistLimitActive)
-											{
-												ImGui::PropertySliderAngle("Twist limit", constraint.twistLimit, 0.f, 180.f);
-											}
-
-											bool twistMotorActive = constraint.maxTwistMotorTorque > 0.f;
-											if (ImGui::PropertyCheckbox("Twist motor active", twistMotorActive))
-											{
-												constraint.maxTwistMotorTorque = -constraint.maxTwistMotorTorque;
-											}
-											if (twistMotorActive)
-											{
-												ImGui::PropertyDropdown("Twist motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)constraint.twistMotorType);
-
-												if (constraint.twistMotorType == constraint_velocity_motor)
-												{
-													ImGui::PropertySliderAngle("Twist motor velocity", constraint.twistMotorVelocity, -360.f, 360.f);
-												}
-												else
-												{
-													float li = twistLimitActive ? constraint.twistLimit : -M_PI;
-													ImGui::PropertySliderAngle("Twist motor target angle", constraint.twistMotorTargetAngle, rad2deg(-li), rad2deg(li));
-												}
-
-												ImGui::PropertySlider("Max twist motor torque", constraint.maxTwistMotorTorque, 0.001f, 1000.f);
-											}
-
-											bool swingMotorActive = constraint.maxSwingMotorTorque > 0.f;
-											if (ImGui::PropertyCheckbox("Swing motor active", swingMotorActive))
-											{
-												constraint.maxSwingMotorTorque = -constraint.maxSwingMotorTorque;
-											}
-											if (swingMotorActive)
-											{
-												ImGui::PropertyDropdown("Swing motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)constraint.swingMotorType);
-
-												if (constraint.swingMotorType == constraint_velocity_motor)
-												{
-													ImGui::PropertySliderAngle("Swing motor velocity", constraint.swingMotorVelocity, -360.f, 360.f);
-												}
-												else
-												{
-													float li = swingLimitActive ? constraint.swingLimit : -M_PI;
-													ImGui::PropertySliderAngle("Swing motor target angle", constraint.swingMotorTargetAngle, rad2deg(-li), rad2deg(li));
-												}
-
-												ImGui::PropertySliderAngle("Swing motor axis angle", constraint.swingMotorAxis, -180.f, 180.f);
-												ImGui::PropertySlider("Max swing motor torque", constraint.maxSwingMotorTorque, 0.001f, 1000.f);
-											}
-											ImGui::EndProperties();
-										}
-									});
-								} break;
-
-								case constraint_type_slider:
-								{
-									drawComponent<slider_constraint>(constraintEntity, "Slider constraint", [this, constraintEntity = constraintEntity](slider_constraint& constraint)
-									{
-										if (ImGui::BeginProperties())
-										{
-											scene_entity otherEntity = getOtherEntity(constraintEntity.getComponent<constraint_entity_reference_component>(), selectedEntity);
-											if (ImGui::PropertyButton("Connected entity", ICON_FA_CUBE, otherEntity.getComponent<tag_component>().name))
-											{
-												setSelectedEntity(otherEntity);
-											}
-
-											bool minLimitActive = constraint.negDistanceLimit <= 0.f;
-											if (ImGui::PropertyCheckbox("Lower limit active", minLimitActive))
-											{
-												constraint.negDistanceLimit = -constraint.negDistanceLimit;
-											}
-											if (minLimitActive)
-											{
-												float minLimit = -constraint.negDistanceLimit;
-												ImGui::PropertySlider("Lower limit", minLimit, 0.f, 1000.f, "-%.3f");
-												constraint.negDistanceLimit = -minLimit;
-											}
-
-											bool maxLimitActive = constraint.posDistanceLimit >= 0.f;
-											if (ImGui::PropertyCheckbox("Upper limit active", maxLimitActive))
-											{
-												constraint.posDistanceLimit = -constraint.posDistanceLimit;
-											}
-											if (maxLimitActive)
-											{
-												ImGui::PropertySlider("Upper limit", constraint.posDistanceLimit, 0.f, 1000.f);
-											}
-
-											bool motorActive = constraint.maxMotorForce > 0.f;
-											if (ImGui::PropertyCheckbox("Motor active", motorActive))
-											{
-												constraint.maxMotorForce = -constraint.maxMotorForce;
-											}
-											if (motorActive)
-											{
-												ImGui::PropertyDropdown("Motor type", constraintMotorTypeNames, arraysize(constraintMotorTypeNames), (uint32&)constraint.motorType);
-
-												if (constraint.motorType == constraint_velocity_motor)
-												{
-													ImGui::PropertySlider("Motor velocity", constraint.motorVelocity, -10.f, 10.f);
-												}
-												else
-												{
-													float lo = minLimitActive ? constraint.negDistanceLimit : -100.f;
-													float hi = maxLimitActive ? constraint.posDistanceLimit : 100.f;
-													ImGui::PropertySlider("Motor target distance", constraint.motorTargetDistance, lo, hi);
-												}
-
-												ImGui::PropertySlider("Max motor force", constraint.maxMotorForce, 0.001f, 1000.f);
-											}
-											ImGui::EndProperties();
-										}
-									});
-								} break;
-							}
-
-							ImGui::PopID();
-						}
-					});
-
-					drawComponent<cloth_component>(selectedEntity, "CLOTH", [](cloth_component& cloth)
-					{
-						bool dirty = false;
-						if (ImGui::BeginProperties())
-						{
-							dirty |= ImGui::PropertyInput("Total mass", cloth.totalMass);
-							dirty |= ImGui::PropertySlider("Stiffness", cloth.stiffness, 0.01f, 0.7f);
-
-							// These two don't need to notify the cloth on change.
-							ImGui::PropertySlider("Velocity damping", cloth.damping, 0.f, 1.f);
-							ImGui::PropertySlider("Gravity factor", cloth.gravityFactor, 0.f, 1.f);
-
-							ImGui::EndProperties();
-						}
-
-						if (dirty)
-						{
-							cloth.recalculateProperties();
-						}
-					});
-
 					drawComponent<point_light_component>(selectedEntity, "POINT LIGHT", [](point_light_component& pl)
 					{
 						if (ImGui::BeginProperties())
@@ -1041,14 +628,6 @@ bool scene_editor::drawSceneHierarchy()
 							ImGui::EndProperties();
 						}
 					});
-
-					if (objectMovedByWidget)
-					{
-						if (cloth_component* cloth = selectedEntity.getComponentIfExists<cloth_component>())
-						{
-							cloth->setWorldPositionOfFixedVertices(selectedEntity.getComponent<transform_component>(), true);
-						}
-					}
 				}
 			}
 			ImGui::EndChild();
@@ -1136,10 +715,6 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 	{
 		if (transform_component* transform = selectedEntity.getComponentIfExists<transform_component>())
 		{
-			// Saved rigid-body properties. When an RB is dragged, we make it kinematic.
-			static bool saved = false;
-			static float invMass;
-
 			bool draggingBefore = gizmo.dragging;
 
 			if (gizmo.manipulateTransformation(*transform, scene->camera, input, !inputCaptured, ldrRenderPass))
@@ -1147,37 +722,12 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 				updateSelectedEntityUIRotation();
 				inputCaptured = true;
 				objectMovedByGizmo = true;
-
-				if (!saved && selectedEntity.hasComponent<rigid_body_component>())
-				{
-					rigid_body_component& rb = selectedEntity.getComponent<rigid_body_component>();
-					invMass = rb.invMass;
-
-					rb.invMass = 0.f;
-					rb.linearVelocity = 0.f;
-
-					saved = true;
-				}
-
-				if (cloth_component* cloth = selectedEntity.getComponentIfExists<cloth_component>())
-				{
-					cloth->setWorldPositionOfFixedVertices(*transform, input.keyboard[key_shift].down);
-				}
 			}
 			else
 			{
 				if (draggingBefore)
 				{
 					undoStack.pushAction("transform entity", transform_undo{ selectedEntity, gizmo.originalTransform, *transform });
-				}
-
-				if (saved)
-				{
-					assert(selectedEntity.hasComponent<rigid_body_component>());
-					rigid_body_component& rb = selectedEntity.getComponent<rigid_body_component>();
-
-					rb.invMass = invMass;
-					saved = false;
 				}
 			}
 		}
@@ -1283,12 +833,7 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 
 	if (!inputCaptured && input.mouse.left.clickEvent)
 	{
-		// Temporary.
-		if (input.keyboard[key_shift].down)
-		{
-			testPhysicsInteraction(*scene, scene->camera.generateWorldSpaceRay(input.mouse.relX, input.mouse.relY));
-		}
-		else if (input.keyboard[key_ctrl].down)
+		if (input.keyboard[key_ctrl].down)
 		{
 			vec3 dir = -scene->camera.generateWorldSpaceRay(input.mouse.relX, input.mouse.relY).direction;
 			undoStack.pushAction("sun direction", sun_direction_undo{ &scene->sun, scene->sun.direction, dir });
@@ -1349,33 +894,6 @@ void scene_editor::drawEntityCreationPopup()
 				);
 
 			setSelectedEntity(sl);
-			clicked = true;
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem("Cloth", "C") || ImGui::IsKeyPressed('C'))
-		{
-			auto cloth = scene->createEntity("Cloth")
-				.addComponent<transform_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f), scene->camera.rotation)
-				.addComponent<cloth_component>(10.f, 10.f, 20u, 20u, 8.f)
-				.addComponent<cloth_render_component>();
-
-			setSelectedEntity(cloth);
-			clicked = true;
-		}
-
-		if (ImGui::MenuItem("Humanoid ragdoll", "R") || ImGui::IsKeyPressed('R'))
-		{
-			auto ragdoll = humanoid_ragdoll::create(*scene, scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -3.f));
-			setSelectedEntity(ragdoll.torso);
-			clicked = true;
-		}
-
-		if (ImGui::MenuItem("Vehicle", "V") || ImGui::IsKeyPressed('V'))
-		{
-			auto vehicle = vehicle::create(*scene, scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -4.f));
-			setSelectedEntity(vehicle.motor);
 			clicked = true;
 		}
 
@@ -1730,35 +1248,6 @@ void scene_editor::drawSettings(float dt)
 			if (tracker->drawSettings() == tracker_ui_select_tracked_entity)
 			{
 				setSelectedEntity(tracker->trackedEntity);
-			}
-			ImGui::EndTree();
-		}
-
-		if (ImGui::BeginTree("Physics"))
-		{
-			if (ImGui::BeginProperties())
-			{
-				bool physicsPaused = physicsSettings.globalTimeScale < 0.f;
-				if (ImGui::PropertyCheckbox("Pause", physicsPaused))
-				{
-					physicsSettings.globalTimeScale *= -1.f;
-				}
-				if (physicsSettings.globalTimeScale >= 0.f)
-				{
-					ImGui::PropertySlider("Time scale", physicsSettings.globalTimeScale);
-				}
-
-				ImGui::PropertySlider("Rigid solver iterations", physicsSettings.numRigidSolverIterations, 1, 200);
-
-				ImGui::PropertySlider("Cloth velocity iterations", physicsSettings.numClothVelocityIterations, 0, 10);
-				ImGui::PropertySlider("Cloth position iterations", physicsSettings.numClothPositionIterations, 0, 10);
-				ImGui::PropertySlider("Cloth drift iterations", physicsSettings.numClothDriftIterations, 0, 10);
-
-				ImGui::PropertySlider("Test force", physicsSettings.testForce, 1.f, 10000.f);
-
-				ImGui::PropertyCheckbox("Use SIMD", physicsSettings.simd);
-
-				ImGui::EndProperties();
 			}
 			ImGui::EndTree();
 		}

@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "bounding_volumes.h"
-#include "collision_gjk.h"
 
 #include <unordered_map>
 
@@ -760,15 +759,6 @@ bool sphereVsOBB(const bounding_sphere& s, const bounding_oriented_box& o)
 	return sphereVsAABB(s_, aabb);
 }
 
-bool sphereVsHull(const bounding_sphere& s, const bounding_hull& h)
-{
-	sphere_support_fn sphereSupport{ s };
-	hull_support_fn hullSupport{ h };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(sphereSupport, hullSupport, gjkSimplex);
-}
-
 bool capsuleVsCapsule(const bounding_capsule& a, const bounding_capsule& b)
 {
 	vec3 closestPoint1, closestPoint2;
@@ -783,73 +773,6 @@ bool capsuleVsCylinder(const bounding_capsule& a, const bounding_cylinder& b)
 	return sphereVsCylinder(bounding_sphere{ closestPoint1, a.radius }, b);
 }
 
-bool capsuleVsAABB(const bounding_capsule& c, const bounding_box& b)
-{
-	capsule_support_fn capsuleSupport{ c };
-	aabb_support_fn boxSupport{ b };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(capsuleSupport, boxSupport, gjkSimplex);
-}
-
-bool capsuleVsOBB(const bounding_capsule& c, const bounding_oriented_box& o)
-{
-	bounding_box aabb = bounding_box::fromCenterRadius(o.center, o.radius);
-	bounding_capsule c_ = {
-		conjugate(o.rotation) * (c.positionA - o.center) + o.center,
-		conjugate(o.rotation) * (c.positionB - o.center) + o.center,
-		c.radius };
-
-	return capsuleVsAABB(c_, aabb);
-}
-
-bool capsuleVsHull(const bounding_capsule& c, const bounding_hull& h)
-{
-	capsule_support_fn capsuleSupport{ c };
-	hull_support_fn hullSupport{ h };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(capsuleSupport, hullSupport, gjkSimplex);
-}
-
-bool cylinderVsCylinder(const bounding_cylinder& a, const bounding_cylinder& b)
-{
-	cylinder_support_fn cylinderSupportA{ a };
-	cylinder_support_fn cylinderSupportB{ b };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(cylinderSupportA, cylinderSupportB, gjkSimplex);
-}
-
-bool cylinderVsAABB(const bounding_cylinder& c, const bounding_box& b)
-{
-	cylinder_support_fn cylinderSupport{ c };
-	aabb_support_fn boxSupport{ b };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(cylinderSupport, boxSupport, gjkSimplex);
-}
-
-bool cylinderVsOBB(const bounding_cylinder& c, const bounding_oriented_box& o)
-{
-	bounding_box aabb = bounding_box::fromCenterRadius(o.center, o.radius);
-	bounding_cylinder c_ = {
-		conjugate(o.rotation) * (c.positionA - o.center) + o.center,
-		conjugate(o.rotation) * (c.positionB - o.center) + o.center,
-		c.radius };
-
-	return cylinderVsAABB(c_, aabb);
-}
-
-bool cylinderVsHull(const bounding_cylinder& c, const bounding_hull& h)
-{
-	cylinder_support_fn cylinderSupport{ c };
-	hull_support_fn hullSupport{ h };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(cylinderSupport, hullSupport, gjkSimplex);
-}
-
 bool aabbVsAABB(const bounding_box& a, const bounding_box& b)
 {
 	if (a.maxCorner.x < b.minCorner.x || a.minCorner.x > b.maxCorner.x) return false;
@@ -861,15 +784,6 @@ bool aabbVsAABB(const bounding_box& a, const bounding_box& b)
 bool aabbVsOBB(const bounding_box& a, const bounding_oriented_box& o)
 {
 	return obbVsOBB(bounding_oriented_box{ a.getCenter(), a.getRadius(), quat::identity }, o);
-}
-
-bool aabbVsHull(const bounding_box& a, const bounding_hull& h)
-{
-	aabb_support_fn aabbSupport{ a };
-	hull_support_fn hullSupport{ h };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(aabbSupport, hullSupport, gjkSimplex);
 }
 
 bool obbVsOBB(const bounding_oriented_box& a, const bounding_oriented_box& b)
@@ -992,24 +906,6 @@ bool obbVsOBB(const bounding_oriented_box& a, const bounding_oriented_box& b)
 	if (penetration < 0.f) { return false; }
 
 	return true;
-}
-
-bool obbVsHull(const bounding_oriented_box& o, const bounding_hull& h)
-{
-	obb_support_fn obbSupport{ o };
-	hull_support_fn hullSupport{ h };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(obbSupport, hullSupport, gjkSimplex);
-}
-
-bool hullVsHull(const bounding_hull& a, const bounding_hull& b)
-{
-	hull_support_fn hullSupport1{ a };
-	hull_support_fn hullSupport2{ b };
-
-	gjk_simplex gjkSimplex;
-	return gjkIntersectionTest(hullSupport1, hullSupport2, gjkSimplex);
 }
 
 

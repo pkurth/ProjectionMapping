@@ -7,8 +7,6 @@
 #include "core/log.h"
 #include "dx/dx_context.h"
 #include "dx/dx_profiling.h"
-#include "physics/physics.h"
-#include "physics/ragdoll.h"
 #include "core/threading.h"
 #include "rendering/mesh_shader.h"
 #include "rendering/shadow_map.h"
@@ -250,8 +248,6 @@ void application::update(const user_input& input, float dt)
 	bool objectDragged = editor.update(input, &ldrRenderPass, dt);
 
 	scene_entity selectedEntity = editor.selectedEntity;
-
-	physicsStep(scene, stackArena, dt);
 
 
 	scene.sun.updateMatrices(scene.camera);

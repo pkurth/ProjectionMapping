@@ -5,8 +5,6 @@
 #include "core/yaml.h"
 #include "core/log.h"
 
-#include "physics/physics.h"
-
 #include "projection_mapping/projector.h"
 
 
@@ -201,88 +199,6 @@ static YAML::Emitter& operator<<(YAML::Emitter& out, const spot_light_component&
 		<< YAML::Key << "Casts shadow" << YAML::Value << c.castsShadow
 		<< YAML::Key << "Shadow resolution" << YAML::Value << c.shadowMapResolution
 		<< YAML::EndMap;
-	return out;
-}
-
-static YAML::Emitter& operator<<(YAML::Emitter& out, const rigid_body_component& c)
-{
-	out << YAML::BeginMap
-		<< YAML::Key << "Local COG" << YAML::Value << c.localCOGPosition
-		<< YAML::Key << "Inv mass" << YAML::Value << c.invMass
-		<< YAML::Key << "Inv inertia" << YAML::Value << c.invInertia
-		<< YAML::Key << "Gravity factor" << YAML::Value << c.gravityFactor
-		<< YAML::Key << "Linear damping" << YAML::Value << c.linearDamping
-		<< YAML::Key << "Angular damping" << YAML::Value << c.angularDamping
-		<< YAML::EndMap;
-	return out;
-}
-
-static YAML::Emitter& operator<<(YAML::Emitter& out, const force_field_component& c)
-{
-	out << YAML::BeginMap
-		<< YAML::Key << "Force" << YAML::Value << c.force
-		<< YAML::EndMap;
-	return out;
-}
-
-static YAML::Emitter& operator<<(YAML::Emitter& out, const collider_component& c)
-{
-	out << YAML::BeginMap
-		<< YAML::Key << "Type" << YAML::Value << colliderTypeNames[c.type];
-
-	switch (c.type)
-	{
-		case collider_type_sphere:
-		{
-			out << YAML::Key << "Center" << YAML::Value << c.sphere.center
-				<< YAML::Key << "Radius" << YAML::Value << c.sphere.radius;
-		} break;
-
-		case collider_type_capsule:
-		{
-			out << YAML::Key << "Position A" << YAML::Value << c.capsule.positionA
-				<< YAML::Key << "Position B" << YAML::Value << c.capsule.positionB
-				<< YAML::Key << "Radius" << YAML::Value << c.capsule.radius;
-		} break;
-
-		case collider_type_aabb:
-		{
-			out << YAML::Key << "Min corner" << YAML::Value << c.aabb.minCorner
-				<< YAML::Key << "Max corner" << YAML::Value << c.aabb.maxCorner;
-		} break;
-
-		case collider_type_obb:
-		{
-			out << YAML::Key << "Center" << YAML::Value << c.obb.center
-				<< YAML::Key << "Radius" << YAML::Value << c.obb.radius
-				<< YAML::Key << "Rotation" << YAML::Value << c.obb.rotation;
-		} break;
-
-		case collider_type_hull:
-		{
-		} break;
-	}
-
-	out << YAML::Key << "Restitution" << YAML::Value << c.properties.restitution
-		<< YAML::Key << "Friction" << YAML::Value << c.properties.friction
-		<< YAML::Key << "Density" << YAML::Value << c.properties.density
-		<< YAML::EndMap;
-	return out;
-}
-
-static YAML::Emitter& operator<<(YAML::Emitter& out, const cloth_component& c)
-{
-	out << YAML::BeginMap
-		<< YAML::Key << "Width" << YAML::Value << c.width
-		<< YAML::Key << "Height" << YAML::Value << c.height
-		<< YAML::Key << "Grid size x" << YAML::Value << c.gridSizeX
-		<< YAML::Key << "Grid size y" << YAML::Value << c.gridSizeY
-		<< YAML::Key << "Total mass" << YAML::Value << c.totalMass
-		<< YAML::Key << "Stiffness" << YAML::Value << c.stiffness
-		<< YAML::Key << "Damping" << YAML::Value << c.damping
-		<< YAML::Key << "Gravity factor" << YAML::Value << c.gravityFactor
-		<< YAML::EndMap;
-
 	return out;
 }
 
@@ -582,139 +498,6 @@ namespace YAML
 	};
 
 	template<>
-	struct convert<rigid_body_component>
-	{
-		static bool decode(const Node& n, rigid_body_component& c)
-		{
-			if (!n.IsMap()) { return false; }
-
-			YAML_LOAD(n, c.localCOGPosition, "Local COG");
-			YAML_LOAD(n, c.invMass, "Inv mass");
-			YAML_LOAD(n, c.invInertia, "Inv inertia");
-			YAML_LOAD(n, c.gravityFactor, "Gravity factor");
-			YAML_LOAD(n, c.linearDamping, "Linear damping");
-			YAML_LOAD(n, c.angularDamping, "Angular damping");
-
-			return true;
-		}
-	};
-
-	template<>
-	struct convert<force_field_component>
-	{
-		static bool decode(const Node& n, force_field_component& c)
-		{
-			if (!n.IsMap()) { return false; }
-
-			YAML_LOAD(n, c.force, "Force");
-
-			return true;
-		}
-	};
-
-	template<>
-	struct convert<collider_component>
-	{
-		static bool decode(const Node& n, collider_component& c)
-		{
-			if (!n.IsMap())
-			{
-				return false;
-			}
-
-			std::string typeString;
-			YAML_LOAD(n, typeString, "Type");
-			for (uint32 i = 0; i < collider_type_count; ++i)
-			{
-				if (typeString == colliderTypeNames[i])
-				{
-					c.type = (collider_type)i;
-					break;
-				}
-			}
-			float restitution, friction, density;
-			YAML_LOAD(n, restitution, "Restitution");
-			YAML_LOAD(n, friction, "Friction");
-			YAML_LOAD(n, density, "Density");
-
-			switch (c.type)
-			{
-				case collider_type_sphere:
-				{
-					vec3 center;
-					float radius;
-					YAML_LOAD(n, center, "Center");
-					YAML_LOAD(n, radius, "Radius");
-					c = collider_component::asSphere({ center, radius }, restitution, friction, density);
-				} break;
-
-				case collider_type_capsule:
-				{
-					vec3 positionA, positionB;
-					float radius;
-					YAML_LOAD(n, positionA, "Position A");
-					YAML_LOAD(n, positionB, "Position B");
-					YAML_LOAD(n, radius, "Radius");
-					c = collider_component::asCapsule({ positionA, positionB, radius }, restitution, friction, density);
-				} break;
-
-				case collider_type_aabb:
-				{
-					vec3 minCorner, maxCorner;
-					YAML_LOAD(n, minCorner, "Min corner");
-					YAML_LOAD(n, maxCorner, "Max corner");
-					c = collider_component::asAABB(bounding_box::fromMinMax(minCorner, maxCorner), restitution, friction, density);
-				} break;
-
-				case collider_type_obb:
-				{
-					vec3 center, radius;
-					quat rotation;
-					YAML_LOAD(n, center, "Center");
-					YAML_LOAD(n, radius, "Radius");
-					YAML_LOAD(n, rotation, "Rotation");
-
-					c = collider_component::asOBB({ center, radius, rotation }, restitution, friction, density);
-				} break;
-
-				case collider_type_hull:
-				{
-					return false;
-				} break;
-
-				default: assert(false); break;
-			}
-
-			return true;
-		}
-	};
-
-	template<>
-	struct convert<cloth_component>
-	{
-		static bool decode(const Node& n, cloth_component& c)
-		{
-			if (!n.IsMap()) { return false; }
-
-			uint32 gridSizeX, gridSizeY;
-			float width, height, totalMass, stiffness, damping, gravityFactor;
-
-			YAML_LOAD(n, width, "Width");
-			YAML_LOAD(n, height, "Height");
-			YAML_LOAD(n, gridSizeX, "Grid size x");
-			YAML_LOAD(n, gridSizeY, "Grid size y");
-			YAML_LOAD(n, totalMass, "Total mass");
-			YAML_LOAD(n, stiffness, "Stiffness");
-			YAML_LOAD(n, damping, "Damping");
-			YAML_LOAD(n, gravityFactor, "Gravity factor");
-
-			c = cloth_component(width, height, gridSizeX, gridSizeY, totalMass, stiffness, damping, gravityFactor);
-
-			return true;
-		}
-	};
-
-	template<>
 	struct convert<raster_component>
 	{
 		static bool decode(const Node& n, raster_component& c)
@@ -818,23 +601,7 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 			if (entity.hasComponent<dynamic_transform_component>()) { out << YAML::Key << "Dynamic" << YAML::Value << true; }
 			if (auto* c = entity.getComponentIfExists<point_light_component>()) { out << YAML::Key << "Point light" << YAML::Value << *c; }
 			if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<rigid_body_component>()) { out << YAML::Key << "Rigid body" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<force_field_component>()) { out << YAML::Key << "Force field" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<cloth_component>()) { out << YAML::Key << "Cloth" << YAML::Value << *c; }
 			if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<physics_reference_component>()) 
-			{ 
-				if (c->numColliders)
-				{
-					out << YAML::Key << "Colliders" << YAML::Value;
-					out << YAML::BeginSeq;
-					for (collider_component& collider : collider_component_iterator(entity))
-					{
-						out << collider;
-					}
-					out << YAML::EndSeq;
-				}
-			}
 			if (auto* c = entity.getComponentIfExists<projector_component>()) { out << YAML::Key << "Projector" << YAML::Value << *c; }
 
 			if (tracker->trackedEntity == entity)
@@ -907,18 +674,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 		if (entityNode["Dynamic"]) { entity.addComponent<dynamic_transform_component>(); }
 		LOAD_COMPONENT(point_light_component, "Point light");
 		LOAD_COMPONENT(spot_light_component, "Spot light");
-		LOAD_COMPONENT(rigid_body_component, "Rigid body");
-		LOAD_COMPONENT(force_field_component, "Force field");
-		LOAD_COMPONENT(cloth_component, "Cloth");
 		LOAD_COMPONENT(raster_component, "Raster");
-
-		if (auto collidersNode = entityNode["Colliders"])
-		{
-			for (uint32 i = 0; i < collidersNode.size(); ++i)
-			{
-				entity.addComponent<collider_component>(collidersNode[i].as<collider_component>());
-			}
-		}
 
 		if (entityNode["Tracking"])
 		{

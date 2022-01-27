@@ -1,14 +1,9 @@
 #include "pch.h"
 #include "scene.h"
-#include "physics/physics.h"
-#include "physics/collision_broad.h"
 
 game_scene::game_scene()
 {
 	// Construct groups early. Ingore the return types.
-	(void)registry.group<collider_component, sap_endpoint_indirection_component>(); // Colliders and SAP endpoints are always sorted in the same order.
-	(void)registry.group<transform_component, dynamic_transform_component, rigid_body_component>();
-	(void)registry.group<transform_component, rigid_body_component>();
 
 #ifndef PHYSICS_ONLY
 	(void)registry.group<position_component, point_light_component>();
@@ -18,10 +13,6 @@ game_scene::game_scene()
 
 void game_scene::clearAll()
 {
-	void clearBroadphase(game_scene & scene);
-	clearBroadphase(*this);
-
-	deleteAllConstraints(*this);
 	registry.clear();
 }
 
@@ -42,21 +33,11 @@ scene_entity game_scene::copyEntity(scene_entity src)
 	if (auto* c = src.getComponentIfExists<spot_light_component>()) { dest.addComponent<spot_light_component>(*c); }
 #endif
 
-	for (collider_component& collider : collider_component_iterator(src))
-	{
-		dest.addComponent<collider_component>(collider);
-	}
-
-	if (auto* c = src.getComponentIfExists<rigid_body_component>()) { dest.addComponent<rigid_body_component>(*c); }
-	if (auto* c = src.getComponentIfExists<force_field_component>()) { dest.addComponent<force_field_component>(*c); }
-	if (auto* c = src.getComponentIfExists<cloth_component>()) { dest.addComponent<cloth_component>(*c); }
-
 	/*
 	TODO:
 		- Animation
 		- Raster
 		- Raytrace
-		- Constraints
 	*/
 
 	return dest;
@@ -64,25 +45,5 @@ scene_entity game_scene::copyEntity(scene_entity src)
 
 void game_scene::deleteEntity(scene_entity e)
 {
-	void removeColliderFromBroadphase(scene_entity entity);
-
-	if (physics_reference_component* reference = e.getComponentIfExists<physics_reference_component>())
-	{
-		scene_entity colliderEntity = { reference->firstColliderEntity, &registry };
-		while (colliderEntity)
-		{
-			collider_component& collider = colliderEntity.getComponent<collider_component>();
-			entt::entity next = collider.nextEntity;
-
-			removeColliderFromBroadphase(colliderEntity);
-		
-			registry.destroy(colliderEntity.handle);
-		
-			colliderEntity = { next, &registry };
-		}
-
-		deleteAllConstraintsFromEntity(e);
-	}
-
 	registry.destroy(e.handle);
 }

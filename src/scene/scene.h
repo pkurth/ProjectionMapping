@@ -25,68 +25,7 @@ struct scene_entity
 	template <typename component_t, typename... args>
 	scene_entity& addComponent(args&&... a)
 	{
-		if constexpr (std::is_same_v<component_t, struct collider_component>)
-		{
-			void addColliderToBroadphase(scene_entity entity);
-
-			if (!hasComponent<physics_reference_component>())
-			{
-				addComponent<physics_reference_component>();
-			}
-
-			physics_reference_component& reference = getComponent<physics_reference_component>();
-			++reference.numColliders;
-
-			entt::entity child = registry->create();
-			collider_component& collider = registry->emplace<collider_component>(child, std::forward<args>(a)...);
-			addColliderToBroadphase(scene_entity(child, registry));
-
-			collider.parentEntity = handle;
-			collider.nextEntity = reference.firstColliderEntity;
-			reference.firstColliderEntity = child;
-
-
-			if (rigid_body_component* rb = getComponentIfExists<rigid_body_component>())
-			{
-				rb->recalculateProperties(registry, reference);
-			}
-		}
-		else
-		{
-			auto& component = registry->emplace_or_replace<component_t>(handle, std::forward<args>(a)...);
-
-			// If component is rigid body, calculate properties.
-			if constexpr (std::is_same_v<component_t, struct rigid_body_component>)
-			{
-				if (physics_reference_component* ref = getComponentIfExists<physics_reference_component>())
-				{
-					component.recalculateProperties(registry, *ref);
-				}
-				if (!hasComponent<dynamic_transform_component>())
-				{
-					addComponent<dynamic_transform_component>();
-				}
-			}
-
-
-			// If component is cloth, transform to correct position.
-			if constexpr (std::is_same_v<component_t, struct cloth_component>)
-			{
-				if (transform_component* transform = getComponentIfExists<transform_component>())
-				{
-					component.setWorldPositionOfFixedVertices(*transform, true);
-				}
-			}
-
-			if constexpr (std::is_same_v<component_t, struct transform_component>)
-			{
-				if (cloth_component* cloth = getComponentIfExists<cloth_component>())
-				{
-					cloth->setWorldPositionOfFixedVertices(component, true);
-				}
-			}
-		}
-
+		auto& component = registry->emplace_or_replace<component_t>(handle, std::forward<args>(a)...);
 		return *this;
 	}
 
