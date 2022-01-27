@@ -10,7 +10,7 @@ bool logWindowOpen = false;
 struct log_message
 {
 	const char* text;
-	message_type type;
+	log_message_type type;
 	float lifetime;
 	const char* file;
 	const char* function;
@@ -27,7 +27,7 @@ static const ImVec4 colorPerType[] =
 static memory_arena arena;
 static std::vector<log_message> messages;
 
-void logMessageInternal(message_type type, const char* file, const char* function, uint32 line, const char* format, ...)
+void logMessageInternal(log_message_type type, const char* file, const char* function, uint32 line, const char* format, ...)
 {
 	arena.ensureFreeSize(1024);
 
