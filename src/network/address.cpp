@@ -34,5 +34,9 @@ bool network_address::initialize(const char* ip, uint32 port)
 
 bool operator==(const network_address& a, const network_address& b)
 {
-	return memcmp(&a.addr, &b.addr, sizeof(a.addr)) == 0;
+#if NETWORK_FAMILY == AF_INET
+	return (a.addr.sin_port == b.addr.sin_port) && (memcmp(&a.addr.sin_addr, &b.addr.sin_addr, sizeof(a.addr.sin_addr)) == 0);
+#else
+	return (a.addr.sin6_port == b.addr.sin6_port) && (memcmp(&a.addr.sin6_addr, &b.addr.sin6_addr, sizeof(a.addr.sin6_addr)) == 0);
+#endif
 }

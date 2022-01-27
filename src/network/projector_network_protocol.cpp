@@ -154,7 +154,7 @@ namespace server
 
 	}
 
-	static void callback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
+	static void messageCallback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
 	{
 		if (size < sizeof(message_header))
 		{
@@ -350,7 +350,7 @@ bool startProjectorNetworkProtocol(game_scene& scene, bool isServer)
 
 	if (isServer)
 	{
-		result = startNetworkServer(SERVER_PORT, server::callback);
+		result = startNetworkServer(SERVER_PORT, server::messageCallback);
 		getLocalIPAddress(SERVER_IP);
 	}
 	else

@@ -12,8 +12,8 @@ static network_address serverAddress;
 
 bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_message_callback& messageCallback, const client_close_callback& closeCallback)
 {
-    network_address address;
-    if (!address.initialize(serverIP, serverPort))
+    network_address serverAddress;
+    if (!serverAddress.initialize(serverIP, serverPort))
     {
         return false;
     }
@@ -23,6 +23,13 @@ bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_me
     {
         return false;
     }
+
+	char clientAddress[128];
+	if (!getLocalIPAddress(clientAddress))
+	{
+		socket.close();
+		return false;
+	}
 
 
 	std::thread thread([messageCallback, closeCallback]()
@@ -45,7 +52,7 @@ bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_me
 
 			if (bytesReceived != 0)
 			{
-				if (address == serverAddress)
+				if (address == ::serverAddress)
 				{
 					if (messageCallback)
 					{
@@ -59,9 +66,9 @@ bool startNetworkClient(const char* serverIP, uint32 serverPort, const client_me
 	});
 	thread.detach();
 
-	LOG_MESSAGE("Client created");
+	LOG_MESSAGE("Client created, IP: %s", clientAddress);
 
-    serverAddress = address;
+    ::serverAddress = serverAddress;
     clientSocket = socket;
 
     return true;

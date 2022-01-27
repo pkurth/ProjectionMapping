@@ -3,6 +3,7 @@
 #include "network.h"
 
 #include <winsock2.h>
+#include <ws2tcpip.h>
 
 struct network_address
 {
