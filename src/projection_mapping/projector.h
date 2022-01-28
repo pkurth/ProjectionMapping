@@ -1,53 +1,84 @@
 #pragma once
 
 #include "core/camera.h"
+#include "core/log.h"
 #include "window/dx_window.h"
 #include "projector_renderer.h"
 
+
+struct projector_calibration
+{
+	quat rotation;
+	vec3 position;
+
+	uint32 width, height;
+
+	camera_intrinsics intrinsics;
+};
+
+struct projector_context
+{
+	std::unordered_map<std::string, projector_calibration> knownProjectorCalibrations; // Maps monitor IDs to projector descriptions.
+};
 
 struct projector_component
 {
 	projector_component() { }
 
-	projector_component(const render_camera& camera, int32 computerID, const std::string& monitorID, bool fullscreen)
+	projector_component(const render_camera& camera, const std::string& monitorID, bool local, bool fullscreen)
 	{
-		initialize(camera, computerID, monitorID, fullscreen);
+		initialize(camera, monitorID, local, fullscreen);
 	}
 
-	void initialize(const render_camera& camera, int32 computerID, const std::string& monitorID, bool fullscreen)
+	void initialize(const render_camera& camera, const std::string& monitorID, bool local, bool fullscreen)
 	{
 		shutdown();
 
-		this->computerID = computerID;
 		this->monitorID = monitorID;
-
 		calibratedCamera = camera;
 
-		if (!headless())
+		if (local)
 		{
-			window.initialize(TEXT("Projector"), camera.width, camera.height, color_depth_8, false, true);
-
-			bool movedToCorrectMonitor = false;
-			for (auto& monitor : win32_window::allConnectedMonitors)
+			bool monitorFound = false;
+			monitor_info monitor;
+			for (auto& m : win32_window::allConnectedMonitors)
 			{
-				if (monitor.uniqueID == monitorID)
+				if (m.uniqueID == monitorID)
 				{
-					window.moveToMonitor(monitor);
-					movedToCorrectMonitor = true;
+					monitor = m;
+					monitorFound = true;
 					break;
 				}
 			}
 
-			if (movedToCorrectMonitor)
+			window.initialize(TEXT("Projector"), camera.width, camera.height, color_depth_8, false, true);
+
+			headless = false;
+
+			if (monitorFound)
 			{
+				window.moveToMonitor(monitor);
 				if (fullscreen)
 				{
 					window.toggleFullscreen();
 				}
+
+				frustumColor = vec4(0.f, 1.f, 0.f, 1.f);
+				LOG_MESSAGE("Created projector on monitor '%s'", monitorID.c_str());
+			}
+			else
+			{
+				frustumColor = vec4(1.f, 0.f, 0.f, 1.f);
+				LOG_WARNING("Monitor '%s' was not found. Projector window could not be moved", monitorID.c_str());
 			}
 		}
+		else
+		{
+			headless = true;
+			frustumColor = vec4(1.f, 1.f, 0.f, 1.f);
 
-		frustumColor = frustumColors[computerID + 1]; // Computer ID is -1 based.
+			LOG_MESSAGE("Created headless (remote) projector");
+		}
 
 		renderer.initialize(color_depth_8, camera.width, camera.height);
 	}
@@ -67,13 +98,10 @@ struct projector_component
 		shutdown();
 	}
 
-	inline bool headless() { return computerID != myComputerID; }
-	inline bool shouldPresent() { return !headless() && window.open && window.clientWidth > 0 && window.clientHeight > 0; }
+	inline bool shouldPresent() { return !headless && window.open && window.clientWidth > 0 && window.clientHeight > 0; }
 
-	static inline int32 myComputerID = -1; // Server is -1;
-
-	int32 computerID;
 	std::string monitorID;
+	bool headless;
 
 	projector_renderer renderer;
 	dx_window window;

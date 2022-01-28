@@ -11,6 +11,7 @@
 projector_manager::projector_manager(game_scene& scene)
 {
 	this->scene = &scene;
+	getMyProjectors();
 	solver.initialize();
 }
 
@@ -71,6 +72,32 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySlider("Reference distance", solver.settings.referenceDistance, 0.f, 5.f);
 
 			ImGui::EndProperties();
+		}
+
+		if (ImGui::BeginTree("Context"))
+		{
+			if (ImGui::BeginProperties())
+			{
+				ImGui::PropertyValue("Known projector calibrations", "");
+				ImGui::PropertySeparator();
+				for (auto& c : context.knownProjectorCalibrations)
+				{
+					ImGui::PropertyValue("Monitor", c.first.c_str());
+
+					const auto& p = c.second;
+					ImGui::PropertyValue("Position", p.position);
+					ImGui::PropertyValue("Rotation", p.rotation);
+					ImGui::PropertyValue("Width", p.width);
+					ImGui::PropertyValue("Height", p.height);
+					ImGui::PropertyValue("Intrinsics", *(vec4*)&p.intrinsics);
+
+					ImGui::PropertySeparator();
+				}
+
+				ImGui::EndProperties();
+			}
+
+			ImGui::EndTree();
 		}
 
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
@@ -196,6 +223,58 @@ void projector_manager::updateAndRender(float dt)
 
 void projector_manager::onSceneLoad()
 {
+	getMyProjectors();
+
 	notifyProjectorNetworkOnSceneLoad();
+	createProjectors();
+}
+
+void projector_manager::getMyProjectors()
+{
+	myProjectors.clear();
+	const auto& monitors = win32_window::allConnectedMonitors;
+
+	for (const auto& m : monitors)
+	{
+		const std::string& uniqueID = m.uniqueID;
+		if (context.knownProjectorCalibrations.find(uniqueID) != context.knownProjectorCalibrations.end())
+		{
+			myProjectors.insert({ uniqueID });
+		}
+	}
+}
+
+void projector_manager::createProjectors()
+{
+	for (auto& monitorID : myProjectors)
+	{
+		createProjector(monitorID, true);
+	}
+
+	for (auto& monitorID : remoteProjectors)
+	{
+		createProjector(monitorID, false);
+	}
+}
+
+void projector_manager::createProjector(const std::string& monitorID, bool local)
+{
+	auto it = context.knownProjectorCalibrations.find(monitorID);
+	assert(it != context.knownProjectorCalibrations.end());
+
+	const auto& p = it->second;
+
+	vec3 position = p.position;
+	quat rotation = p.rotation;
+
+	//pos = setupRotation * pos;
+	//rotation = setupRotation * rotation;
+
+	render_camera projCamera;
+	projCamera.initializeCalibrated(position, rotation, p.width, p.height, p.intrinsics, 0.01f);
+
+	scene->createEntity("Projector")
+		.addComponent<position_rotation_component>(position, rotation)
+		.addComponent<projector_component>(projCamera, monitorID, local, true);
 }
 

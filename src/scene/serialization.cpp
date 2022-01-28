@@ -5,8 +5,6 @@
 #include "core/yaml.h"
 #include "core/log.h"
 
-#include "projection_mapping/projector.h"
-
 
 static YAML::Emitter& operator<<(YAML::Emitter& out, const render_camera& camera)
 {
@@ -214,14 +212,29 @@ static YAML::Emitter& operator<<(YAML::Emitter& out, const raster_component& c)
 	return out;
 }
 
-static YAML::Emitter& operator<<(YAML::Emitter& out, const projector_component& c)
+static YAML::Emitter& operator<<(YAML::Emitter& out, const projector_context& c)
 {
-	auto& monitor = win32_window::allConnectedMonitors[c.window.monitorIndex];
-
 	out << YAML::BeginMap
-		<< YAML::Key << "Camera" << YAML::Value << c.calibratedCamera
-		<< YAML::Key << "Monitor" << YAML::Value << monitor.uniqueID
-		<< YAML::Key << "Fullscreen" << YAML::Value << c.window.fullscreen
+		<< YAML::Key << "Projector calibrations" << YAML::Value << YAML::BeginSeq;
+
+	for (auto it : c.knownProjectorCalibrations)
+	{
+		auto& c = it.second;
+
+		out << YAML::BeginMap
+			<< YAML::Key << "Monitor" << YAML::Value << it.first
+			<< YAML::Key << "Rotation" << YAML::Value << c.rotation
+			<< YAML::Key << "Position" << YAML::Value << c.position
+			<< YAML::Key << "Width" << YAML::Value << c.width
+			<< YAML::Key << "Height" << YAML::Value << c.height
+			<< YAML::Key << "Fx" << YAML::Value << c.intrinsics.fx
+			<< YAML::Key << "Fy" << YAML::Value << c.intrinsics.fy
+			<< YAML::Key << "Cx" << YAML::Value << c.intrinsics.cx
+			<< YAML::Key << "Cy" << YAML::Value << c.intrinsics.cy
+			<< YAML::EndMap;
+	}
+
+	out << YAML::EndSeq
 		<< YAML::EndMap;
 
 	return out;
@@ -520,32 +533,39 @@ namespace YAML
 	};
 
 	template<>
-	struct convert<projector_component>
+	struct convert<projector_context>
 	{
-		static bool decode(const Node& n, projector_component& c)
+		static bool decode(const Node& n, projector_context& c)
 		{
 			if (!n.IsMap()) { return false; }
 
-			int32 computerID = -1;
-			YAML_LOAD(n, computerID, "Computer");
+			if (Node projectorsNode = n["Projector calibrations"])
+			{
+				for (Node proj : projectorsNode)
+				{
+					std::string monitor;
+					projector_calibration desc;
+					
+					YAML_LOAD(proj, monitor, "Monitor");
+					YAML_LOAD(proj, desc.rotation, "Rotation");
+					YAML_LOAD(proj, desc.position, "Position");
+					YAML_LOAD(proj, desc.width, "Width");
+					YAML_LOAD(proj, desc.height, "Height");
+					YAML_LOAD(proj, desc.intrinsics.fx, "Fx");
+					YAML_LOAD(proj, desc.intrinsics.fy, "Fy");
+					YAML_LOAD(proj, desc.intrinsics.cx, "Cx");
+					YAML_LOAD(proj, desc.intrinsics.cy, "Cy");
 
-			std::string monitorID;
-			YAML_LOAD(n, monitorID, "Monitor");
-
-			render_camera camera;
-			YAML_LOAD(n, camera, "Camera");
-
-			bool fullscreen = false;
-			YAML_LOAD(n, fullscreen, "Fullscreen");
-
-			c.initialize(camera, computerID, monitorID, fullscreen);
-
+					c.knownProjectorCalibrations.insert({ monitor, desc });
+				}
+			}
+			
 			return true;
 		}
 	};
 }
 
-void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSettings, depth_tracker* tracker)
+void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSettings, depth_tracker* tracker, projector_context* projectorContext)
 {
 	if (scene.savePath.empty())
 	{
@@ -570,6 +590,8 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 	out << YAML::Key << "Tracker position" << YAML::Value << tracker->globalCameraPosition
 		<< YAML::Key << "Tracker rotation" << YAML::Value << tracker->globalCameraRotation;
 
+	out << YAML::Key << "Projector context" << YAML::Value << *projectorContext;
+
 	out << YAML::Key << "Entities"
 		<< YAML::Value
 		<< YAML::BeginSeq;
@@ -579,36 +601,31 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 	{
 		scene_entity entity = { entityID, scene };
 
-		// Only entities with tags are valid top level entities. All others are helpers like colliders and constraints.
-		if (tag_component* tag = entity.getComponentIfExists<tag_component>())
+		if (!entity.hasComponent<projector_component>()) // For now we don't serialize projectors.
 		{
-			out << YAML::BeginMap;
-
-			out << YAML::Key << "Tag" << YAML::Value << tag->name;
-
-			if (auto* c = entity.getComponentIfExists<transform_component>()) { out << YAML::Key << "Transform" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<position_component>()) { out << YAML::Key << "Position" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<position_rotation_component>()) { out << YAML::Key << "Position/Rotation" << YAML::Value << *c; }
-			if (entity.hasComponent<dynamic_transform_component>()) { out << YAML::Key << "Dynamic" << YAML::Value << true; }
-			if (auto* c = entity.getComponentIfExists<point_light_component>()) { out << YAML::Key << "Point light" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
-			if (auto* c = entity.getComponentIfExists<projector_component>()) { out << YAML::Key << "Projector" << YAML::Value << *c; }
-
-			if (tracker->trackedEntity == entity)
+			if (tag_component* tag = entity.getComponentIfExists<tag_component>())
 			{
-				out << YAML::Key << "Tracking" << YAML::Value << true;
-			}
+				out << YAML::BeginMap;
 
-			/* 
-			TODO:
-				- Animation
-				- Raytrace
-				- Constraints
-			*/
-			out << YAML::EndMap;
+				out << YAML::Key << "Tag" << YAML::Value << tag->name;
+
+				if (auto* c = entity.getComponentIfExists<transform_component>()) { out << YAML::Key << "Transform" << YAML::Value << *c; }
+				if (auto* c = entity.getComponentIfExists<position_component>()) { out << YAML::Key << "Position" << YAML::Value << *c; }
+				if (auto* c = entity.getComponentIfExists<position_rotation_component>()) { out << YAML::Key << "Position/Rotation" << YAML::Value << *c; }
+				if (entity.hasComponent<dynamic_transform_component>()) { out << YAML::Key << "Dynamic" << YAML::Value << true; }
+				if (auto* c = entity.getComponentIfExists<point_light_component>()) { out << YAML::Key << "Point light" << YAML::Value << *c; }
+				if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
+				if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
+
+				if (tracker->trackedEntity == entity)
+				{
+					out << YAML::Key << "Tracking" << YAML::Value << true;
+				}
+
+				out << YAML::EndMap;
+			}
 		}
-	});
+		});
 
 	out << YAML::EndSeq;
 
@@ -622,7 +639,7 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 	LOG_MESSAGE("Scene saved to '%ws'", scene.savePath.c_str());
 }
 
-bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSettings, std::string& environmentName, depth_tracker* tracker)
+bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSettings, std::string& environmentName, depth_tracker* tracker, projector_context* projectorContext)
 {
 	fs::path filename = openFileDialog("Scene files", "sc");
 	if (filename.empty())
@@ -639,6 +656,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 
 	scene = game_scene();
 	scene.savePath = std::move(filename);
+	projectorContext->knownProjectorCalibrations.clear();
 
 	std::string sceneName = n["Scene"].as<std::string>();
 
@@ -650,6 +668,8 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 
 	YAML_LOAD(n, tracker->globalCameraPosition, "Tracker position");
 	YAML_LOAD(n, tracker->globalCameraRotation, "Tracker rotation");
+
+	YAML_LOAD(n, *projectorContext, "Projector context");
 
 	auto entitiesNode = n["Entities"];
 	for (auto entityNode : entitiesNode)
@@ -671,8 +691,6 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 		{
 			tracker->trackedEntity = entity;
 		}
-
-		LOAD_COMPONENT(projector_component, "Projector");
 	}
 
 	LOG_MESSAGE("Scene loaded from '%ws'", scene.savePath.c_str());

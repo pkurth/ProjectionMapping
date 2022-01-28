@@ -111,7 +111,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 
 	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 	{
-		if (!projector.window.open && !projector.headless())
+		if (!projector.window.open && !projector.headless)
 		{
 			scene_entity entity = { entityHandle, *scene };
 			scene->deleteEntity(entity);
@@ -815,7 +815,7 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 		}
 		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('S'))
 		{
-			serializeSceneToDisk(*scene, renderer->settings, tracker);
+			serializeToFile();
 			inputCaptured = true;
 			ImGui::GetIO().KeysDown['S'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
 		}
@@ -933,13 +933,13 @@ void scene_editor::setEnvironment(const fs::path& filename)
 
 void scene_editor::serializeToFile()
 {
-	serializeSceneToDisk(*scene, renderer->settings, tracker);
+	serializeSceneToDisk(*scene, renderer->settings, tracker, &projectorManager->context);
 }
 
 bool scene_editor::deserializeFromFile()
 {
 	std::string environmentName;
-	if (deserializeSceneFromDisk(*scene, renderer->settings, environmentName, tracker))
+	if (deserializeSceneFromDisk(*scene, renderer->settings, environmentName, tracker, &projectorManager->context))
 	{
 		setSelectedEntityNoUndo({});
 		setEnvironment(environmentName);
