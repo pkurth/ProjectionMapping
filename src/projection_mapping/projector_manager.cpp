@@ -35,7 +35,7 @@ void projector_manager::updateAndRender(float dt)
 				ImGui::PropertyInput("Server port", SERVER_PORT);
 			}
 
-			if (ImGui::PropertyDisableableButton("Network", "Start", !projectorNetworkInitialized))
+			if (ImGui::PropertyDisableableButton("Network", isServer ? "Start" : "Connect", !projectorNetworkInitialized))
 			{
 				startProjectorNetworkProtocol(*scene, this, isServer);
 			}
