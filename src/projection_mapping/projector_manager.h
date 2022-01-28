@@ -15,22 +15,28 @@ struct projector_manager
 
 	void onSceneLoad();
 
-	projector_context context;
+	void onMessageFromClient(const std::vector<std::string>& remoteMonitors);
+	void onMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
+
 	projector_solver solver;
+	projector_context context;
 
 private:
 
-	void getMyProjectors();
-	void createProjectors();
+	std::unordered_set<std::string> remoteMonitors;
+
+	void createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
 	void createProjector(const std::string& monitorID, bool local);
+
+	void sendInformationToClients();
 
 	game_scene* scene;
 
 	bool detailWindowOpen = false;
 
 	bool isServer = true;
+	bool dirty = false;
 
+	std::mutex mutex;
 
-	std::unordered_set<std::string> myProjectors;
-	std::unordered_set<std::string> remoteProjectors;
 };

@@ -21,7 +21,7 @@ uint32 SERVER_PORT = 27015;
 bool projectorNetworkInitialized = false;
 static bool isServer;
 static game_scene* scene;
-static projector_solver* solver;
+static projector_manager* manager;
 static projector_solver_settings oldSolverSettings;
 
 static float timeSinceLastUpdate = 0.f;
@@ -50,11 +50,7 @@ struct hostname_message
 
 struct monitor_message
 {
-	char name[32];
 	char uniqueID[128];
-	uint16 width;
-	uint16 height;
-	bool probablyProjector;
 };
 
 struct object_message
@@ -71,6 +67,26 @@ struct tracking_message
 	float rotation[4];
 	float position[3];
 	uint32 id;
+};
+
+struct projector_message_header
+{
+	uint16 numCalibrations;
+	uint16 numProjectors;
+};
+
+struct projector_calibration_message
+{
+	char uniqueID[128];
+	float rotation[4];
+	float position[3];
+	uint16 width, height;
+	camera_intrinsics intrinsics;
+};
+
+struct projector_instantiation_message
+{
+	uint8 calibrationIndex;
 };
 
 
@@ -197,9 +213,69 @@ namespace server
 		mutex.unlock();
 	}
 
-	static void sendProjectorInformation()
+	static void sendProjectorInformation(const projector_context& context, const std::vector<std::string>& projectors)
 	{
+		message_buffer messageBuffer;
+		messageBuffer.header.type = message_projector_info;
+		messageBuffer.header.messageID = 0;
 
+		uint32 numProjectorCalibrations = (uint32)context.knownProjectorCalibrations.size();
+		assert(numProjectorCalibrations < 256);
+
+		uint32 numProjectors = (uint32)projectors.size();
+
+		projector_message_header* projectorHeader = messageBuffer.push<projector_message_header>(1);
+		projectorHeader->numCalibrations = numProjectorCalibrations;
+		projectorHeader->numProjectors = numProjectors;
+
+		projector_calibration_message* calibrationMessages = messageBuffer.push<projector_calibration_message>(numProjectorCalibrations);
+		
+		uint32 i = 0;
+		for (const auto& c : context.knownProjectorCalibrations)
+		{
+			projector_calibration_message& msg = calibrationMessages[i];
+
+			const projector_calibration& calib = c.second;
+
+			strncpy_s(msg.uniqueID, c.first.c_str(), sizeof(msg.uniqueID));
+			memcpy(msg.rotation, calib.rotation.v4.data, sizeof(quat));
+			memcpy(msg.position, calib.position.data, sizeof(vec3));
+			msg.intrinsics = calib.intrinsics;
+			msg.width = (uint16)calib.width;
+			msg.height = (uint16)calib.height;
+
+			++i;
+		}
+
+		projector_instantiation_message* projectorMessages = messageBuffer.push<projector_instantiation_message>(numProjectors);
+
+		i = 0;
+		for (const std::string& monitorID : projectors)
+		{
+			projector_instantiation_message& msg = projectorMessages[i];
+
+			bool found = false;
+			for (uint32 j = 0; j < numProjectorCalibrations; ++j)
+			{
+				if (monitorID == calibrationMessages[j].uniqueID)
+				{
+					found = true;
+					msg.calibrationIndex = (uint8)j;
+					break;
+				}
+			}
+			assert(found);
+
+			++i;
+		}
+
+		mutex.lock();
+		for (const client_connection& connection : clientConnections)
+		{
+			messageBuffer.header.clientID = connection.clientID;
+			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
+		}
+		mutex.unlock();
 	}
 
 	static void sendSolverSettings()
@@ -211,7 +287,7 @@ namespace server
 		messageBuffer.header.messageID = 0;
 
 		projector_solver_settings* message = messageBuffer.push<projector_solver_settings>(1);
-		*message = solver->settings;
+		*message = manager->solver.settings;
 
 		mutex.lock();
 		for (const client_connection& connection : clientConnections)
@@ -265,10 +341,13 @@ namespace server
 				uint32 numMonitors = size / (uint32)sizeof(monitor_message);
 				const monitor_message* monitors = (monitor_message*)data;
 
+				std::vector<std::string> clientMonitors;
+
 				LOG_MESSAGE("Received message containing %u monitors", numMonitors);
 				for (uint32 i = 0; i < numMonitors; ++i)
 				{
-					LOG_MESSAGE("Monitor %u: %s (%ux%u pixels)", i, monitors[i].name, monitors[i].width, monitors[i].height);
+					LOG_MESSAGE("Monitor %u: %s", i, monitors[i].uniqueID);
+					clientMonitors.push_back(monitors[i].uniqueID);
 				}
 
 
@@ -279,6 +358,8 @@ namespace server
 				mutex.lock();
 				clientConnections.push_back(connection);
 				mutex.unlock();
+
+				manager->onMessageFromClient(clientMonitors);
 
 				// Response.
 				sendObjectInformation(connection);
@@ -324,11 +405,7 @@ namespace client
 			monitor_message& msg = messages[i];
 			monitor_info& mon = monitors[i];
 
-			strncpy_s(msg.name, mon.name.c_str(), sizeof(msg.name));
 			strncpy_s(msg.uniqueID, mon.uniqueID.c_str(), sizeof(msg.uniqueID));
-			msg.width = (uint16)mon.width;
-			msg.height = (uint16)mon.height;
-			msg.probablyProjector = mon.probablyProjector;
 		}
 
 		sendToServer(messageBuffer.buffer, messageBuffer.size);
@@ -350,7 +427,6 @@ namespace client
 		{
 			LOG_MESSAGE("Received first message from server. Assigning client ID %u", header->clientID);
 			clientID = header->clientID;
-			//projector_component::myComputerID = (int32)header->clientID;
 		}
 
 		if (clientID != header->clientID)
@@ -400,6 +476,96 @@ namespace client
 
 			} break;
 
+			case message_projector_info:
+			{
+				if (size < sizeof(projector_message_header))
+				{
+					LOG_ERROR("Message is smaller than sizeof(projector_message_header). Expected at least %u bytes after header, got %u", (uint32)sizeof(projector_message_header), size);
+					return;
+				}
+
+				projector_message_header* projectorHeader = (projector_message_header*)data;
+				data = (const char*)(projectorHeader + 1);
+				size -= sizeof(projector_message_header);
+
+				uint32 numProjectorCalibrations = projectorHeader->numCalibrations;
+				uint32 numProjectors = projectorHeader->numProjectors;
+
+				uint32 expectedSize = numProjectorCalibrations * (uint32)sizeof(projector_calibration_message) + numProjectors * (uint32)sizeof(projector_instantiation_message);
+
+				if (size < expectedSize)
+				{
+					LOG_ERROR("Message is smaller than header indicates. Expected at least %u bytes after header, got %u", expectedSize, size);
+					return;
+				}
+
+				if (size > expectedSize)
+				{
+					LOG_ERROR("Message is larger than header indicates. Expected at least %u bytes after header, got %u", expectedSize, size);
+					return;
+				}
+
+				projector_calibration_message* calibrationMessages = (projector_calibration_message*)data;
+				data = (const char*)(calibrationMessages + numProjectorCalibrations);
+				size -= sizeof(projector_calibration_message) * numProjectorCalibrations;
+
+				projector_instantiation_message* instantiationMessages = (projector_instantiation_message*)data;
+				data = (const char*)(instantiationMessages + numProjectors);
+				size -= sizeof(projector_instantiation_message) * numProjectors;
+
+				assert(size == 0);
+
+				std::unordered_map<std::string, projector_calibration> calibrations;
+				std::vector<std::string> myProjectors;
+				std::vector<std::string> remoteProjectors;
+
+				for (uint32 i = 0; i < numProjectorCalibrations; ++i)
+				{
+					projector_calibration_message& msg = calibrationMessages[i];
+
+					std::string monitor = msg.uniqueID;
+
+					projector_calibration calib;
+					memcpy(calib.rotation.v4.data, msg.rotation, sizeof(quat));
+					memcpy(calib.position.data, msg.position, sizeof(vec3));
+					calib.width = msg.width;
+					calib.height = msg.height;
+					calib.intrinsics = msg.intrinsics;
+
+					calibrations.insert({ monitor, calib });
+				}
+
+				for (uint32 i = 0; i < numProjectors; ++i)
+				{
+					uint32 index = instantiationMessages[i].calibrationIndex;
+					projector_calibration_message& msg = calibrationMessages[index];
+
+					std::string monitor = msg.uniqueID;
+
+					bool found = false;
+					for (auto& m : win32_window::allConnectedMonitors)
+					{
+						if (m.uniqueID == monitor)
+						{
+							found = true;
+							break;
+						}
+					}
+
+					if (found)
+					{
+						myProjectors.push_back(monitor);
+					}
+					else
+					{
+						remoteProjectors.push_back(monitor);
+					}
+				}
+
+				manager->onMessageFromServer(std::move(calibrations), myProjectors, remoteProjectors);
+
+			} break;
+
 			case message_tracking:
 			{
 				if (size % sizeof(tracking_message) != 0)
@@ -445,7 +611,7 @@ namespace client
 
 				LOG_MESSAGE("Updating solver settings");
 
-				solver->settings = *(const projector_solver_settings*)data;
+				manager->solver.settings = *(const projector_solver_settings*)data;
 			} break;
 
 			default:
@@ -462,14 +628,14 @@ namespace client
 	}
 }
 
-bool startProjectorNetworkProtocol(game_scene& scene, projector_solver& solver, bool isServer)
+bool startProjectorNetworkProtocol(game_scene& scene, projector_manager* manager, bool isServer)
 {
 	bool result = false;
 
 	::isServer = isServer;
 	::scene = &scene;
-	::solver = &solver;
-	::oldSolverSettings = solver.settings;
+	::manager = manager;
+	::oldSolverSettings = manager->solver.settings;
 
 	if (isServer)
 	{
@@ -506,9 +672,9 @@ bool updateProjectorNetworkProtocol(float dt)
 		{
 			server::sendTrackingInformation();
 
-			if (memcmp(&solver->settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
+			if (memcmp(&manager->solver.settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
 			{
-				oldSolverSettings = solver->settings;
+				oldSolverSettings = manager->solver.settings;
 				server::sendSolverSettings();
 			}
 			
@@ -519,7 +685,7 @@ bool updateProjectorNetworkProtocol(float dt)
 	return true;
 }
 
-bool notifyProjectorNetworkOnSceneLoad()
+bool notifyProjectorNetworkOnSceneLoad(const projector_context& context, const std::vector<std::string>& projectors)
 {
 	if (!projectorNetworkInitialized)
 	{
@@ -529,6 +695,7 @@ bool notifyProjectorNetworkOnSceneLoad()
 	if (isServer)
 	{
 		server::sendObjectInformation();
+		server::sendProjectorInformation(context, projectors);
 	}
 
 	return true;

@@ -11,7 +11,6 @@
 projector_manager::projector_manager(game_scene& scene)
 {
 	this->scene = &scene;
-	getMyProjectors();
 	solver.initialize();
 }
 
@@ -25,7 +24,7 @@ void projector_manager::beginFrame()
 
 void projector_manager::updateAndRender(float dt)
 {
-	if (ImGui::Begin("Projectors"))
+	if (ImGui::Begin("Projection Mapping"))
 	{
 		if (ImGui::BeginProperties())
 		{
@@ -38,7 +37,7 @@ void projector_manager::updateAndRender(float dt)
 
 			if (ImGui::PropertyDisableableButton("Network", "Start", !projectorNetworkInitialized))
 			{
-				startProjectorNetworkProtocol(*scene, solver, isServer);
+				startProjectorNetworkProtocol(*scene, this, isServer);
 			}
 
 			if (projectorNetworkInitialized && isServer)
@@ -74,6 +73,13 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::EndProperties();
 		}
 
+		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
+
+		if (ImGui::Button("Detailed view"))
+		{
+			detailWindowOpen = true;
+		}
+
 		if (ImGui::BeginTree("Context"))
 		{
 			if (ImGui::BeginProperties())
@@ -89,7 +95,7 @@ void projector_manager::updateAndRender(float dt)
 					ImGui::PropertyValue("Rotation", p.rotation);
 					ImGui::PropertyValue("Width", p.width);
 					ImGui::PropertyValue("Height", p.height);
-					ImGui::PropertyValue("Intrinsics", *(vec4*)&p.intrinsics);
+					ImGui::PropertyValue("Intrinsics", *(vec4*)&p.intrinsics, "%.1f, %.1f, %.1f, %.1f");
 
 					ImGui::PropertySeparator();
 				}
@@ -99,15 +105,16 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::EndTree();
 		}
-
-		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
-
-		if (ImGui::Button("Detailed view"))
-		{
-			detailWindowOpen = true;
-		}
 	}
 	ImGui::End();
+
+	mutex.lock();
+	if (dirty)
+	{
+		dirty = false;
+		sendInformationToClients();
+	}
+	mutex.unlock();
 
 	updateProjectorNetworkProtocol(dt);
 
@@ -151,7 +158,7 @@ void projector_manager::updateAndRender(float dt)
 					ImGui::TableNextRow();
 					
 					ImGui::TableNextColumn();
-					ImGui::Text("%u", i);
+					ImGui::Text("%u (%s)", i, (projector.headless ? "remote" : "local"));
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.frameResult);
@@ -223,29 +230,67 @@ void projector_manager::updateAndRender(float dt)
 
 void projector_manager::onSceneLoad()
 {
-	getMyProjectors();
-
-	notifyProjectorNetworkOnSceneLoad();
-	createProjectors();
+	mutex.lock();
+	sendInformationToClients();
+	mutex.unlock();
 }
 
-void projector_manager::getMyProjectors()
+void projector_manager::sendInformationToClients()
 {
-	myProjectors.clear();
-	const auto& monitors = win32_window::allConnectedMonitors;
+	std::vector<std::string> myProjectors;
+	std::vector<std::string> remoteProjectors;
 
-	for (const auto& m : monitors)
+	for (const monitor_info& monitor : win32_window::allConnectedMonitors)
 	{
-		const std::string& uniqueID = m.uniqueID;
-		if (context.knownProjectorCalibrations.find(uniqueID) != context.knownProjectorCalibrations.end())
+		auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
+		if (it != context.knownProjectorCalibrations.end())
 		{
-			myProjectors.insert({ uniqueID });
+			myProjectors.push_back(monitor.uniqueID);
 		}
 	}
+
+	for (const std::string& monitorID : remoteMonitors)
+	{
+		auto it = context.knownProjectorCalibrations.find(monitorID);
+		if (it != context.knownProjectorCalibrations.end())
+		{
+			remoteProjectors.push_back(monitorID);
+		}
+	}
+
+	std::vector<std::string> allProjectors;
+	allProjectors.insert(allProjectors.end(), myProjectors.begin(), myProjectors.end());
+	allProjectors.insert(allProjectors.end(), remoteProjectors.begin(), remoteProjectors.end());
+
+	notifyProjectorNetworkOnSceneLoad(context, allProjectors);
+	createProjectors(myProjectors, remoteProjectors);
 }
 
-void projector_manager::createProjectors()
+void projector_manager::onMessageFromClient(const std::vector<std::string>& remoteMonitors)
 {
+	mutex.lock();
+
+	this->remoteMonitors.insert(remoteMonitors.begin(), remoteMonitors.end());
+	dirty = true;
+
+	mutex.unlock();
+}
+
+void projector_manager::onMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
+{
+	this->context.knownProjectorCalibrations = std::move(calibrations);
+	this->remoteMonitors.clear();
+	this->remoteMonitors.insert(remoteMonitors.begin(), remoteMonitors.end());
+
+	createProjectors(myProjectors, remoteProjectors);
+}
+
+void projector_manager::createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
+{
+	// Delete all current projectors.
+	auto projectorGroup = scene->view<projector_component>();
+	scene->registry.destroy(projectorGroup.begin(), projectorGroup.end());
+
 	for (auto& monitorID : myProjectors)
 	{
 		createProjector(monitorID, true);

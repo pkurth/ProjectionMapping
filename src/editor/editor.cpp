@@ -105,7 +105,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 	bool objectDragged = false;
 	objectDragged |= handleUserInput(input, ldrRenderPass, dt);
 	objectDragged |= drawSceneHierarchy();
-	drawHardwareWindow();
+	//drawHardwareWindow();
 	drawMainMenuBar();
 	drawSettings(dt);
 
