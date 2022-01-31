@@ -304,6 +304,8 @@ bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clie
 		windowClassInitialized = true;
 	}
 
+	this->disableResizing = disableResizing;
+
 	if (!windowHandle)
 	{
 		++numOpenWindows;
@@ -352,7 +354,6 @@ bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clie
 
 	open = true;
 	this->visible = visible;
-	this->disableResizing = disableResizing;
 	if (visible)
 	{
 		ShowWindow(windowHandle, SW_SHOW);
@@ -940,6 +941,18 @@ static LRESULT CALLBACK windowCallBack(
 			{
 				if (window->minimumWidth != -1) { info->ptMinTrackSize.x = window->minimumWidth; }
 				if (window->minimumHeight != -1) { info->ptMinTrackSize.y = window->minimumHeight; }
+
+				if (window->disableResizing)
+				{
+					info->ptMaxTrackSize.x = 10000;
+					info->ptMaxTrackSize.y = 10000;
+				}
+			}
+			else
+			{
+				// Allow windows to grow past the max monitor size.
+				info->ptMaxTrackSize.x = 10000;
+				info->ptMaxTrackSize.y = 10000;
 			}
 			return 0;
 		} break;
