@@ -501,8 +501,6 @@ namespace client
 				continue;
 			}
 
-			std::cout << "Received message " << header->type << '\n';
-
 			if (clientID == -1)
 			{
 				LOG_MESSAGE("Received first message from server. Assigning client ID %u", header->clientID);
