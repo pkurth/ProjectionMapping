@@ -78,5 +78,15 @@ uint32 network_socket::receive(network_address& sender, void* data, uint32 maxSi
 	int fromLength = (int)sizeof(sender.addr);
 	int bytesReceived = recvfrom(socket, (char*)data, maxSize, 0, (sockaddr*)&sender.addr, &fromLength);
 
+	if (bytesReceived == SOCKET_ERROR)
+	{
+		int error = WSAGetLastError();
+
+		if (error == WSAEWOULDBLOCK || error == EWOULDBLOCK)
+		{
+			bytesReceived = 0;
+		}
+	}
+
 	return (uint32)bytesReceived;
 }

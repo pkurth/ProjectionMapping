@@ -35,8 +35,4 @@ private:
 	bool detailWindowOpen = false;
 
 	bool isServer = true;
-	bool dirty = false;
-
-	std::mutex mutex;
-
 };

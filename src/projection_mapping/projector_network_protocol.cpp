@@ -89,8 +89,9 @@ struct projector_instantiation_message
 	uint8 calibrationIndex;
 };
 
+#define NETWORK_BUFFER_SIZE 4096
 
-struct message_buffer
+struct send_buffer
 {
 	uint32 size = sizeof(message_header);
 
@@ -108,7 +109,35 @@ struct message_buffer
 		message_header header;
 		char buffer[NETWORK_BUFFER_SIZE];
 	};
+};
 
+struct receive_buffer
+{
+	uint32 offset = 0;
+	uint32 sizeRemaining = 0;
+	uint32 actualSize;
+
+	void reset()
+	{
+		offset = 0;
+		sizeRemaining = actualSize;
+	}
+
+	template <typename T>
+	T* get(uint32 count)
+	{
+		uint32 s = (uint32)sizeof(T) * count;
+		if (offset + s > actualSize)
+		{
+			return 0;
+		}
+		T* result = (T*)(buffer + offset);
+		offset += s;
+		sizeRemaining -= s;
+		return result;
+	}
+
+	char buffer[NETWORK_BUFFER_SIZE];
 };
 
 
@@ -135,15 +164,13 @@ namespace server
 	};
 
 	static std::vector<client_connection> clientConnections;
-	static std::mutex mutex;
-
 
 	static void sendObjectInformation(const client_connection& connection)
 	{
 		auto objectGroup = getObjectGroup();
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
-		message_buffer messageBuffer;
+		send_buffer messageBuffer;
 		messageBuffer.header.type = message_object_info;
 		messageBuffer.header.clientID = connection.clientID;
 		messageBuffer.header.messageID = 0;
@@ -169,15 +196,12 @@ namespace server
 		sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 	}
 
-	// Do not call the following functions from callback!
 	static void sendObjectInformation()
 	{
-		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
 			sendObjectInformation(connection);
 		}
-		mutex.unlock();
 	}
 
 	static void sendTrackingInformation()
@@ -185,7 +209,7 @@ namespace server
 		auto objectGroup = getObjectGroup();
 		uint32 numObjectsInScene = (uint32)objectGroup.size();
 
-		message_buffer messageBuffer;
+		send_buffer messageBuffer;
 		messageBuffer.header.type = message_tracking;
 		messageBuffer.header.messageID = runningTrackingMessageID++;
 
@@ -203,19 +227,16 @@ namespace server
 			++id;
 		}
 
-
-		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
 			messageBuffer.header.clientID = connection.clientID;
 			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
-		mutex.unlock();
 	}
 
 	static void sendProjectorInformation(const projector_context& context, const std::vector<std::string>& projectors)
 	{
-		message_buffer messageBuffer;
+		send_buffer messageBuffer;
 		messageBuffer.header.type = message_projector_info;
 		messageBuffer.header.messageID = 0;
 
@@ -269,106 +290,126 @@ namespace server
 			++i;
 		}
 
-		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
 			messageBuffer.header.clientID = connection.clientID;
 			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
-		mutex.unlock();
 	}
 
 	static void sendSolverSettings()
 	{
 		LOG_MESSAGE("Sending solver settings");
 
-		message_buffer messageBuffer;
+		send_buffer messageBuffer;
 		messageBuffer.header.type = message_solver_settings;
 		messageBuffer.header.messageID = 0;
 
 		projector_solver_settings* message = messageBuffer.push<projector_solver_settings>(1);
 		*message = manager->solver.settings;
 
-		mutex.lock();
 		for (const client_connection& connection : clientConnections)
 		{
 			messageBuffer.header.clientID = connection.clientID;
 			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
-		mutex.unlock();
 	}
 
-	static void messageCallback(const char* data, uint32 size, const network_address& clientAddress, bool clientAlreadyKnown)
+
+	static bool initialize()
 	{
-		if (size < sizeof(message_header))
+		bool result = startNetworkServer(SERVER_PORT);
+		
+		getLocalIPAddress(SERVER_IP);
+		LOG_MESSAGE("Server created, IP: %s, port %u", SERVER_IP, SERVER_PORT);
+
+		return result;
+	}
+
+	static void update(float dt)
+	{
+		receive_buffer messageBuffer;
+		network_address clientAddress;
+		bool addressKnown;
+
+		while (checkForServerMessages(messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize, clientAddress, addressKnown) == receive_result_success)
 		{
-			LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), size);
-			return;
+			messageBuffer.reset();
+
+			const message_header* header = messageBuffer.get<message_header>(1);
+			if (!header)
+			{
+				LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), messageBuffer.sizeRemaining);
+				continue;
+			}
+
+			switch (header->type)
+			{
+				case message_hello_from_client:
+				{
+					if (addressKnown)
+					{
+						LOG_MESSAGE("Received duplicate 'hello' from client. Ignoring message");
+						continue;
+					}
+
+					const hostname_message* hostname = messageBuffer.get<hostname_message>(1);
+					if (!hostname)
+					{
+						LOG_ERROR("Message is smaller than sizeof(hostname_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(hostname_message), messageBuffer.sizeRemaining);
+						continue;
+					}
+					LOG_MESSAGE("Received message identifies client as '%s'", hostname->hostname);
+
+					if (messageBuffer.sizeRemaining % sizeof(monitor_message) != 0)
+					{
+						LOG_ERROR("Message size is not evenly divisible by sizeof(monitor_message). Expected multiple of %u, got %u", (uint32)sizeof(monitor_message), messageBuffer.sizeRemaining);
+						continue;
+					}
+
+					uint32 numMonitors = messageBuffer.sizeRemaining / (uint32)sizeof(monitor_message);
+					const monitor_message* monitors = messageBuffer.get<monitor_message>(numMonitors);
+
+					std::vector<std::string> clientMonitors;
+
+					LOG_MESSAGE("Received message containing %u monitors", numMonitors);
+					for (uint32 i = 0; i < numMonitors; ++i)
+					{
+						LOG_MESSAGE("Monitor %u: %s", i, monitors[i].uniqueID);
+						clientMonitors.push_back(monitors[i].uniqueID);
+					}
+
+
+					uint16 clientID = runningClientID++;
+					LOG_MESSAGE("Assigning new client ID %u", clientID);
+
+					client_connection connection = { hostname->hostname, clientID, clientAddress };
+					clientConnections.push_back(connection);
+
+					manager->onMessageFromClient(clientMonitors);
+				} break;
+
+				default:
+				{
+					LOG_ERROR("Received message which we don't understand: %u", (uint32)header->type);
+				} break;
+			}
 		}
 
-		const message_header* header = (const message_header*)data;
-		data = (const char*)(header + 1);
-		size -= sizeof(message_header);
 
-		switch (header->type)
+		timeSinceLastUpdate += dt;
+
+		if (timeSinceLastUpdate >= updateTime)
 		{
-			case message_hello_from_client:
+			sendTrackingInformation();
+			
+			if (memcmp(&manager->solver.settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
 			{
-				if (clientAlreadyKnown)
-				{
-					LOG_MESSAGE("Received duplicate 'hello' from client. Ignoring message");
-					return;
-				}
-
-				if (size < sizeof(hostname_message))
-				{
-					LOG_ERROR("Message is smaller than sizeof(hostname_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(hostname_message), size);
-					return;
-				}
-
-				hostname_message* hostname = (hostname_message*)data;
-				data = (const char*)(hostname + 1);
-				size -= sizeof(hostname_message);
-
-				LOG_MESSAGE("Received message identifies client as '%s'", hostname->hostname);
-
-				if (size % sizeof(monitor_message) != 0)
-				{
-					LOG_ERROR("Message size is not evenly divisible by sizeof(monitor_message). Expected multiple of %u, got %u", (uint32)sizeof(monitor_message), size);
-					return;
-				}
-
-				uint32 numMonitors = size / (uint32)sizeof(monitor_message);
-				const monitor_message* monitors = (monitor_message*)data;
-
-				std::vector<std::string> clientMonitors;
-
-				LOG_MESSAGE("Received message containing %u monitors", numMonitors);
-				for (uint32 i = 0; i < numMonitors; ++i)
-				{
-					LOG_MESSAGE("Monitor %u: %s", i, monitors[i].uniqueID);
-					clientMonitors.push_back(monitors[i].uniqueID);
-				}
-
-
-				uint16 clientID = runningClientID++;
-				LOG_MESSAGE("Assigning new client ID %u", clientID);
-
-				client_connection connection = { hostname->hostname, clientID, clientAddress };
-				mutex.lock();
-				clientConnections.push_back(connection);
-				mutex.unlock();
-
-				manager->onMessageFromClient(clientMonitors);
-
-				// Response.
-				sendObjectInformation(connection);
-			} break;
-
-			default:
-			{
-				LOG_ERROR("Received message which we don't understand: %u", (uint32)header->type);
-			} break;
+				oldSolverSettings = manager->solver.settings;
+				sendSolverSettings();
+			}
+			
+			timeSinceLastUpdate -= updateTime;
 		}
 	}
 }
@@ -390,7 +431,7 @@ namespace client
 	{
 		std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
 
-		message_buffer messageBuffer;
+		send_buffer messageBuffer;
 		messageBuffer.header.type = message_hello_from_client;
 		messageBuffer.header.clientID = 0; // No client ID has been assigned yet.
 		messageBuffer.header.messageID = 0;
@@ -411,220 +452,246 @@ namespace client
 		sendToServer(messageBuffer.buffer, messageBuffer.size);
 	}
 
-	static void messageCallback(const char* data, uint32 size)
+	static bool initialize()
 	{
-		if (size < sizeof(message_header))
+		bool result = startNetworkClient(SERVER_IP, SERVER_PORT);
+
+		if (result)
 		{
-			LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), size);
-			return;
+			sendHello();
 		}
 
-		const message_header* header = (const message_header*)data;
-		data = (const char*)(header + 1);
-		size -= sizeof(message_header);
-
-		if (clientID == -1)
+		char clientAddress[128];
+		if (!getLocalIPAddress(clientAddress))
 		{
-			LOG_MESSAGE("Received first message from server. Assigning client ID %u", header->clientID);
-			clientID = header->clientID;
+			return false;
 		}
 
-		if (clientID != header->clientID)
-		{
-			LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u. Ignoring message", clientID, (uint32)header->clientID);
-			return;
-		}
+		LOG_MESSAGE("Client created, IP: %s", clientAddress);
 
-		switch (header->type)
+		return true;
+	}
+
+	static void update()
+	{
+		receive_buffer messageBuffer;
+
+		while (true)
 		{
-			case message_object_info:
+			receive_result result = checkForClientMessages(messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize);
+			
+			if (result == receive_result_nothing_received)
 			{
-				if (size % sizeof(object_message) != 0)
+				break;
+			}
+
+			if (result == receive_result_connection_closed)
+			{
+				LOG_MESSAGE("Connection closed");
+				projectorNetworkInitialized = false;
+				return;
+			}
+
+			messageBuffer.reset();
+
+			const message_header* header = messageBuffer.get<message_header>(1);
+			if (!header)
+			{
+				LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), messageBuffer.sizeRemaining);
+				continue;
+			}
+
+			std::cout << "Received message " << header->type << '\n';
+
+			if (clientID == -1)
+			{
+				LOG_MESSAGE("Received first message from server. Assigning client ID %u", header->clientID);
+				clientID = header->clientID;
+			}
+
+			if (clientID != header->clientID)
+			{
+				LOG_ERROR("Received message with non-matching client ID. Expected %u, got %u. Ignoring message", clientID, (uint32)header->clientID);
+				continue;
+			}
+
+			switch (header->type)
+			{
+				case message_object_info:
 				{
-					LOG_ERROR("Message size is not evenly divisible by sizeof(object_message). Expected multiple of %u, got %u", (uint32)sizeof(object_message), size);
-					return;
-				}
-
-				// Delete objects in scene.
-				auto objectGroup = getObjectGroup();
-				scene->registry.destroy(objectGroup.begin(), objectGroup.end());
-				trackedObjects.clear();
-
-				// Populate with received objects.
-				uint32 numObjects = size / (uint32)sizeof(object_message);
-				const object_message* objects = (object_message*)data;
-
-				LOG_MESSAGE("Received message containing %u objects", numObjects);
-				for (uint32 i = 0; i < numObjects; ++i)
-				{
-					LOG_MESSAGE("Object %u: %s", objects[i].id, objects[i].filename);
-
-					if (auto targetObjectMesh = loadMeshFromFile(objects[i].filename))
+					if (messageBuffer.sizeRemaining % sizeof(object_message) != 0)
 					{
-						trs transform;
-						memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
-						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
-						memcpy(transform.scale.data, objects[i].scale, sizeof(vec3));
-
-						auto targetObject = scene->createEntity("Target object")
-							.addComponent<transform_component>(transform)
-							.addComponent<raster_component>(targetObjectMesh);
-
-						trackedObjects.push_back(targetObject);
+						LOG_ERROR("Message size is not evenly divisible by sizeof(object_message). Expected multiple of %u, got %u", (uint32)sizeof(object_message), messageBuffer.sizeRemaining);
+						break;
 					}
-				}
 
-			} break;
+					// Delete objects in scene.
+					auto objectGroup = getObjectGroup();
+					scene->registry.destroy(objectGroup.begin(), objectGroup.end());
+					trackedObjects.clear();
 
-			case message_projector_info:
-			{
-				if (size < sizeof(projector_message_header))
-				{
-					LOG_ERROR("Message is smaller than sizeof(projector_message_header). Expected at least %u bytes after header, got %u", (uint32)sizeof(projector_message_header), size);
-					return;
-				}
+					// Populate with received objects.
+					uint32 numObjects = messageBuffer.sizeRemaining / (uint32)sizeof(object_message);
+					const object_message* objects = messageBuffer.get<object_message>(numObjects);
 
-				projector_message_header* projectorHeader = (projector_message_header*)data;
-				data = (const char*)(projectorHeader + 1);
-				size -= sizeof(projector_message_header);
-
-				uint32 numProjectorCalibrations = projectorHeader->numCalibrations;
-				uint32 numProjectors = projectorHeader->numProjectors;
-
-				uint32 expectedSize = numProjectorCalibrations * (uint32)sizeof(projector_calibration_message) + numProjectors * (uint32)sizeof(projector_instantiation_message);
-
-				if (size < expectedSize)
-				{
-					LOG_ERROR("Message is smaller than header indicates. Expected at least %u bytes after header, got %u", expectedSize, size);
-					return;
-				}
-
-				if (size > expectedSize)
-				{
-					LOG_ERROR("Message is larger than header indicates. Expected at least %u bytes after header, got %u", expectedSize, size);
-					return;
-				}
-
-				projector_calibration_message* calibrationMessages = (projector_calibration_message*)data;
-				data = (const char*)(calibrationMessages + numProjectorCalibrations);
-				size -= sizeof(projector_calibration_message) * numProjectorCalibrations;
-
-				projector_instantiation_message* instantiationMessages = (projector_instantiation_message*)data;
-				data = (const char*)(instantiationMessages + numProjectors);
-				size -= sizeof(projector_instantiation_message) * numProjectors;
-
-				assert(size == 0);
-
-				std::unordered_map<std::string, projector_calibration> calibrations;
-				std::vector<std::string> myProjectors;
-				std::vector<std::string> remoteProjectors;
-
-				for (uint32 i = 0; i < numProjectorCalibrations; ++i)
-				{
-					projector_calibration_message& msg = calibrationMessages[i];
-
-					std::string monitor = msg.uniqueID;
-
-					projector_calibration calib;
-					memcpy(calib.rotation.v4.data, msg.rotation, sizeof(quat));
-					memcpy(calib.position.data, msg.position, sizeof(vec3));
-					calib.width = msg.width;
-					calib.height = msg.height;
-					calib.intrinsics = msg.intrinsics;
-
-					calibrations.insert({ monitor, calib });
-				}
-
-				for (uint32 i = 0; i < numProjectors; ++i)
-				{
-					uint32 index = instantiationMessages[i].calibrationIndex;
-					projector_calibration_message& msg = calibrationMessages[index];
-
-					std::string monitor = msg.uniqueID;
-
-					bool found = false;
-					for (auto& m : win32_window::allConnectedMonitors)
+					LOG_MESSAGE("Received message containing %u objects", numObjects);
+					for (uint32 i = 0; i < numObjects; ++i)
 					{
-						if (m.uniqueID == monitor)
+						LOG_MESSAGE("Object %u: %s", objects[i].id, objects[i].filename);
+
+						if (auto targetObjectMesh = loadMeshFromFile(objects[i].filename))
 						{
-							found = true;
-							break;
+							trs transform;
+							memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
+							memcpy(transform.position.data, objects[i].position, sizeof(vec3));
+							memcpy(transform.scale.data, objects[i].scale, sizeof(vec3));
+
+							auto targetObject = scene->createEntity("Target object")
+								.addComponent<transform_component>(transform)
+								.addComponent<raster_component>(targetObjectMesh);
+
+							trackedObjects.push_back(targetObject);
 						}
 					}
 
-					if (found)
+				} break;
+
+				case message_projector_info:
+				{
+					if (messageBuffer.sizeRemaining < sizeof(projector_message_header))
 					{
-						myProjectors.push_back(monitor);
+						LOG_ERROR("Message is smaller than sizeof(projector_message_header). Expected at least %u bytes after header, got %u", (uint32)sizeof(projector_message_header), messageBuffer.sizeRemaining);
+						break;
 					}
-					else
+
+					projector_message_header* projectorHeader = messageBuffer.get<projector_message_header>(1);
+					uint32 numProjectorCalibrations = projectorHeader->numCalibrations;
+					uint32 numProjectors = projectorHeader->numProjectors;
+
+					uint32 expectedSize = numProjectorCalibrations * (uint32)sizeof(projector_calibration_message) + numProjectors * (uint32)sizeof(projector_instantiation_message);
+
+					if (messageBuffer.sizeRemaining < expectedSize)
 					{
-						remoteProjectors.push_back(monitor);
+						LOG_ERROR("Message is smaller than header indicates. Expected at least %u bytes after header, got %u", expectedSize, messageBuffer.sizeRemaining);
+						break;
 					}
-				}
 
-				manager->onMessageFromServer(std::move(calibrations), myProjectors, remoteProjectors);
-
-			} break;
-
-			case message_tracking:
-			{
-				if (size % sizeof(tracking_message) != 0)
-				{
-					LOG_ERROR("Message size is not evenly divisible by sizeof(tracking_message). Expected multiple of %u, got %u", (uint32)sizeof(tracking_message), size);
-					return;
-				}
-
-				if (header->messageID < latestTrackingMessageID)
-				{
-					// Ignore out-of-order tracking messages.
-					return;
-				}
-
-				latestTrackingMessageID = header->messageID;
-
-				uint32 numObjects = size / (uint32)sizeof(tracking_message);
-				const tracking_message* objects = (tracking_message*)data;
-
-				//LOG_MESSAGE("Received message containing %u objects", numObjects);
-
-				for (uint32 i = 0; i < numObjects; ++i)
-				{
-					if (i < trackedObjects.size())
+					if (messageBuffer.sizeRemaining > expectedSize)
 					{
-						scene_entity o = trackedObjects[i];
-
-						transform_component& transform = o.getComponent<transform_component>();
-						memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
-						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
+						LOG_ERROR("Message is larger than header indicates. Expected %u bytes after header, got %u", expectedSize, messageBuffer.sizeRemaining);
+						break;
 					}
-				}
 
-			} break;
+					projector_calibration_message* calibrationMessages = messageBuffer.get<projector_calibration_message>(numProjectorCalibrations);
+					projector_instantiation_message* instantiationMessages = messageBuffer.get<projector_instantiation_message>(numProjectors);
 
-			case message_solver_settings:
-			{
-				if (size != sizeof(projector_solver_settings))
+					assert(messageBuffer.sizeRemaining == 0);
+
+					std::unordered_map<std::string, projector_calibration> calibrations;
+					std::vector<std::string> myProjectors;
+					std::vector<std::string> remoteProjectors;
+
+					for (uint32 i = 0; i < numProjectorCalibrations; ++i)
+					{
+						projector_calibration_message& msg = calibrationMessages[i];
+
+						std::string monitor = msg.uniqueID;
+
+						projector_calibration calib;
+						memcpy(calib.rotation.v4.data, msg.rotation, sizeof(quat));
+						memcpy(calib.position.data, msg.position, sizeof(vec3));
+						calib.width = msg.width;
+						calib.height = msg.height;
+						calib.intrinsics = msg.intrinsics;
+
+						calibrations.insert({ monitor, calib });
+					}
+
+					for (uint32 i = 0; i < numProjectors; ++i)
+					{
+						uint32 index = instantiationMessages[i].calibrationIndex;
+						projector_calibration_message& msg = calibrationMessages[index];
+
+						std::string monitor = msg.uniqueID;
+
+						bool found = false;
+						for (auto& m : win32_window::allConnectedMonitors)
+						{
+							if (m.uniqueID == monitor)
+							{
+								found = true;
+								break;
+							}
+						}
+
+						if (found)
+						{
+							myProjectors.push_back(monitor);
+						}
+						else
+						{
+							remoteProjectors.push_back(monitor);
+						}
+					}
+
+					manager->onMessageFromServer(std::move(calibrations), myProjectors, remoteProjectors);
+
+				} break;
+
+				case message_tracking:
 				{
-					LOG_ERROR("Message size does not equal sizeof(projector_solver_settings). Expected %u, got %u", (uint32)sizeof(projector_solver_settings), size);
-					return;
-				}
+					if (messageBuffer.sizeRemaining % sizeof(tracking_message) != 0)
+					{
+						LOG_ERROR("Message size is not evenly divisible by sizeof(tracking_message). Expected multiple of %u, got %u", (uint32)sizeof(tracking_message), messageBuffer.sizeRemaining);
+						break;
+					}
 
-				LOG_MESSAGE("Updating solver settings");
+					if (header->messageID < latestTrackingMessageID)
+					{
+						// Ignore out-of-order tracking messages.
+						break;
+					}
 
-				manager->solver.settings = *(const projector_solver_settings*)data;
-			} break;
+					latestTrackingMessageID = header->messageID;
 
-			default:
-			{
-				LOG_ERROR("Received message which we don't understand: %u", (uint32)header->type);
-			} break;
+					uint32 numObjects = messageBuffer.sizeRemaining / (uint32)sizeof(tracking_message);
+					const tracking_message* objects = messageBuffer.get<tracking_message>(numObjects);
+
+					//LOG_MESSAGE("Received message containing %u objects", numObjects);
+
+					for (uint32 i = 0; i < numObjects; ++i)
+					{
+						if (i < trackedObjects.size())
+						{
+							scene_entity o = trackedObjects[i];
+
+							transform_component& transform = o.getComponent<transform_component>();
+							memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
+							memcpy(transform.position.data, objects[i].position, sizeof(vec3));
+						}
+					}
+
+				} break;
+
+				case message_solver_settings:
+				{
+					if (messageBuffer.sizeRemaining != sizeof(projector_solver_settings))
+					{
+						LOG_ERROR("Message size does not equal sizeof(projector_solver_settings). Expected %u, got %u", (uint32)sizeof(projector_solver_settings), messageBuffer.sizeRemaining);
+						break;
+					}
+
+					LOG_MESSAGE("Updating solver settings");
+
+					manager->solver.settings = *messageBuffer.get<projector_solver_settings>(1);
+				} break;
+
+				default:
+				{
+					LOG_ERROR("Received message which we don't understand: %u", (uint32)header->type);
+				} break;
+			}
 		}
-	}
-
-	static void closeCallback()
-	{
-		LOG_MESSAGE("Connection closed");
-		projectorNetworkInitialized = false;
 	}
 }
 
@@ -639,20 +706,17 @@ bool startProjectorNetworkProtocol(game_scene& scene, projector_manager* manager
 
 	if (isServer)
 	{
-		result = startNetworkServer(SERVER_PORT, server::messageCallback);
-		getLocalIPAddress(SERVER_IP);
+		result = server::initialize();
 	}
 	else
 	{
-		result = startNetworkClient(SERVER_IP, SERVER_PORT, client::messageCallback, client::closeCallback);
-		
-		if (result)
-		{
-			client::sendHello();
-		}
+		result = client::initialize();
 	}
 
-	projectorNetworkInitialized = true;
+	if (result)
+	{
+		projectorNetworkInitialized = true;
+	}
 
 	return result;
 }
@@ -666,20 +730,11 @@ bool updateProjectorNetworkProtocol(float dt)
 
 	if (isServer)
 	{
-		timeSinceLastUpdate += dt;
-
-		if (timeSinceLastUpdate >= updateTime)
-		{
-			server::sendTrackingInformation();
-
-			if (memcmp(&manager->solver.settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
-			{
-				oldSolverSettings = manager->solver.settings;
-				server::sendSolverSettings();
-			}
-			
-			timeSinceLastUpdate -= updateTime;
-		}
+		server::update(dt);
+	}
+	else
+	{
+		client::update();
 	}
 
 	return true;

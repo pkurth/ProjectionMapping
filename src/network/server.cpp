@@ -16,66 +16,50 @@ struct udp_connection
 
 static network_socket serverSocket;
 static std::vector<udp_connection> activeConnections;
-static std::mutex mutex;
 
-bool startNetworkServer(uint32 port, const server_message_callback& callback)
+bool startNetworkServer(uint32 port)
 {
 	network_socket socket;
-	if (!socket.initialize(port))
+	if (!socket.initialize(port, false))
 	{
-		return false;
-	}
-
-	char serverAddress[128];
-	if (!getLocalIPAddress(serverAddress))
-	{
-		socket.close();
 		return false;
 	}
 
 	serverSocket = socket;
 
+	return true;
+}
 
-	std::thread thread([callback]()
+receive_result checkForServerMessages(char* buffer, uint32 size, uint32& outBytesReceived, network_address& outClientAddress, bool& outClientKnown)
+{
+	network_address clientAddress;
+	uint32 bytesReceived = serverSocket.receive(clientAddress, buffer, size);
+
+	if (bytesReceived != -1 && bytesReceived != 0)
 	{
-		while (true)
+		bool addressKnown = false;
+		for (auto& con : activeConnections)
 		{
-			char buffer[NETWORK_BUFFER_SIZE];
-
-			network_address clientAddress;
-			uint32 bytesReceived = serverSocket.receive(clientAddress, buffer, NETWORK_BUFFER_SIZE);
-
-			if (bytesReceived != -1 && bytesReceived != 0)
+			if (con.address == clientAddress)
 			{
-				bool addressKnown = false;
-				for (auto& con : activeConnections)
-				{
-					if (con.address == clientAddress)
-					{
-						addressKnown = true;
-						break;
-					}
-				}
-
-				if (!addressKnown)
-				{
-					mutex.lock();
-					activeConnections.push_back({ clientAddress });
-					mutex.unlock();
-				}
-
-				if (callback)
-				{
-					callback(buffer, bytesReceived, clientAddress, addressKnown);
-				}
+				addressKnown = true;
+				break;
 			}
 		}
-	});
-	thread.detach();
 
-	LOG_MESSAGE("Server created, IP: %s, port %u", serverAddress, port);
+		outClientAddress = clientAddress;
+		outClientKnown = addressKnown;
+		outBytesReceived = bytesReceived;
 
-	return true;
+		if (!addressKnown)
+		{
+			activeConnections.push_back({ clientAddress });
+		}
+
+		return receive_result_success;
+	}
+
+	return receive_result_nothing_received;
 }
 
 bool sendTo(const network_address& address, const char* data, uint32 size)
@@ -87,12 +71,10 @@ bool broadcastToClients(const char* data, uint32 size)
 {
 	bool result = true;
 
-	mutex.lock();
 	for (auto& con : activeConnections)
 	{
 		result &= serverSocket.send(con.address, data, size);
 	}
-	mutex.unlock();
 
 	return result;
 }

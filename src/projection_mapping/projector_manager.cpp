@@ -108,14 +108,6 @@ void projector_manager::updateAndRender(float dt)
 	}
 	ImGui::End();
 
-	mutex.lock();
-	if (dirty)
-	{
-		dirty = false;
-		sendInformationToClients();
-	}
-	mutex.unlock();
-
 	updateProjectorNetworkProtocol(dt);
 
 
@@ -230,9 +222,7 @@ void projector_manager::updateAndRender(float dt)
 
 void projector_manager::onSceneLoad()
 {
-	mutex.lock();
 	sendInformationToClients();
-	mutex.unlock();
 }
 
 void projector_manager::sendInformationToClients()
@@ -268,12 +258,8 @@ void projector_manager::sendInformationToClients()
 
 void projector_manager::onMessageFromClient(const std::vector<std::string>& remoteMonitors)
 {
-	mutex.lock();
-
 	this->remoteMonitors.insert(remoteMonitors.begin(), remoteMonitors.end());
-	dirty = true;
-
-	mutex.unlock();
+	sendInformationToClients();
 }
 
 void projector_manager::onMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
