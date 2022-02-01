@@ -134,7 +134,7 @@ void projector_solver::solve(const projector_component* projectors, const render
 
 				projector_attenuation_cb cb;
 				cb.index = i;
-				cb.desiredWhiteValue = 0.7f;
+				cb.desiredWhiteValue = settings.referenceWhite;
 				cb.referenceDistance = settings.referenceDistance;
 
 				cl->setCompute32BitConstants(PROJECTOR_ATTENUATION_RS_CB, cb);

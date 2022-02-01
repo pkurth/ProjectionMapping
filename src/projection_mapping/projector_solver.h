@@ -12,6 +12,7 @@ struct projector_solver_settings
 	bool applySolverIntensity = false;
 
 	float referenceDistance = 0.5f;
+	float referenceWhite = 0.7f;
 
 	float depthDiscontinuityThreshold = 0.09f;
 	uint32 depthDiscontinuityDilateRadius = 2;

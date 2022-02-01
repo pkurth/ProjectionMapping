@@ -69,6 +69,7 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySeparator();
 
 			ImGui::PropertySlider("Reference distance", solver.settings.referenceDistance, 0.f, 5.f);
+			ImGui::PropertySlider("Reference white", solver.settings.referenceWhite);
 
 			ImGui::EndProperties();
 		}
