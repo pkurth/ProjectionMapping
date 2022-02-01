@@ -65,8 +65,6 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	editor.initialize(&scene, renderer, tracker, projectorManager);
 
-	quat setupRotation = quat::identity;
-
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/augustus.obj"))
 	{
 #if 1
@@ -77,20 +75,33 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		trs transform = trs::identity;
 #endif
 
-		setupRotation = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
+		tracker->globalCameraRotation = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
 		
 		
-		transform.rotation = setupRotation * transform.rotation;
-		transform.position = setupRotation * transform.position;
+		transform.rotation = tracker->globalCameraRotation * transform.rotation;
+		transform.position = tracker->globalCameraRotation * transform.position;
 
 		auto targetObject = scene.createEntity("Target object")
 			.addComponent<transform_component>(transform)
 			.addComponent<raster_component>(targetObjectMesh);
 
-		tracker->trackedEntities.push_back(targetObject);
+		tracker->trackEntity(targetObject);
 	}
 
-	tracker->globalCameraRotation = setupRotation;
+
+	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/nike.obj"))
+	{
+		trs transform = trs::identity;
+	
+		transform.rotation = tracker->globalCameraRotation * transform.rotation;
+		transform.position = tracker->globalCameraRotation * transform.position;
+	
+		auto targetObject = scene.createEntity("Target object")
+			.addComponent<transform_component>(transform)
+			.addComponent<raster_component>(targetObjectMesh);
+	
+		tracker->trackEntity(targetObject);
+	}
 
 
 	editor.setEnvironment("assets/sky/sunset_in_the_chalk_quarry_4k.hdr");
@@ -123,69 +134,6 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		SET_NAME(spotLightShadowInfoBuffer[i]->resource, "Spot light shadow infos");
 		SET_NAME(pointLightShadowInfoBuffer[i]->resource, "Point light shadow infos");
 	}
-
-
-	// Dummy projectors.
-
-#if 0
-	uint32 numProjectors = 0;
-	float projectorRadius = 2.3f;
-	for (uint32 i = 0; i < numProjectors; ++i)
-	{
-		float angle = M_TAU / numProjectors * i;
-		vec3 position(cos(angle) * projectorRadius, 1.f, sin(angle) * projectorRadius);
-		vec3 target(0.f, 1.f, 0.f);
-		quat rotation = lookAtQuaternion(normalize(target - position), vec3(0.f, 1.f, 0.f));
-
-		scene.createEntity("Projector")
-			.addComponent<position_rotation_component>(position, rotation)
-			.addComponent<projector_component>();
-	}
-#else
-	/*scene.createEntity("Projector")
-		.addComponent<position_rotation_component>(vec3(0.25f, 0.1f, 0.46f), quat(vec3(0.f, 1.f, 0.f), deg2rad(20.f)))
-		.addComponent<projector_component>();
-	
-	scene.createEntity("Projector")
-		.addComponent<position_rotation_component>(vec3(-0.17f, 0.1f, 0.43f), quat(vec3(0.f, 1.f, 0.f), deg2rad(-20.f)))
-		.addComponent<projector_component>();*/
-
-	//for (uint32 i = 0; i < 9; ++i)
-	//{
-	//	vec3 pos(0.059607f, -0.365440f, 0.533256f);
-	//	quat rotation = mat3ToQuaternion(transpose(mat3(-0.069518f, -0.967943f, -0.241359f, 0.960249f, 0.000640f, -0.279144f, 0.270350f, -0.251171f, 0.929421f)));
-	//
-	//	pos = setupRotation * pos;
-	//	rotation = setupRotation * rotation;
-	//
-	//	render_camera projCamera;
-	//	projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2717.140869f, 2714.319580f, 974.937622f, 1095.246460f }, 0.01f);
-	//
-	//	scene.createEntity("Projector")
-	//		.addComponent<position_rotation_component>(pos, rotation)
-	//		.addComponent<projector_component>(projCamera);
-	//}
-	//
-	//{
-	//	vec3 pos(0.105580f, 0.209924f, 0.440254f);
-	//	quat rotation = mat3ToQuaternion(transpose(mat3(0.075530f, -0.979857f, 0.184866f, 0.981546f, 0.040397f, -0.186910f, 0.175677f, 0.195572f, 0.964826f)));
-	//
-	//	pos = setupRotation * pos;
-	//	rotation = setupRotation * rotation;
-	//
-	//	render_camera projCamera;
-	//	projCamera.initializeCalibrated(pos, rotation, 1920, 1200, camera_intrinsics{ 2690.001709f, 2693.022949f, 979.055237f, 991.163513f }, 0.01f);
-	//
-	//	scene.createEntity("Projector")
-	//		.addComponent<position_rotation_component>(pos, rotation)
-	//		.addComponent<projector_component>(projCamera);
-	//}
-
-
-
-#endif
-
-
 
 	stackArena.initialize();
 }
