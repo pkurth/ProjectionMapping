@@ -152,7 +152,7 @@ static auto getObjectGroup()
 namespace server
 {
 	static uint16 runningClientID = 0;
-	static uint32 runningTrackingMessageID = 0;
+	static uint32 runningMessageID = 1;
 
 	struct client_connection
 	{
@@ -172,7 +172,7 @@ namespace server
 		send_buffer messageBuffer;
 		messageBuffer.header.type = message_object_info;
 		messageBuffer.header.clientID = connection.clientID;
-		messageBuffer.header.messageID = 0;
+		messageBuffer.header.messageID = runningMessageID++;
 
 		object_message* messages = messageBuffer.push<object_message>(numObjectsInScene);
 
@@ -210,7 +210,7 @@ namespace server
 
 		send_buffer messageBuffer;
 		messageBuffer.header.type = message_tracking;
-		messageBuffer.header.messageID = runningTrackingMessageID++;
+		messageBuffer.header.messageID = runningMessageID++;
 
 		tracking_message* messages = messageBuffer.push<tracking_message>(numObjectsInScene);
 
@@ -237,7 +237,7 @@ namespace server
 	{
 		send_buffer messageBuffer;
 		messageBuffer.header.type = message_projector_info;
-		messageBuffer.header.messageID = 0;
+		messageBuffer.header.messageID = runningMessageID++;
 
 		uint32 numProjectorCalibrations = (uint32)context.knownProjectorCalibrations.size();
 		assert(numProjectorCalibrations < 256);
@@ -302,7 +302,7 @@ namespace server
 
 		send_buffer messageBuffer;
 		messageBuffer.header.type = message_solver_settings;
-		messageBuffer.header.messageID = 0;
+		messageBuffer.header.messageID = runningMessageID++;
 
 		projector_solver_settings* message = messageBuffer.push<projector_solver_settings>(1);
 		*message = manager->solver.settings;
@@ -441,6 +441,9 @@ namespace client
 
 	static uint32 clientID = -1;
 	static uint32 latestTrackingMessageID = 0;
+	static uint32 latestObjectMessageID = 0;
+	static uint32 latestProjectorMessageID = 0;
+	static uint32 latestSettingsMessageID = 0;
 	
 	static std::vector<scene_entity> trackedObjects;
 
@@ -555,6 +558,14 @@ namespace client
 						break;
 					}
 
+					if (header->messageID < latestObjectMessageID)
+					{
+						// Ignore out-of-order tracking messages.
+						break;
+					}
+
+					latestObjectMessageID = header->messageID;
+
 					// Delete objects in scene.
 					auto objectGroup = getObjectGroup();
 					scene->registry.destroy(objectGroup.begin(), objectGroup.end());
@@ -593,6 +604,14 @@ namespace client
 						LOG_ERROR("Message is smaller than sizeof(projector_message_header). Expected at least %u bytes after header, got %u", (uint32)sizeof(projector_message_header), messageBuffer.sizeRemaining);
 						break;
 					}
+
+					if (header->messageID < latestProjectorMessageID)
+					{
+						// Ignore out-of-order tracking messages.
+						break;
+					}
+
+					latestProjectorMessageID = header->messageID;
 
 					projector_message_header* projectorHeader = messageBuffer.get<projector_message_header>(1);
 					uint32 numProjectorCalibrations = projectorHeader->numCalibrations;
@@ -710,6 +729,14 @@ namespace client
 						LOG_ERROR("Message size does not equal sizeof(projector_solver_settings). Expected %u, got %u", (uint32)sizeof(projector_solver_settings), messageBuffer.sizeRemaining);
 						break;
 					}
+
+					if (header->messageID < latestSettingsMessageID)
+					{
+						// Ignore out-of-order tracking messages.
+						break;
+					}
+
+					latestSettingsMessageID = header->messageID;
 
 					LOG_MESSAGE("Updating solver settings");
 
