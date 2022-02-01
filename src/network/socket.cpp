@@ -73,20 +73,25 @@ bool network_socket::send(const network_address& destination, const void* data, 
 	return true;
 }
 
-uint32 network_socket::receive(network_address& sender, void* data, uint32 maxSize)
+receive_result network_socket::receive(network_address& sender, void* data, uint32 maxSize, uint32& outBytesReceived)
 {
 	int fromLength = (int)sizeof(sender.addr);
 	int bytesReceived = recvfrom(socket, (char*)data, maxSize, 0, (sockaddr*)&sender.addr, &fromLength);
+
+	receive_result result = receive_result_success;
 
 	if (bytesReceived == SOCKET_ERROR)
 	{
 		int error = WSAGetLastError();
 
+		result = receive_result_connection_closed;
 		if (error == WSAEWOULDBLOCK || error == EWOULDBLOCK)
 		{
 			bytesReceived = 0;
+			result = receive_result_nothing_received;
 		}
 	}
 
-	return (uint32)bytesReceived;
+	outBytesReceived = (uint32)bytesReceived;
+	return result;
 }

@@ -1,9 +1,7 @@
 #include "pch.h"
 #include "projector_network_protocol.h"
 
-#include "network/network.h"
-#include "network/client.h"
-#include "network/server.h"
+#include "network/socket.h"
 
 #include "core/log.h"
 #include "window/window.h"
@@ -164,6 +162,7 @@ namespace server
 	};
 
 	static std::vector<client_connection> clientConnections;
+	static network_socket serverSocket;
 
 	static void sendObjectInformation(const client_connection& connection)
 	{
@@ -193,7 +192,7 @@ namespace server
 			++id;
 		}
 
-		sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
+		serverSocket.send(connection.address, messageBuffer.buffer, messageBuffer.size);
 	}
 
 	static void sendObjectInformation()
@@ -230,7 +229,7 @@ namespace server
 		for (const client_connection& connection : clientConnections)
 		{
 			messageBuffer.header.clientID = connection.clientID;
-			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
+			serverSocket.send(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
 	}
 
@@ -293,7 +292,7 @@ namespace server
 		for (const client_connection& connection : clientConnections)
 		{
 			messageBuffer.header.clientID = connection.clientID;
-			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
+			serverSocket.send(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
 	}
 
@@ -311,28 +310,33 @@ namespace server
 		for (const client_connection& connection : clientConnections)
 		{
 			messageBuffer.header.clientID = connection.clientID;
-			sendTo(connection.address, messageBuffer.buffer, messageBuffer.size);
+			serverSocket.send(connection.address, messageBuffer.buffer, messageBuffer.size);
 		}
 	}
 
 
 	static bool initialize()
 	{
-		bool result = startNetworkServer(SERVER_PORT);
+		network_socket socket;
+		if (!socket.initialize(SERVER_PORT, false))
+		{
+			return false;
+		}
+
+		serverSocket = socket;
 		
 		getLocalIPAddress(SERVER_IP);
 		LOG_MESSAGE("Server created, IP: %s, port %u", SERVER_IP, SERVER_PORT);
 
-		return result;
+		return true;
 	}
 
 	static void update(float dt)
 	{
 		receive_buffer messageBuffer;
 		network_address clientAddress;
-		bool addressKnown;
 
-		while (checkForServerMessages(messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize, clientAddress, addressKnown) == receive_result_success)
+		while (serverSocket.receive(clientAddress, messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize) == receive_result_success)
 		{
 			messageBuffer.reset();
 
@@ -347,6 +351,16 @@ namespace server
 			{
 				case message_hello_from_client:
 				{
+					bool addressKnown = false;
+					for (const client_connection& c : clientConnections)
+					{
+						if (c.address == clientAddress)
+						{
+							addressKnown = true;
+							break;
+						}
+					}
+
 					if (addressKnown)
 					{
 						LOG_MESSAGE("Received duplicate 'hello' from client. Ignoring message");
@@ -422,10 +436,14 @@ namespace server
 
 namespace client
 {
+	static network_address serverAddress;
+	static network_socket clientSocket;
+
 	static uint32 clientID = -1;
 	static uint32 latestTrackingMessageID = 0;
-
+	
 	static std::vector<scene_entity> trackedObjects;
+
 
 	static void sendHello()
 	{
@@ -449,23 +467,30 @@ namespace client
 			strncpy_s(msg.uniqueID, mon.uniqueID.c_str(), sizeof(msg.uniqueID));
 		}
 
-		sendToServer(messageBuffer.buffer, messageBuffer.size);
+		clientSocket.send(serverAddress, messageBuffer.buffer, messageBuffer.size);
 	}
 
 	static bool initialize()
 	{
-		bool result = startNetworkClient(SERVER_IP, SERVER_PORT);
-
-		if (result)
-		{
-			sendHello();
-		}
-
-		char clientAddress[128];
-		if (!getLocalIPAddress(clientAddress))
+		network_address serverAddr;
+		if (!serverAddr.initialize(SERVER_IP, SERVER_PORT))
 		{
 			return false;
 		}
+
+		network_socket socket;
+		if (!socket.initialize(0, false))
+		{
+			return false;
+		}
+
+		serverAddress = serverAddr;
+		clientSocket = socket;
+
+		sendHello();
+
+		char clientAddress[128];
+		getLocalIPAddress(clientAddress);
 
 		LOG_MESSAGE("Client created, IP: %s", clientAddress);
 
@@ -478,11 +503,18 @@ namespace client
 
 		while (true)
 		{
-			receive_result result = checkForClientMessages(messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize);
+			network_address senderAddress;
+			receive_result result = clientSocket.receive(senderAddress, messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize);
 			
 			if (result == receive_result_nothing_received)
 			{
 				break;
+			}
+
+			if (senderAddress != serverAddress)
+			{
+				LOG_MESSAGE("Received message from sender other than server. Ignoring message");
+				continue;
 			}
 
 			if (result == receive_result_connection_closed)
