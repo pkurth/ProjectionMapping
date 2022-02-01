@@ -306,7 +306,9 @@ void projector_manager::createProjector(const std::string& monitorID, bool local
 	//pos = setupRotation * pos;
 	//rotation = setupRotation * rotation;
 
-	scene->createEntity("Projector")
+	const char* name = local ? "Projector (local)" : "Projector (remote)";
+
+	scene->createEntity(name)
 		.addComponent<position_rotation_component>(position, rotation)
 		.addComponent<projector_component>(p.width, p.height, p.intrinsics, monitorID, local, true);
 }

@@ -4,7 +4,7 @@
 
 struct tag_component
 {
-	char name[16];
+	char name[24];
 
 	tag_component(const char* n)
 	{
