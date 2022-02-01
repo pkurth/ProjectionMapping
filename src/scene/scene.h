@@ -22,6 +22,12 @@ struct scene_entity
 	scene_entity(uint32 id, entt::registry* reg) : handle((entt::entity)id), registry(reg) {}
 	scene_entity(const scene_entity&) = default;
 
+
+	bool isValid()
+	{
+		return registry && registry->valid(handle);
+	}
+
 	template <typename component_t, typename... args>
 	scene_entity& addComponent(args&&... a)
 	{
@@ -128,11 +134,6 @@ struct game_scene
 	void deleteAllComponents()
 	{
 		registry.clear<component_t>();
-	}
-
-	bool isEntityValid(scene_entity e)
-	{
-		return registry.valid(e.handle);
 	}
 
 	template <typename component_t>

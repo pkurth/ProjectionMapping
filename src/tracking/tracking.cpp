@@ -384,13 +384,7 @@ static rotation_translation smoothDeltaTransform(rotation_translation delta, flo
 	return lieExp(lieLog(delta) * t);
 }
 
-struct solver_result
-{
-	vec6 x;
-	depth_tracker::solver_stats stats;
-};
-
-static solver_result solve(const tracking_ata& A, const tracking_atb& b, uint32 maxNumIterations = 20)
+static vec6 solve(const tracking_ata& A, const tracking_atb& b, uint32 maxNumIterations = 20)
 {
 	vec6 x;
 	memset(&x, 0, sizeof(x));
@@ -419,7 +413,7 @@ static solver_result solve(const tracking_ata& A, const tracking_atb& b, uint32 
 		p = r + p * beta;
 	}
 
-	return { x, { rdotr, k } };
+	return x;
 }
 
 static rotation_translation eulerUpdate(vec6 x, float smoothing)
@@ -472,7 +466,7 @@ void depth_tracker::processLastTrackingJob(tracking_job& job)
 	assert(trackedEntity);
 
 	// If entity has been deleted, don't track it anymore.
-	if (!trackedEntity.registry->valid(trackedEntity.handle))
+	if (!trackedEntity.isValid())
 	{
 		job.used = false;
 		--numTrackingJobs;
@@ -489,7 +483,7 @@ void depth_tracker::processLastTrackingJob(tracking_job& job)
 
 	//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
 	bool correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
-	numCorrespondences = indirect.counter;
+	job.numCorrespondences = indirect.counter;
 
 
 	if (tracking && correspondencesValid)
@@ -504,8 +498,7 @@ void depth_tracker::processLastTrackingJob(tracking_job& job)
 		tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
 		unmapBuffer(job.ataReadbackBuffer, false);
 
-		solver_result result = solve(ata, atb);
-		stats = result.stats;
+		vec6 x = solve(ata, atb);
 
 		float s = smoothing;
 
@@ -517,12 +510,12 @@ void depth_tracker::processLastTrackingJob(tracking_job& job)
 		rotation_translation delta;
 		if (rotationRepresentation == tracking_rotation_representation_euler)
 		{
-			delta = eulerUpdate(result.x, s);
+			delta = eulerUpdate(x, s);
 		}
 		else
 		{
 			assert(rotationRepresentation == tracking_rotation_representation_lie);
-			delta = lieUpdate(result.x, s);
+			delta = lieUpdate(x, s);
 		}
 
 
@@ -770,8 +763,6 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 
 void depth_tracker::update()
 {
-	numCorrespondences = 0;
-
 	if (camera.isInitialized())
 	{
 		dx_command_list* cl = dxContext.getFreeRenderCommandList();
@@ -983,46 +974,48 @@ scene_entity depth_tracker::drawSettings()
 				if (job.used)
 				{
 					scene_entity entity = job.trackedEntity;
-					assert(entity);
-
-					ImGui::PushID(i);
-
-					char label[32];
-					snprintf(label, sizeof(label), "    Entity %u", index);
-					if (ImGui::PropertyButton(label, ICON_FA_CUBE, entity.getComponent<tag_component>().name))
+					if (entity && entity.isValid())
 					{
-						result = entity;
+						ImGui::PushID(i);
+
+						char label[32];
+						snprintf(label, sizeof(label), "    Entity %u", index);
+						if (ImGui::PropertyButton(label, entity.getComponent<tag_component>().name))
+						{
+							result = entity;
+						}
+
+						snprintf(label, sizeof(label), "    Export entity %u", index);
+						if (ImGui::PropertyButton(label, "Copy relative 4x4 matrix to clipboard",
+							"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
+						{
+							const transform_component& transform = entity.getComponent<transform_component>();
+
+							mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
+								* createViewMatrix(globalCameraPosition, globalCameraRotation)
+								* trsToMat4(transform);
+
+							char buffer[512];
+							snprintf(buffer, sizeof(buffer),
+								"%ff, %ff, %ff, %ff, "
+								"%ff, %ff, %ff, %ff, "
+								"%ff, %ff, %ff, %ff, "
+								"%ff, %ff, %ff, %ff",
+								m.m[0], m.m[1], m.m[2], m.m[3],
+								m.m[4], m.m[5], m.m[6], m.m[7],
+								m.m[8], m.m[9], m.m[10], m.m[11],
+								m.m[12], m.m[13], m.m[14], m.m[15]);
+
+							ImGui::SetClipboardText(buffer);
+						}
+
+						ImGui::PropertyValue("    Number of correspondences", job.numCorrespondences);
+
+						ImGui::PropertySeparator();
+						ImGui::PopID();
+
+						++index;
 					}
-
-					snprintf(label, sizeof(label), "    Export entity %u", index);
-					if (ImGui::PropertyButton(label, "Copy relative 4x4 matrix to clipboard",
-						"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
-					{
-						const transform_component& transform = entity.getComponent<transform_component>();
-
-						mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
-							* createViewMatrix(globalCameraPosition, globalCameraRotation)
-							* trsToMat4(transform);
-
-						char buffer[512];
-						snprintf(buffer, sizeof(buffer),
-							"%ff, %ff, %ff, %ff, "
-							"%ff, %ff, %ff, %ff, "
-							"%ff, %ff, %ff, %ff, "
-							"%ff, %ff, %ff, %ff",
-							m.m[0], m.m[1], m.m[2], m.m[3],
-							m.m[4], m.m[5], m.m[6], m.m[7],
-							m.m[8], m.m[9], m.m[10], m.m[11],
-							m.m[12], m.m[13], m.m[14], m.m[15]);
-
-						ImGui::SetClipboardText(buffer);
-					}
-
-					ImGui::PropertySeparator();
-					ImGui::PopID();
-
-
-					++index;
 				}
 			}
 			
@@ -1046,14 +1039,6 @@ scene_entity depth_tracker::drawSettings()
 
 			ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
 			ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
-
-			ImGui::Separator();
-			ImGui::PropertyValue("Number of correspondences", numCorrespondences);
-			if (tracking)
-			{
-				//ImGui::PropertyValue("Current error", stats.error, "%.8f");
-				ImGui::PropertyValue("CG iterations", stats.numCGIterations);
-			}
 
 			ImGui::EndProperties();
 		}

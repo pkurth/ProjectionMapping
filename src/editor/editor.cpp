@@ -97,7 +97,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 {
 	CPU_PROFILE_BLOCK("Update editor");
 
-	if (selectedEntity && !scene->isEntityValid(selectedEntity))
+	if (selectedEntity && !selectedEntity.isValid())
 	{
 		setSelectedEntityNoUndo({});
 	}

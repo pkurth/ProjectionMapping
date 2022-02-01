@@ -81,7 +81,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		transform.rotation = tracker->globalCameraRotation * transform.rotation;
 		transform.position = tracker->globalCameraRotation * transform.position;
 
-		auto targetObject = scene.createEntity("Target object")
+		auto targetObject = scene.createEntity("Augustus")
 			.addComponent<transform_component>(transform)
 			.addComponent<raster_component>(targetObjectMesh);
 
@@ -96,7 +96,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 		transform.rotation = tracker->globalCameraRotation * transform.rotation;
 		transform.position = tracker->globalCameraRotation * transform.position;
 	
-		auto targetObject = scene.createEntity("Target object")
+		auto targetObject = scene.createEntity("Nike")
 			.addComponent<transform_component>(transform)
 			.addComponent<raster_component>(targetObjectMesh);
 	

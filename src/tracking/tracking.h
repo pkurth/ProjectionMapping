@@ -33,12 +33,6 @@ struct depth_tracker
 	bool trackEntity(scene_entity entity);
 	void clearTrackedEntities();
 
-	struct solver_stats
-	{
-		float error;
-		uint32 numCGIterations;
-	};
-
 	vec3 globalCameraPosition = vec3(0.f, 0.f, 0.f);
 	quat globalCameraRotation = quat::identity;
 
@@ -63,6 +57,8 @@ private:
 
 		bool buffersAreInitialized = false;
 		bool used = false;
+
+		uint32 numCorrespondences;
 	};
 
 	void initializeTrackingJob(tracking_job& job, scene_entity entity);
@@ -101,10 +97,5 @@ private:
 	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
 
 	bool tracking = false;
-
-
-	// This is declared here, so that we can show it in the editor.
-	solver_stats stats = {};
-	uint32 numCorrespondences = 0;
 };
 
