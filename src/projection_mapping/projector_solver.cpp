@@ -51,7 +51,7 @@ static void projectorToCB(const render_camera& camera, projector_cb& proj)
 	proj.forward = vec4(camera.rotation * vec3(0.f, 0.f, -1.f), 0.f);
 }
 
-void projector_solver::solve(const projector_component* projectors, uint32 numProjectors)
+void projector_solver::solve(const projector_component* projectors, const render_camera* cameras, uint32 numProjectors)
 {
 	this->numProjectors = numProjectors;
 
@@ -73,7 +73,7 @@ void projector_solver::solve(const projector_component* projectors, uint32 numPr
 	{
 		const projector_component& p = projectors[i];
 
-		projectorToCB(p.calibratedCamera, projectorCBs[i]);
+		projectorToCB(cameras[i], projectorCBs[i]);
 
 		(linearRenderResultsBaseDescriptor + i).create2DTextureSRV(p.renderer.ldrPostProcessingTexture);
 		(srgbRenderResultsBaseDescriptor + i).create2DTextureSRV(p.renderer.frameResult);

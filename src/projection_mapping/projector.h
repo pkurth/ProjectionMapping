@@ -25,17 +25,19 @@ struct projector_component
 {
 	projector_component() { }
 
-	projector_component(const render_camera& camera, const std::string& monitorID, bool local, bool fullscreen)
+	projector_component(uint32 width, uint32 height, camera_intrinsics intrinsics, const std::string& monitorID, bool local, bool fullscreen)
 	{
-		initialize(camera, monitorID, local, fullscreen);
+		initialize(width, height, intrinsics, monitorID, local, fullscreen);
 	}
 
-	void initialize(const render_camera& camera, const std::string& monitorID, bool local, bool fullscreen)
+	void initialize(uint32 width, uint32 height, camera_intrinsics intrinsics, const std::string& monitorID, bool local, bool fullscreen)
 	{
 		shutdown();
 
 		this->monitorID = monitorID;
-		calibratedCamera = camera;
+		this->intrinsics = intrinsics;
+		this->width = width;
+		this->height = height;
 
 		if (local)
 		{
@@ -51,7 +53,7 @@ struct projector_component
 				}
 			}
 
-			window.initialize(TEXT("Projector"), camera.width, camera.height, color_depth_8, false, true);
+			window.initialize(TEXT("Projector"), width, height, color_depth_8, false, true);
 
 			headless = false;
 
@@ -80,7 +82,7 @@ struct projector_component
 			LOG_MESSAGE("Created headless (remote) projector");
 		}
 
-		renderer.initialize(color_depth_8, camera.width, camera.height);
+		renderer.initialize(color_depth_8, width, height);
 	}
 
 	void shutdown()
@@ -103,9 +105,10 @@ struct projector_component
 	std::string monitorID;
 	bool headless;
 
+	uint32 width, height;
 	projector_renderer renderer;
+	camera_intrinsics intrinsics;
 	dx_window window;
-	render_camera calibratedCamera;
 	vec4 frustumColor;
 
 	static inline vec4 frustumColors[] =

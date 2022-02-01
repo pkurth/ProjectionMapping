@@ -179,19 +179,24 @@ void projector_manager::updateAndRender(float dt)
 		ImGui::End();
 	}
 
+
+	uint32 numProjectors = scene->numberOfComponentsOfType<projector_component>();
+	render_camera projectorCameras[32];
+
+	uint32 projectorIndex = numProjectors - 1; // EnTT iterates back to front.
 	for (auto [entityHandle, projector, transform] : scene->group(entt::get<projector_component, position_rotation_component>).each())
 	{
-		projector.calibratedCamera.position = transform.position;
-		projector.calibratedCamera.rotation = transform.rotation;
-		projector.calibratedCamera.updateMatrices();
+		render_camera& camera = projectorCameras[projectorIndex--];
+		camera.initializeCalibrated(transform.position, transform.rotation, projector.width, projector.height, projector.intrinsics, 0.01f);
+		camera.updateMatrices();
 
-		projector.renderer.setProjectorCamera(projector.calibratedCamera);
+		projector.renderer.setProjectorCamera(camera);
 
 		projector.renderer.endFrame();
 	}
 
 
-	solver.solve(scene->raw<projector_component>(), scene->numberOfComponentsOfType<projector_component>());
+	solver.solve(scene->raw<projector_component>(), projectorCameras, numProjectors);
 
 
 
@@ -301,11 +306,8 @@ void projector_manager::createProjector(const std::string& monitorID, bool local
 	//pos = setupRotation * pos;
 	//rotation = setupRotation * rotation;
 
-	render_camera projCamera;
-	projCamera.initializeCalibrated(position, rotation, p.width, p.height, p.intrinsics, 0.01f);
-
 	scene->createEntity("Projector")
 		.addComponent<position_rotation_component>(position, rotation)
-		.addComponent<projector_component>(projCamera, monitorID, local, true);
+		.addComponent<projector_component>(p.width, p.height, p.intrinsics, monitorID, local, true);
 }
 
