@@ -772,7 +772,7 @@ void depth_tracker::update()
 {
 	numCorrespondences = 0;
 
-	if (cameraInitialized())
+	if (camera.isInitialized())
 	{
 		dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
@@ -861,7 +861,7 @@ void depth_tracker::update()
 
 void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 {
-	if (showDepth && cameraInitialized())
+	if (showDepth && camera.isInitialized())
 	{
 		mat4 depthCameraM = createModelMatrix(camera.depthSensor.position, camera.depthSensor.rotation);
 
@@ -877,6 +877,11 @@ void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 
 bool depth_tracker::isEntityTracked(scene_entity entity)
 {
+	if (!camera.isInitialized())
+	{
+		return false;
+	}
+
 	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
 	{
 		if (trackingJobs[i].used && trackingJobs[i].trackedEntity == entity)
@@ -889,6 +894,11 @@ bool depth_tracker::isEntityTracked(scene_entity entity)
 
 bool depth_tracker::trackEntity(scene_entity entity)
 {
+	if (!camera.isInitialized())
+	{
+		return false;
+	}
+
 	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
 	{
 		if (!trackingJobs[i].used)
@@ -903,6 +913,11 @@ bool depth_tracker::trackEntity(scene_entity entity)
 
 void depth_tracker::clearTrackedEntities()
 {
+	if (!camera.isInitialized())
+	{
+		return;
+	}
+
 	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
 	{
 		trackingJobs[i].used = false;
@@ -947,7 +962,7 @@ scene_entity depth_tracker::drawSettings()
 
 	ImGui::Separator();
 
-	if (cameraInitialized())
+	if (camera.isInitialized())
 	{
 		if (ImGui::BeginProperties())
 		{

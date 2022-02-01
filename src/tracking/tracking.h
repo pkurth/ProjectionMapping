@@ -44,8 +44,6 @@ struct depth_tracker
 
 private:
 
-	bool cameraInitialized() { return cameraDepthTexture != 0; }
-
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
 	
 	rgbd_camera camera;

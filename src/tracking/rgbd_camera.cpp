@@ -384,6 +384,16 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, bool alignDepthToColor
     rs2_error* e = 0;
 
     rs2_device_list* deviceList = rs2_query_devices(rsContext, &e);
+    assertRealsenseSuccess(e);
+
+    uint32 numRealsenseDevices = rs2_get_device_count(deviceList, &e);
+    assertRealsenseSuccess(e);
+
+    if (deviceIndex >= numRealsenseDevices)
+    {
+        return false;
+    }
+
     realsense.device = rs2_create_device(deviceList, deviceIndex, &e);
     if (!checkRealsenseSuccess(e))
     {

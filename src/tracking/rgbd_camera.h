@@ -110,6 +110,8 @@ struct rgbd_camera
 	bool initializeRealsense(uint32 deviceIndex = 0, bool alignDepthToColor = true);
 	void shutdown();
 
+	bool isInitialized() { return info.type != rgbd_camera_type_uninitialized; }
+
 	bool getFrame(rgbd_frame& result, int32 timeOutInMilliseconds = 0); // 0: Return immediately.
 	void releaseFrame(rgbd_frame& frame);
 
