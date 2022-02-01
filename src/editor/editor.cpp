@@ -105,7 +105,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 	bool objectDragged = false;
 	objectDragged |= handleUserInput(input, ldrRenderPass, dt);
 	objectDragged |= drawSceneHierarchy();
-	//drawHardwareWindow();
+	drawHardwareWindow();
 	drawMainMenuBar();
 	drawSettings(dt);
 
@@ -652,7 +652,7 @@ void scene_editor::drawHardwareWindow()
 				{
 					if (ImGui::BeginProperties())
 					{
-						ImGui::PropertyValue("Unique ID", monitor.uniqueID.c_str());
+						ImGui::PropertyInputText("Unique ID", (char*)monitor.uniqueID.c_str(), 128, true);
 
 						ImGui::EndProperties();
 					}

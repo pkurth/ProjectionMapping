@@ -16,8 +16,8 @@ void main(cs_input IN)
 {
 	int2 center = IN.dispatchThreadID.xy;
 
-	float3 scene = input[center + int2(0, 0)].rgb;
-	scene *= intensity[center + int2(0, 0)];
+	float3 scene = input[center].rgb;
+	scene *= intensity[center];
 
 	if (present.sharpenStrength > 0.f)
 	{

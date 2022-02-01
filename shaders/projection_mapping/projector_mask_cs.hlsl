@@ -38,7 +38,7 @@ void main(cs_input IN)
 	const float2 uv = (float2(texCoord) + float2(0.5f, 0.5f)) * projectors[index].invScreenDims;
 
 	
-	float depthMask = 1.f - depthMasks[index].SampleLevel(clampSampler, uv, 0); // 0 at edges, 1 everywhere else.
+	float depthMask = depthMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
 	float colorMask = colorMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
 	float bestMask = bestMasks[index].SampleLevel(clampSampler, uv, 0); // 1 where best, 0 everywhere else.
 
@@ -50,10 +50,12 @@ void main(cs_input IN)
 	float maskFactor = smoothstep(edgeWidth, edgeWidth + edgeTransition, distanceFromEdge);
 	float edgeMask = maskFactor;
 
-
+	depthMask *= 1.f;
 	colorMask = 1.f - lerp(colorMask * cb.colorMaskStrength, 0.f, bestMask);
 
-	float softMask = min(colorMask, edgeMask);
 
-	output[index][texCoord] = float2(depthMask, softMask);
+	float softMask = min(colorMask, edgeMask);
+	float hardMask = 1.f - depthMask;
+
+	output[index][texCoord] = float2(hardMask, softMask);
 }

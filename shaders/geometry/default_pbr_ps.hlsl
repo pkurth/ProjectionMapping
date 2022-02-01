@@ -324,7 +324,7 @@ ps_output main(ps_input IN)
 		bot = t;
 	}
 
-	OUT.hdrColor.rgb = surface.P.y > 0.1f ? top : bot;
+	//OUT.hdrColor.rgb = surface.P.y > 0.1f ? top : bot;
 	//OUT.hdrColor.rgb = float3(0.6f, 0.6f, 0.6f);
 	OUT.hdrColor.rgb = rgb;
 	return OUT;
