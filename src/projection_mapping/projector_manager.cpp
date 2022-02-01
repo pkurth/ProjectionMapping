@@ -184,8 +184,13 @@ void projector_manager::updateAndRender(float dt)
 	render_camera projectorCameras[32];
 
 	uint32 projectorIndex = numProjectors - 1; // EnTT iterates back to front.
-	for (auto [entityHandle, projector, transform] : scene->group(entt::get<projector_component, position_rotation_component>).each())
+	// We use a view here, because we need the projectors sorted the same way as the raw array. An alternative would be to group projectors with position_rotation_components,
+	// but this conflicts with the owning group of spot lights and position_rotations.
+	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 	{
+		scene_entity entity = { entityHandle, *scene };
+		position_rotation_component& transform = entity.getComponent<position_rotation_component>();
+
 		render_camera& camera = projectorCameras[projectorIndex--];
 		camera.initializeCalibrated(transform.position, transform.rotation, projector.width, projector.height, projector.intrinsics, 0.01f);
 		camera.updateMatrices();
