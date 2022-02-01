@@ -87,7 +87,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 			.addComponent<transform_component>(transform)
 			.addComponent<raster_component>(targetObjectMesh);
 
-		tracker->trackedEntity = targetObject;
+		tracker->trackedEntities.push_back(targetObject);
 	}
 
 	tracker->globalCameraRotation = setupRotation;

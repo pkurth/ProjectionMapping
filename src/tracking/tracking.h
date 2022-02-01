@@ -18,12 +18,6 @@ enum tracking_rotation_representation
 	tracking_rotation_representation_lie,
 };
 
-enum tracker_ui_interaction
-{
-	tracker_ui_no_interaction,
-	tracker_ui_select_tracked_entity,
-};
-
 struct depth_tracker
 {
 	depth_tracker();
@@ -31,7 +25,7 @@ struct depth_tracker
 	depth_tracker& operator=(const depth_tracker&) = delete;
 	depth_tracker& operator=(depth_tracker&&) = default;
 
-	tracker_ui_interaction drawSettings();
+	scene_entity drawSettings();
 	void update();
 	void visualizeDepth(ldr_render_pass* renderPass);
 
@@ -41,7 +35,7 @@ struct depth_tracker
 		uint32 numCGIterations;
 	};
 
-	scene_entity trackedEntity = {};
+	std::vector<scene_entity> trackedEntities;
 
 	vec3 globalCameraPosition = vec3(0.f, 0.f, 0.f);
 	quat globalCameraRotation = quat::identity;

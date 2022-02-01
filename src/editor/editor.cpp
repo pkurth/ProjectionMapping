@@ -1248,9 +1248,10 @@ void scene_editor::drawSettings(float dt)
 
 		if (ImGui::BeginTree("Tracker"))
 		{
-			if (tracker->drawSettings() == tracker_ui_select_tracked_entity)
+			scene_entity e = tracker->drawSettings();
+			if (e)
 			{
-				setSelectedEntity(tracker->trackedEntity);
+				setSelectedEntity(e);
 			}
 			ImGui::EndTree();
 		}

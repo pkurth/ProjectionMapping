@@ -138,7 +138,7 @@ depth_tracker::depth_tracker()
 {
 	initializePipelines();
 
-	initialize(rgbd_camera_type_azure, 0);
+	initialize(rgbd_camera_type_realsense, 0);
 }
 
 void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)
@@ -481,16 +481,26 @@ void depth_tracker::update()
 			}
 
 
-			// If entity has been deleted, don't track it anymore.
-			if (trackedEntity && !trackedEntity.registry->valid(trackedEntity.handle))
+			uint32 numTrackedEntities = (uint32)trackedEntities.size();
+			for (uint32 i = 0; i < numTrackedEntities; ++i)
 			{
-				trackedEntity = {};
+				scene_entity trackedEntity = trackedEntities[i];
+
+				// If entity has been deleted, don't track it anymore.
+				if (trackedEntity && !trackedEntity.registry->valid(trackedEntity.handle))
+				{
+					trackedEntities[i] = trackedEntities.back();
+					--numTrackedEntities;
+					--i;
+				}
 			}
 
-			if (!trackedEntity)
+			if (trackedEntities.size() == 0)
 			{
 				tracking = false;
 			}
+
+			scene_entity trackedEntity = (trackedEntities.size() > 0) ? trackedEntities[0] : scene_entity{};
 
 			{
 				CPU_PROFILE_BLOCK("Process last tracking result");
@@ -780,9 +790,9 @@ void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 	}
 }
 
-tracker_ui_interaction depth_tracker::drawSettings()
+scene_entity depth_tracker::drawSettings()
 {
-	tracker_ui_interaction result = tracker_ui_no_interaction;
+	scene_entity result = {};
 
 	if (ImGui::BeginTree("Cameras"))
 	{
@@ -828,36 +838,53 @@ tracker_ui_interaction depth_tracker::drawSettings()
 			}
 			ImGui::PropertySeparator();
 
-			bool valid = trackedEntity;
-			if (ImGui::PropertyDisableableButton("Entity", ICON_FA_CUBE, valid, valid ? trackedEntity.getComponent<tag_component>().name : "No entity set"))
+			ImGui::PropertyValue("Tracked entities", (uint32)trackedEntities.size());
+
+			uint32 index = 0;
+			for (scene_entity& entity : trackedEntities)
 			{
-				result = tracker_ui_select_tracked_entity;
+				ImGui::PushID((int)entity.handle);
+				if (entity)
+				{
+					char label[32];
+					snprintf(label, sizeof(label), "Entity %u", index);
+					if (ImGui::PropertyButton(label, ICON_FA_CUBE, entity.getComponent<tag_component>().name))
+					{
+						result = entity;
+					}
+
+					snprintf(label, sizeof(label), "Export entity %u", index);
+					if (ImGui::PropertyButton(label, "Copy relative 4x4 matrix to clipboard",
+						"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
+					{
+						const transform_component& transform = entity.getComponent<transform_component>();
+
+						mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
+							* createViewMatrix(globalCameraPosition, globalCameraRotation)
+							* trsToMat4(transform);
+
+						char buffer[512];
+						snprintf(buffer, sizeof(buffer),
+							"%ff, %ff, %ff, %ff, "
+							"%ff, %ff, %ff, %ff, "
+							"%ff, %ff, %ff, %ff, "
+							"%ff, %ff, %ff, %ff",
+							m.m[0], m.m[1], m.m[2], m.m[3],
+							m.m[4], m.m[5], m.m[6], m.m[7],
+							m.m[8], m.m[9], m.m[10], m.m[11],
+							m.m[12], m.m[13], m.m[14], m.m[15]);
+
+						ImGui::SetClipboardText(buffer);
+					}
+
+					ImGui::PropertySeparator();
+					++index;
+				}
+				ImGui::PopID();
 			}
-			if (ImGui::PropertyDisableableButton("Export", "Copy relative 4x4 matrix to clipboard", valid, 
-				"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
-			{
-				const transform_component& transform = trackedEntity.getComponent<transform_component>();
-
-				mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
-					* createViewMatrix(globalCameraPosition, globalCameraRotation)
-					* trsToMat4(transform);
-
-				char buffer[512];
-				snprintf(buffer, sizeof(buffer),
-					"%ff, %ff, %ff, %ff, "
-					"%ff, %ff, %ff, %ff, "
-					"%ff, %ff, %ff, %ff, "
-					"%ff, %ff, %ff, %ff",
-					m.m[0], m.m[1], m.m[2], m.m[3],
-					m.m[4], m.m[5], m.m[6], m.m[7],
-					m.m[8], m.m[9], m.m[10], m.m[11],
-					m.m[12], m.m[13], m.m[14], m.m[15]);
-
-				ImGui::SetClipboardText(buffer);
-			}
-
+			
 			ImGui::PropertyCheckbox("Visualize depth", showDepth);
-			ImGui::PropertyDisableableCheckbox("Tracking", tracking, valid);
+			ImGui::PropertyDisableableCheckbox("Tracking", tracking, trackedEntities.size() > 0);
 			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
 

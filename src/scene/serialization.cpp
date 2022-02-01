@@ -617,7 +617,7 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 				if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
 				if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
 
-				if (tracker->trackedEntity == entity)
+				if (std::find(tracker->trackedEntities.begin(), tracker->trackedEntities.end(), entity) != tracker->trackedEntities.end())
 				{
 					out << YAML::Key << "Tracking" << YAML::Value << true;
 				}
@@ -657,6 +657,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 	scene = game_scene();
 	scene.savePath = std::move(filename);
 	projectorContext->knownProjectorCalibrations.clear();
+	tracker->trackedEntities.clear();
 
 	std::string sceneName = n["Scene"].as<std::string>();
 
@@ -689,7 +690,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 
 		if (entityNode["Tracking"])
 		{
-			tracker->trackedEntity = entity;
+			tracker->trackedEntities.push_back(entity);
 		}
 	}
 
