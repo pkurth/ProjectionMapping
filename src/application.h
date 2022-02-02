@@ -11,12 +11,13 @@
 #include "rendering/raytracing.h"
 #include "editor/editor.h"
 #include "projection_mapping/projector_manager.h"
+#include "calibration/calibration.h"
 #include "tracking/tracking.h"
 
 struct application
 {
 	void loadCustomShaders();
-	void initialize(main_renderer* renderer, projector_manager* projectorManager, depth_tracker* tracker);
+	void initialize(main_renderer* renderer, projector_manager* projectorManager, projector_system_calibration* projectorCalibration, depth_tracker* tracker);
 	void update(const user_input& input, float dt);
 
 	void handleFileDrop(const fs::path& filename);

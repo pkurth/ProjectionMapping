@@ -50,7 +50,7 @@ void application::loadCustomShaders()
 	}
 }
 
-void application::initialize(main_renderer* renderer, projector_manager* projectorManager, depth_tracker* tracker)
+void application::initialize(main_renderer* renderer, projector_manager* projectorManager, projector_system_calibration* projectorCalibration, depth_tracker* tracker)
 {
 	this->renderer = renderer;
 	this->projectorManager = projectorManager;
@@ -63,7 +63,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	scene.camera.initializeIngame(vec3(0.f, 1.f, 5.f), quat::identity, deg2rad(70.f), 0.1f);
 
-	editor.initialize(&scene, renderer, tracker, projectorManager);
+	editor.initialize(&scene, renderer, tracker, projectorManager, projectorCalibration);
 
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/augustus.obj"))
 	{

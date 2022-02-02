@@ -8,6 +8,7 @@
 #define NANOSVGRAST_IMPLEMENTATION
 #include <nanosvg/nanosvgrast.h>
 
+#include <wincodec.h>
 
 
 bool isImageExtension(const fs::path& extension)
@@ -339,6 +340,28 @@ bool loadSVGFromFile(const fs::path& filepath, uint32 flags, DirectX::ScratchIma
 	createDesc(metadata, flags, textureDesc);
 
 	return true;
+}
+
+bool saveImageToFile(const fs::path& filepath, DirectX::Image image)
+{
+	fs::path extension = filepath.extension();
+
+	if (extension == ".dds")
+	{
+		return SUCCEEDED(DirectX::SaveToDDSFile(image, DirectX::DDS_FLAGS_NONE, filepath.c_str()));
+	}
+	else if (extension == ".tga")
+	{
+		return SUCCEEDED(DirectX::SaveToTGAFile(image, filepath.c_str()));
+	}
+	else
+	{
+		auto guid = (extension == ".png") ? GUID_ContainerFormatPng :
+			(extension == ".jpg") ? GUID_ContainerFormatJpeg : 
+			GUID_ContainerFormatBmp;
+
+		return SUCCEEDED(DirectX::SaveToWICFile(image, DirectX::WIC_FLAGS_NONE, GUID_ContainerFormatPng, filepath.c_str(), 0));
+	}
 }
 
 bool loadImageFromFile(const fs::path& filepath, uint32 flags, DirectX::ScratchImage& scratchImage, D3D12_RESOURCE_DESC& textureDesc)

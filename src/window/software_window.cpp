@@ -47,19 +47,24 @@ bool software_window::initialize(const TCHAR* name, uint32 requestedClientWidth,
 		}
 	}
 
-	bitmapInfo->bmiHeader.biWidth = bufferWidth == 0 ? clientWidth : bufferWidth;
-	bitmapInfo->bmiHeader.biHeight = bufferHeight == 0 ? clientHeight : bufferHeight;
+	setNewBuffer(buffer, numChannels, bufferWidth == 0 ? clientWidth : bufferWidth, bufferHeight == 0 ? clientHeight : bufferHeight);
+
+	return true;
+}
+
+void software_window::setNewBuffer(uint8* buffer, uint32 numChannels, uint32 bufferWidth, uint32 bufferHeight)
+{
+	bitmapInfo->bmiHeader.biWidth = bufferWidth;
+	bitmapInfo->bmiHeader.biHeight = bufferHeight;
 	bitmapInfo->bmiHeader.biPlanes = 1;
 	bitmapInfo->bmiHeader.biBitCount = 8 * numChannels;
 
 	blitX = 0;
 	blitY = 0;
-	blitWidth = bufferWidth == 0 ? clientWidth : bufferWidth;
-	blitHeight = bufferHeight == 0 ? clientHeight : bufferHeight;
+	blitWidth = bufferWidth;
+	blitHeight = bufferHeight;
 
 	this->buffer = buffer;
-
-	return true;
 }
 
 void software_window::changeBlitRegion(uint32 x, uint32 y, uint32 width, uint32 height)

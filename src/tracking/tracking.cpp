@@ -157,6 +157,8 @@ void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)
 		cameraColorTexture = createTexture(0, camera.colorSensor.width, camera.colorSensor.height, trackingColorFormat, false, false, false, D3D12_RESOURCE_STATE_GENERIC_READ);
 		uint32 requiredSize = (uint32)GetRequiredIntermediateSize(cameraColorTexture->resource.Get(), 0, 1);
 		colorUploadBuffer = createUploadBuffer(requiredSize, 1, 0);
+
+		colorFrameCopy = new color_bgra[camera.colorSensor.width * camera.colorSensor.height];
 	}
 
 	cameraUnprojectTableTexture = createTexture(camera.depthSensor.unprojectTable, camera.depthSensor.width, camera.depthSensor.height, DXGI_FORMAT_R32G32_FLOAT);
@@ -805,6 +807,12 @@ void depth_tracker::update()
 					cl->transitionBarrier(cameraColorTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_DEST);
 					UpdateSubresources<1>(cl->commandList.Get(), cameraColorTexture->resource.Get(), colorUploadBuffer->resource.Get(), 0, 0, 1, &subresource);
 					cl->transitionBarrier(cameraColorTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+
+					if (storeColorFrameCopy)
+					{
+						memcpy(colorFrameCopy, frame.color, camera.colorSensor.width * camera.colorSensor.height * sizeof(color_bgra));
+					}
 				}
 
 				camera.releaseFrame(frame);
@@ -914,6 +922,45 @@ void depth_tracker::clearTrackedEntities()
 		trackingJobs[i].used = false;
 	}
 	numTrackingJobs = 0;
+}
+
+scene_entity depth_tracker::getTrackedEntity(uint32 index)
+{
+	if (!camera.isInitialized())
+	{
+		return {};
+	}
+
+	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
+	{
+		if (trackingJobs[i].used)
+		{
+			if (index == 0)
+			{
+				return trackingJobs[i].trackedEntity;
+			}
+			--index;
+		}
+	}
+
+	return {};
+}
+
+mat4 depth_tracker::getTrackingMatrix(uint32 index)
+{
+	scene_entity entity = getTrackedEntity(index);
+	if (!entity)
+	{
+		return mat4::identity;
+	}
+
+	const transform_component& transform = entity.getComponent<transform_component>();
+
+	mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
+		* createViewMatrix(globalCameraPosition, globalCameraRotation)
+		* trsToMat4(transform);
+
+	return m;
 }
 
 scene_entity depth_tracker::drawSettings()

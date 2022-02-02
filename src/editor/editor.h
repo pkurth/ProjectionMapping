@@ -8,10 +8,11 @@
 #include "rendering/main_renderer.h"
 #include "tracking/tracking.h"
 #include "projection_mapping/projector_manager.h"
+#include "calibration/calibration.h"
 
 struct scene_editor
 {
-	void initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker, projector_manager* projectorManager);
+	void initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker, projector_manager* projectorManager, projector_system_calibration* projectorCalibration);
 
 	bool update(const user_input& input, ldr_render_pass* ldrRenderPass, float dt);
 
@@ -39,6 +40,7 @@ private:
 	main_renderer* renderer;
 	depth_tracker* tracker;
 	projector_manager* projectorManager;
+	projector_system_calibration* projectorCalibration;
 
 	undo_stack undoStack;
 	transformation_gizmo gizmo;

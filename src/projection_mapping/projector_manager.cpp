@@ -125,6 +125,7 @@ void projector_manager::updateAndRender(float dt)
 				ImGui::TableSetupColumn("Color discontinuities");
 				ImGui::TableSetupColumn("Masks");
 				ImGui::TableSetupColumn("Solver intensities");
+
 				ImGui::TableHeadersRow();
 
 				auto hoverImage = [](const ref<dx_texture>& tex)

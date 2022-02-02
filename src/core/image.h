@@ -42,6 +42,8 @@ bool loadImageFromFile(const fs::path& filepath, uint32 flags, DirectX::ScratchI
 bool loadSVGFromFile(const fs::path& filepath, uint32 flags, DirectX::ScratchImage& scratchImage, D3D12_RESOURCE_DESC& textureDesc);
 
 
+bool saveImageToFile(const fs::path& filepath, DirectX::Image image);
+
 
 static bool isUAVCompatibleFormat(DXGI_FORMAT format)
 {

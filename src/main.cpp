@@ -130,6 +130,7 @@ int main(int argc, char** argv)
 	projector_renderer::initializeCommon();
 	projector_manager projectorManager(app.getScene());
 	depth_tracker tracker;
+	projector_system_calibration calibration(&tracker);
 
 	initializeTransformationGizmos();
 	initializeRenderUtils();
@@ -147,7 +148,7 @@ int main(int argc, char** argv)
 	main_renderer renderer;
 	renderer.initialize(window.colorDepth, window.clientWidth, window.clientHeight, spec);
 
-	app.initialize(&renderer, &projectorManager, &tracker);
+	app.initialize(&renderer, &projectorManager, &calibration, &tracker);
 
 	file_browser fileBrowser;
 	mesh_editor_panel meshEditor;

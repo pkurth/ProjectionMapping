@@ -33,15 +33,23 @@ struct depth_tracker
 	bool trackEntity(scene_entity entity);
 	void clearTrackedEntities();
 
+	uint32 getNumberOfTrackedEntities() { return numTrackingJobs; }
+	scene_entity getTrackedEntity(uint32 index);
+	mat4 getTrackingMatrix(uint32 index);
+
 	vec3 globalCameraPosition = vec3(0.f, 0.f, 0.f);
 	quat globalCameraRotation = quat::identity;
+
+
+	bool storeColorFrameCopy = false;
+	color_bgra* colorFrameCopy = 0;
+
+	rgbd_camera camera;
 
 private:
 
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
 	
-	rgbd_camera camera;
-
 	struct tracking_job
 	{
 		ref<dx_buffer> icpDispatchBuffer;

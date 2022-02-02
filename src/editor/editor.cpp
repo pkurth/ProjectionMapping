@@ -82,12 +82,13 @@ void scene_editor::setSelectedEntityNoUndo(scene_entity entity)
 	updateSelectedEntityUIRotation();
 }
 
-void scene_editor::initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker, projector_manager* projectorManager)
+void scene_editor::initialize(game_scene* scene, main_renderer* renderer, depth_tracker* tracker, projector_manager* projectorManager, projector_system_calibration* projectorCalibration)
 {
 	this->scene = scene;
 	this->renderer = renderer;
 	this->tracker = tracker;
 	this->projectorManager = projectorManager;
+	this->projectorCalibration = projectorCalibration;
 	cameraController.initialize(&scene->camera);
 
 	systemInfo = getSystemInfo();
@@ -1253,6 +1254,12 @@ void scene_editor::drawSettings(float dt)
 			{
 				setSelectedEntity(e);
 			}
+			ImGui::EndTree();
+		}
+
+		if (ImGui::BeginTree("Calibration"))
+		{
+			projectorCalibration->edit();
 			ImGui::EndTree();
 		}
 
