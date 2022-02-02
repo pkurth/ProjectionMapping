@@ -77,6 +77,10 @@ namespace ImGui
 	void PopupOkButton(uint32 width = 120);
 
 
+	void BeginDisabled();
+	void EndDisabled();
+
+
 	bool BeginProperties();
 	void EndProperties();
 

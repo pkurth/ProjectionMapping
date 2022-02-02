@@ -22,6 +22,8 @@ static inline std::string getTime()
 	return time;
 }
 
+static const fs::path calibrationBaseDirectory = "calibration_temp";
+
 bool projector_system_calibration::projectCalibrationPatterns()
 {
 	if (tracker->getNumberOfTrackedEntities() == 0)
@@ -70,6 +72,7 @@ bool projector_system_calibration::projectCalibrationPatterns()
 			if (!blackWindows[i].initialize(L"Black", 1, 1, &black, 1, 1, 1))
 			{
 				LOG_ERROR("Failed to open black window");
+				state = calibration_state_none;
 				return;
 			}
 		}
@@ -84,7 +87,7 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		uint32 captureStride = colorCameraWidth * colorCameraHeight;
 
 		std::string time = getTime();
-		fs::path baseDir = fs::path("calibration_temp") / time;
+		fs::path baseDir = calibrationBaseDirectory / time;
 		fs::create_directories(baseDir);
 
 		FILE* file = fopen((baseDir / "tracking.txt").string().c_str(), "w+");
@@ -142,6 +145,11 @@ bool projector_system_calibration::projectCalibrationPatterns()
 					Sleep(500);
 
 					memcpy(colorFrame, tracker->colorFrameCopy, colorCameraWidth * colorCameraHeight * sizeof(color_bgra));
+
+					if (cancel)
+					{
+						goto cleanup;
+					}
 				}
 
 				DirectX::Image image;
@@ -165,6 +173,11 @@ bool projector_system_calibration::projectCalibrationPatterns()
 
 					fs::path imagePath = currentOutputDir / ("image" + pad + number + ".png");
 					saveImageToFile(imagePath, image);
+
+					if (cancel)
+					{
+						goto cleanup;
+					}
 				}
 
 				Sleep(1000);
@@ -172,11 +185,14 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		}
 
 
+		cleanup:
+		
 		tracker->storeColorFrameCopy = false;
 
 		delete[] captures;
 		delete[] pattern;
 
+		cancel = false;
 
 		state = calibration_state_none;
 	});
@@ -192,6 +208,9 @@ bool projector_system_calibration::calibrate()
 
 
 
+
+
+	cancel = false;
 	state = calibration_state_none;
 
 	return true;
@@ -217,6 +236,11 @@ bool projector_system_calibration::edit()
 	}
 
 	bool uiActive = state == calibration_state_none;
+
+	if (state == calibration_state_none)
+	{
+		cancel = false;
+	}
 
 	if (ImGui::BeginTable("##ProjTable", 3, ImGuiTableFlags_Resizable))
 	{
@@ -255,17 +279,51 @@ bool projector_system_calibration::edit()
 
 	ImGui::Separator();
 
+	if (ImGui::DisableableButton("Clear temp data", uiActive))
+	{
+		fs::remove_all(calibrationBaseDirectory);
+	}
+
 	if (ImGui::BeginProperties())
 	{
+		if (!uiActive)
+		{
+			ImGui::BeginDisabled();
+		}
 		ImGui::PropertySlider("White value", whiteValue);
-		if (ImGui::PropertyDisableableButton("Project calibration patterns", "Go", uiActive))
+		if (!uiActive)
+		{
+			ImGui::EndDisabled();
+		}
+
+
+
+		auto cancelableButton = [](const char* label, calibration_state state, calibration_state runningState, volatile bool& cancel)
+		{
+			if (state == runningState)
+			{
+				if (ImGui::PropertyButton(label, "Cancel"))
+				{
+					cancel = true;
+				}
+			}
+			else
+			{
+				if (ImGui::PropertyDisableableButton(label, "Go", state == calibration_state_none))
+				{
+					return true;
+				}
+			}
+
+			return false;
+		};
+
+		if (cancelableButton("Project calibration patterns", state, calibration_state_projecting_patterns, cancel))
 		{
 			projectCalibrationPatterns();
 		}
 
-		ImGui::PropertySeparator();
-
-		if (ImGui::PropertyDisableableButton("Calibrate", "Go", uiActive))
+		if (cancelableButton("Calibrate", state, calibration_state_calibrating, cancel))
 		{
 			calibrate();
 		}

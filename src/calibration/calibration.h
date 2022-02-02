@@ -22,6 +22,8 @@ private:
 		calibration_state_calibrating,
 	};
 
+	volatile bool cancel = false;
+
 	calibration_state state = calibration_state_uninitialized;
 	depth_tracker* tracker;
 

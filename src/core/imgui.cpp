@@ -462,6 +462,18 @@ namespace ImGui
 		ImGui::SetItemDefaultFocus();
 	}
 
+	void BeginDisabled()
+	{
+		ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.2f);
+	}
+
+	void EndDisabled()
+	{
+		ImGui::PopItemFlag();
+		ImGui::PopStyleVar();
+	}
+
 
 
 
