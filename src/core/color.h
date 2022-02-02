@@ -56,6 +56,11 @@ static vec3 randomRGB(random_number_generator& rng)
 	return hsv2rgb(hsv);
 }
 
+static float linearToSRGB(float color)
+{
+	return color < 0.0031308f ? 12.92f * color : 1.055f * pow(abs(color), 1.f / 2.4f) - 0.055f;
+}
+
 static vec3 linearToSRGB(vec3 color)
 {
 	// Approximately pow(color, 1.0 / 2.2).
