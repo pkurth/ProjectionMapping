@@ -26,20 +26,20 @@ vec3 triangulateStereo(const camera_intrinsics& camIntr, const camera_intrinsics
 	vec3 p1 = lambda1 * camRay + camOrigin;
 	vec3 p2 = lambda2 * projRay + projPosition;
 
-	vec3 scannedPosition;
+	vec3 result;
 
 	if (mode == triangulate_clamp_to_cam)
 	{
-		scannedPosition = p1;
+		result = p1;
 	}
 	else if (mode == triangulate_clamp_to_proj)
 	{
-		scannedPosition = p2;
+		result = p2;
 	}
 	else
 	{
 		assert(mode == triangulate_center_point);
-		scannedPosition = (p1 + p2) * 0.5f;
+		result = (p1 + p2) * 0.5f;
 	}
 
 	vec3 p1_p2 = p1 - p2;
@@ -48,5 +48,5 @@ vec3 triangulateStereo(const camera_intrinsics& camIntr, const camera_intrinsics
 	auto mask = (lambda1 < 0.f) || (lambda2 < 0.f);
 	outDistance = mask ? -1.f : outDistance;
 
-	return scannedPosition;
+	return result;
 }

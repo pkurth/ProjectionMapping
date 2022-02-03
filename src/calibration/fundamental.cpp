@@ -2,21 +2,22 @@
 #include "fundamental.h"
 #include "calibration_internal.h"
 #include "svd.h"
-#include "core/random.h"
+
+#include <random>
 
 
 
 struct mat9
 {
-	float m[9 * 9]; // Column major.
+	double m[9 * 9]; // Column major.
 
-	float& operator()(uint32 y, uint32 x) { return m[x * 9 + y]; }
-	const float& operator()(uint32 y, uint32 x) const { return m[x * 9 + y]; }
+	double& operator()(uint32 y, uint32 x) { return m[x * 9 + y]; }
+	const double& operator()(uint32 y, uint32 x) const { return m[x * 9 + y]; }
 };
 
 struct vec9
 {
-	float m[9];
+	double m[9];
 };
 
 struct qr_decomposition
@@ -32,7 +33,7 @@ static void computeMinor(mat9& m, const mat9& from, uint32 d)
 		{
 			if (x < d || y < d)
 			{
-				m(y, x) = (x == y) ? 1.f : 0.f;
+				m(y, x) = (x == y) ? 1. : 0.;
 			}
 			else
 			{
@@ -42,9 +43,9 @@ static void computeMinor(mat9& m, const mat9& from, uint32 d)
 	}
 }
 
-static float length(const vec9& v)
+static double length(const vec9& v)
 {
-	float result = 0.f;
+	double result = 0.;
 	for (uint32 i = 0; i < 9; ++i)
 	{
 		result += v.m[i] * v.m[i];
@@ -55,11 +56,11 @@ static float length(const vec9& v)
 static vec9 extractColumn(const mat9& m, uint32 c)
 {
 	vec9 result;
-	memcpy(result.m, &m.m[c * 9], sizeof(float) * 9);
+	memcpy(result.m, &m.m[c * 9], sizeof(double) * 9);
 	return result;
 }
 
-static vec9 scaledAdd(const vec9& a, const vec9& b, float s)
+static vec9 scaledAdd(const vec9& a, const vec9& b, double s)
 {
 	vec9 result;
 	for (uint32 i = 0; i < 9; ++i)
@@ -72,8 +73,8 @@ static vec9 scaledAdd(const vec9& a, const vec9& b, float s)
 static vec9 normalize(const vec9& v)
 {
 	vec9 result;
-	float l = length(v);
-	float f = (l < EPSILON) ? 1.f : 1.f / length(v);
+	double l = length(v);
+	double f = (l < EPSILON) ? 1. : 1. / length(v);
 	for (uint32 i = 0; i < 9; ++i)
 	{
 		result.m[i] = v.m[i] * f;
@@ -87,12 +88,12 @@ static void computeHouseholderFactor(mat9& mat, const vec9& v)
 	{
 		for (uint32 j = 0; j < 9; ++j)
 		{
-			mat(i, j) = -2.f * v.m[i] * v.m[j];
+			mat(i, j) = -2. * v.m[i] * v.m[j];
 		}
 	}
 	for (uint32 i = 0; i < 9; ++i)
 	{
-		mat(i, i) += 1.f;
+		mat(i, i) += 1.;
 	}
 }
 
@@ -102,7 +103,7 @@ static void multiply(const mat9& a, const mat9& b, mat9& result)
 	{
 		for (uint32 j = 0; j < 9; ++j)
 		{
-			float v = 0.f;
+			double v = 0.;
 			for (uint32 k = 0; k < 9; ++k)
 			{
 				v += a(i, k) * b(k, j);
@@ -125,7 +126,7 @@ static mat9 transpose(const mat9& m)
 	return result;
 }
 
-static bool isDiagonal(const mat9& m, float threshold = 1e-5f)
+static bool isDiagonal(const mat9& m, double threshold = 1e-6f)
 {
 	for (uint32 y = 0, idx = 0; y < 9; ++y)
 	{
@@ -133,7 +134,7 @@ static bool isDiagonal(const mat9& m, float threshold = 1e-5f)
 		{
 			if (x != y)
 			{
-				if (!fuzzyEquals(m.m[idx], 0.f, threshold))
+				if (!fuzzyEquals(m.m[idx], 0., threshold))
 				{
 					return false;
 				}
@@ -163,9 +164,9 @@ static vec9 operator-(const vec9& a, const vec9& b)
 	return result;
 }
 
-static float dot(const vec9& a, const vec9& b)
+static double dot(const vec9& a, const vec9& b)
 {
-	float result = 0;
+	double result = 0;
 	for (uint32 i = 0; i < 9; ++i)
 	{
 		result += a.m[i] * b.m[i];
@@ -186,8 +187,8 @@ qr_decomposition qrDecomposition(const mat9& mat)
 		computeMinor(z1, z, k);
 		vec9 x = extractColumn(z1, k);
 
-		float a = length(x);
-		if (mat(k, k) > 0.f)
+		double a = length(x);
+		if (mat(k, k) > 0.)
 		{
 			a = -a;
 		}
@@ -195,7 +196,7 @@ qr_decomposition qrDecomposition(const mat9& mat)
 		vec9 e;
 		for (uint32 i = 0; i < 9; ++i)
 		{
-			e.m[i] = (i == k) ? 1.f : 0.f;
+			e.m[i] = (i == k) ? 1. : 0.;
 		}
 
 		// e = x + a*e
@@ -223,6 +224,21 @@ qr_decomposition qrDecomposition(const mat9& mat)
 	multiply(result.Q, mat, result.R);
 	result.Q = transpose(result.Q);
 
+
+
+
+
+#if 0
+	mat9 test;
+	multiply(result.Q, result.R, test);
+
+	for (int i = 0; i < 81; ++i)
+	{
+		assert(fuzzyEquals(test.m[i], mat.m[i], 0.01));
+	}
+#endif
+
+
 	return result;
 }
 
@@ -241,7 +257,7 @@ static bool getEigen(mat9 A, vec9& outEigenValues, mat9& outEigenVectors)
 	vec9 init = diagonal(A);
 
 	vec9 error = init - res;
-	float e = dot(error, error);
+	double e = dot(error, error);
 
 	while (e > 0.001f)
 	{
@@ -267,13 +283,13 @@ static bool getEigen(mat9 A, vec9& outEigenValues, mat9& outEigenVectors)
 	return true;
 }
 
-static mat3 eightPointAlgorithm(const std::vector<pixel_correspondence>& pc)
+static mat3d eightPointAlgorithm(const std::vector<pixel_correspondence>& pc)
 {
 	int count = (int)pc.size();
 	float t = 1.f / count;
 
 	vec2 m1c(0, 0), m2c(0, 0);
-	float scale1 = 0, scale2 = 0;
+	double scale1 = 0, scale2 = 0;
 
 	for (int i = 0; i < count; ++i)
 	{
@@ -293,11 +309,11 @@ static mat3 eightPointAlgorithm(const std::vector<pixel_correspondence>& pc)
 
 	if (scale1 < FLT_EPSILON || scale2 < FLT_EPSILON)
 	{
-		return mat3::identity;
+		return mat3d::identity;
 	}
 
-	scale1 = sqrt(2.f) / scale1;
-	scale2 = sqrt(2.f) / scale2;
+	scale1 = sqrt(2.) / scale1;
+	scale2 = sqrt(2.) / scale2;
 
 	mat9 A = {};
 
@@ -306,11 +322,11 @@ static mat3 eightPointAlgorithm(const std::vector<pixel_correspondence>& pc)
 	// To save computation time, we compute (At*A) instead of A and then solve (At*A)x=0.
 	for (int i = 0; i < count; ++i)
 	{
-		float x1 = (pc[i].camera.x - m1c.x) * scale1;
-		float y1 = (pc[i].camera.y - m1c.y) * scale1;
-		float x2 = (pc[i].projector.x - m2c.x) * scale2;
-		float y2 = (pc[i].projector.y - m2c.y) * scale2;
-		vec9 r = { x2 * x1, x2 * y1, x2, y2 * x1, y2 * y1, y2, x1, y1, 1.f };
+		double x1 = (pc[i].camera.x - m1c.x) * scale1;
+		double y1 = (pc[i].camera.y - m1c.y) * scale1;
+		double x2 = (pc[i].projector.x - m2c.x) * scale2;
+		double y2 = (pc[i].projector.y - m2c.y) * scale2;
+		vec9 r = { x2 * x1, x2 * y1, x2, y2 * x1, y2 * y1, y2, x1, y1, 1. };
 
 		// A += r * rT.
 		for (uint32 y = 0; y < 9; ++y)
@@ -321,18 +337,6 @@ static mat3 eightPointAlgorithm(const std::vector<pixel_correspondence>& pc)
 			}
 		}
 	}
-
-#if 0
-	qr_decomposition qr = qrDecomposition(A);
-
-	mat9 test;
-	multiply(qr.Q, qr.R, test);
-
-	for (int i = 0; i < 81; ++i)
-	{
-		assert(fuzzyEquals(test.m[i], A.m[i]));
-	}
-#endif
 
 	vec9 W; // Eigen values.
 	mat9 V; // Eigen vectors.
@@ -350,29 +354,30 @@ static mat3 eightPointAlgorithm(const std::vector<pixel_correspondence>& pc)
 
 	if (i < 8)
 	{
-		return mat3::identity;
+		return mat3d::identity;
 	}
 
-	mat3 F0;
-	memcpy(F0.m, &V(0, 8), sizeof(float) * 9); // Last column: Eigen vector corresponding to smallest Eigen value.
+	mat3d F0;
+	memcpy(F0.m, &V(0, 8), sizeof(double) * 9); // Last column: Eigen vector corresponding to smallest Eigen value.
+	F0 = transpose(F0);
 
 	svd3 svd = computeSVD(F0);
 
-	vec3 w = svd.singularValues;
-	w.z = 0.f;
+	vec3d w = svd.singularValues;
+	w.z = 0.;
 
-	F0 = svd.U * mat3(w.x, 0.f, 0.f, 0.f, w.y, 0.f, 0.f, 0.f, w.z) * transpose(svd.V);
+	F0 = svd.U * mat3d(w.x, 0., 0., 0., w.y, 0., 0., 0., w.z) * transpose(svd.V);
 
 	// Apply the transformation that is inverse to what we used to normalize the point coordinates.
-	mat3 T1(scale1, 0, -scale1 * m1c.x, 0, scale1, -scale1 * m1c.y, 0.f, 0.f, 1.f);
-	mat3 T2(scale2, 0, -scale2 * m2c.x, 0, scale2, -scale2 * m2c.y, 0.f, 0.f, 1.f);
+	mat3d T1(scale1, 0, -scale1 * m1c.x, 0, scale1, -scale1 * m1c.y, 0., 0., 1.);
+	mat3d T2(scale2, 0, -scale2 * m2c.x, 0, scale2, -scale2 * m2c.y, 0., 0., 1.);
 
 	F0 = transpose(T2) * F0 * T1;
 
 	// Make F(3,3) = 1
 	if (fabs(F0.m22) > FLT_EPSILON)
 	{
-		F0 *= 1.f / F0.m22;
+		F0 = F0 * (1. / F0.m22);
 	}
 
 	return F0;
@@ -395,16 +400,16 @@ void testQR()
 	eightPointAlgorithm(pcs);
 }
 
-static int ransacUpdateNumIters(float p, float ep, int modelPoints, int maxIters)
+static int ransacUpdateNumIters(double p, double ep, int modelPoints, int maxIters)
 {
-	p = max(p, 0.f);
-	p = min(p, 1.f);
-	ep = max(ep, 0.f);
-	ep = min(ep, 1.f);
+	p = max(p, 0.);
+	p = min(p, 1.);
+	ep = max(ep, 0.);
+	ep = min(ep, 1.);
 
 	// Avoid infs & nans.
-	float num = max(1.f - p, FLT_MIN);
-	float denom = 1.f - pow(1.f - ep, (float)modelPoints);
+	double num = max(1. - p, DBL_MIN);
+	double denom = 1. - pow(1. - ep, (double)modelPoints);
 	if (denom < FLT_MIN)
 	{
 		return 0;
@@ -416,11 +421,11 @@ static int ransacUpdateNumIters(float p, float ep, int modelPoints, int maxIters
 	return (denom >= 0 || -num >= maxIters * (-denom)) ? maxIters : (int)std::round(num / denom);
 }
 
-mat3 computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::vector<uint8>& outMask)
+mat3d computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::vector<uint8>& outMask)
 {
 	int numIterations = 1000;
-	float confidence = 0.99f;
-	float tolerance = 1.f;
+	double confidence = 0.99;
+	double tolerance = 1.;
 
 	int count = (int)pc.size();
 	outMask.resize(count);
@@ -428,7 +433,7 @@ mat3 computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::
 
 	if (count < 8)
 	{
-		return mat3::identity;
+		return mat3d::identity;
 	}
 
 	if (count == 8)
@@ -443,26 +448,18 @@ mat3 computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::
 	std::vector<uint8> tmpMask(count);
 	int bestNumInliers = 0;
 
-	random_number_generator rng = { 1234 };
+	std::mt19937 rng{ std::random_device{}() };
 
 	for (int it = 0; it < numIterations; ++it)
 	{
-		uint32 left = count;
-		auto begin = pcCopy.begin();
-		for (int i = 0; i < 8; ++i)
-		{
-			auto r = begin;
-			uint32 offset = rng.randomUint32() % left;
-			std::advance(r, offset);
-			std::swap(*begin, *r);
-			subset[i] = *begin;
-			++begin;
-			--left;
-		}
+		subset.clear();
+		std::sample(pcCopy.begin(), pcCopy.end(), std::back_inserter(subset), 8, rng);
 
-		mat3 F = eightPointAlgorithm(subset);
+		assert(subset.size() == 8);
 
-		if (fuzzyEquals(F, mat3::identity))
+		mat3d F = eightPointAlgorithm(subset);
+
+		if (fuzzyEquals(F, mat3d::identity))
 		{
 			continue;
 		}
@@ -470,18 +467,18 @@ mat3 computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::
 		int numInliers = 0;
 		for (int i = 0; i < count; ++i)
 		{
-			vec3 cam(pc[i].camera.x, pc[i].camera.y, 1.f);
-			vec3 proj(pc[i].projector.x, pc[i].projector.y, 1.f);
+			vec3d cam{ pc[i].camera.x, pc[i].camera.y, 1. };
+			vec3d proj{ pc[i].projector.x, pc[i].projector.y, 1. };
 
-			vec3 camF = F * cam;
-			float s2 = 1.f / dot(camF, camF);
-			float d2 = dot(proj, camF);
+			vec3d camF = F * cam;
+			double s2 = 1. / dot(camF, camF);
+			double d2 = dot(proj, camF);
 
-			vec3 projF = transpose(F) * proj;
-			float s1 = 1.f / dot(projF, projF);
-			float d1 = dot(cam, projF);
+			vec3d projF = transpose(F) * proj;
+			double s1 = 1. / dot(projF, projF);
+			double d1 = dot(cam, projF);
 
-			float err = max(d1 * d1 * s1, d2 * d2 * s2);
+			double err = max(d1 * d1 * s1, d2 * d2 * s2);
 
 			if (err < tolerance)
 			{
@@ -498,7 +495,7 @@ mat3 computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::
 		{
 			std::swap(outMask, tmpMask);
 			bestNumInliers = numInliers;
-			numIterations = ransacUpdateNumIters(confidence, (float)(count - numInliers) / count, 8, numIterations);
+			numIterations = ransacUpdateNumIters(confidence, (double)(count - numInliers) / count, 8, numIterations);
 		}
 	}
 
@@ -517,5 +514,5 @@ mat3 computeFundamentalMatrix(const std::vector<pixel_correspondence>& pc, std::
 
 		return eightPointAlgorithm(inliers);
 	}
-	return mat3::identity;
+	return mat3d::identity;
 }
