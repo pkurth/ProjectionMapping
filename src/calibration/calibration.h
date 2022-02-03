@@ -17,6 +17,10 @@ private:
 	bool calibrate();
 
 	void submitPointCloudForVisualization(const struct image_point_cloud& pc, uint32 projectorIndex);
+	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, uint32 projectorIndex);
+
+	bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<struct pixel_correspondence> pixelCorrespondences,
+		const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, vec3& outPosition, quat& outRotation);
 
 	enum calibration_state
 	{
@@ -68,7 +72,17 @@ private:
 		uint32 projectorIndex;
 	};
 
+	struct frustum_visualization
+	{
+		quat rotation;
+		vec3 position;
+		uint32 width, height;
+		camera_intrinsics intrinsics;
+		uint32 projectorIndex;
+	};
+
 	std::mutex visualizationMutex;
 	std::vector<point_cloud_visualization> pointCloudsToVisualize;
+	std::vector<frustum_visualization> frustaToVisualize;
 };
 
