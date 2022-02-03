@@ -2,6 +2,7 @@
 #include "calibration.h"
 #include "graycode.h"
 #include "calibration_internal.h"
+#include "point_cloud.h"
 
 #include "core/imgui.h"
 #include "core/log.h"
@@ -10,6 +11,15 @@
 #include "window/window.h"
 #include "window/software_window.h"
 
+#include "dx/dx_context.h"
+#include "dx/dx_render_target.h"
+#include "dx/dx_command_list.h"
+#include "dx/dx_pipeline.h"
+
+#include "calibration_rs.hlsli"
+
+static const fs::path calibrationBaseDirectory = "calibration_temp";
+static dx_pipeline depthToColorPipeline;
 
 static inline std::string getTime()
 {
@@ -23,8 +33,6 @@ static inline std::string getTime()
 
 	return time;
 }
-
-static const fs::path calibrationBaseDirectory = "calibration_temp";
 
 bool projector_system_calibration::projectCalibrationPatterns()
 {
@@ -246,8 +254,8 @@ struct proj_calibration_sequence
 struct calibration_input
 {
 	std::vector<proj_calibration_sequence> projectors;
-	int camWidth, camHeight;
-	int numGlobalSequences;
+	int32 camWidth, camHeight;
+	int32 numGlobalSequences;
 };
 
 static bool readMatrixFromFile(const fs::path& filename, mat4& out)
@@ -476,6 +484,80 @@ static bool loadAndDecodeImageSequences(const fs::path& workingDir, const std::v
 	return calibInput.projectors.size() > 0;
 }
 
+static void projectDepthIntoColorFrame(const ref<composite_mesh>& mesh, 
+	const mat4& trackingMat, 
+	const mat4& colorCameraViewMat,
+	const mat4& colorCameraProjMat, const camera_distortion& colorCameraDistortion,
+	ref<dx_texture>& colorBuffer, ref<dx_texture>& depthBuffer, ref<dx_buffer>& readbackBuffer,
+	const image<vec2>& colorCameraUnprojectTable,
+	image_point_cloud& outPointCloud)
+{
+	auto renderTarget = dx_render_target(colorBuffer->width, colorBuffer->height)
+		.colorAttachment(colorBuffer)
+		.depthAttachment(depthBuffer);
+
+	dx_command_list* cl = dxContext.getFreeRenderCommandList();
+	cl->transitionBarrier(colorBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+	cl->setPipelineState(*depthToColorPipeline.pipeline);
+	cl->setGraphicsRootSignature(*depthToColorPipeline.rootSignature);
+
+	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	cl->setRenderTarget(renderTarget);
+	cl->setViewport(renderTarget.viewport);
+	cl->clearRTV(colorBuffer, 0.f, 0.f, 0.f, 0.f);
+	cl->clearDepth(depthBuffer);
+
+	depth_to_color_cb cb;
+	cb.mv = colorCameraViewMat * trackingMat;
+	cb.p = colorCameraProjMat;
+	cb.distortion = colorCameraDistortion;
+
+	cl->setGraphics32BitConstants(DEPTH_TO_COLOR_RS_CB, cb);
+
+	cl->setVertexBuffer(0, mesh->mesh.vertexBuffer.positions);
+	cl->setVertexBuffer(1, mesh->mesh.vertexBuffer.others);
+	cl->setIndexBuffer(mesh->mesh.indexBuffer);
+
+
+	for (auto& submesh : mesh->submeshes)
+	{
+		cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
+	}
+
+	cl->transitionBarrier(colorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+	cl->copyTextureRegionToBuffer(colorBuffer, readbackBuffer, 0, 0, 0, colorBuffer->width, colorBuffer->height);
+
+	uint64 fence = dxContext.executeCommandList(cl);
+
+	dxContext.renderQueue.waitForFence(fence);
+
+
+
+
+	image<vec4> output(colorBuffer->width, colorBuffer->height);
+
+	uint8* dest = (uint8*)output.data;
+	uint32 destPitch = sizeof(vec4) * output.width;
+
+	uint8* result = (uint8*)mapBuffer(readbackBuffer, true);
+	uint32 resultPitch = sizeof(vec4) * alignTo(colorBuffer->width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+
+	for (uint32 h = 0; h < colorBuffer->height; ++h)
+	{
+		memcpy(dest, result, destPitch);
+		result += resultPitch;
+		dest += destPitch;
+	}
+
+	unmapBuffer(readbackBuffer, false);
+
+	outPointCloud.constructFromRendering(output, colorCameraUnprojectTable);
+	outPointCloud.writeToFile(calibrationBaseDirectory / "test.ply");
+	outPointCloud.writeToImage(calibrationBaseDirectory / "test.png");
+}
+
 bool projector_system_calibration::calibrate()
 {
 	auto& monitors = win32_window::allConnectedMonitors;
@@ -494,14 +576,44 @@ bool projector_system_calibration::calibrate()
 		return false;
 	}
 
-	calibration_input input;
-	if (!loadAndDecodeImageSequences(calibrationBaseDirectory, projectors, input))
+	state = calibration_state_calibrating;
+
+	calibration_input calibInput;
+	if (!loadAndDecodeImageSequences(calibrationBaseDirectory, projectors, calibInput))
 	{
+		state = calibration_state_none;
 		return false;
 	}
 
+	auto& colorSensor = tracker->camera.colorSensor;
 
-	state = calibration_state_calibrating;
+	uint32 camWidth = (uint32)calibInput.camWidth;
+	uint32 camHeight = (uint32)calibInput.camHeight;
+
+	assert(colorSensor.width == camWidth);
+	assert(colorSensor.height == camHeight);
+
+	mat4 colorCameraViewMat = createViewMatrix(colorSensor.position, colorSensor.rotation);
+	mat4 colorCameraProjMat = createPerspectiveProjectionMatrix((float)colorSensor.width, (float)colorSensor.height, 
+		colorSensor.intrinsics.fx, colorSensor.intrinsics.fy, colorSensor.intrinsics.cx, colorSensor.intrinsics.cy, 0.01f, -1.f);
+	camera_distortion colorCameraDistortion = colorSensor.distortion;
+
+	image<vec2> colorCameraUnprojectTable(colorSensor.width, colorSensor.height, colorSensor.unprojectTable);
+
+	proj_calibration_sequence& proj = calibInput.projectors[0];
+	calibration_sequence& seq = proj.sequences[0];
+	const mat4& trackingMat = seq.trackingMat;
+
+	assert(tracker->getNumberOfTrackedEntities() > 0);
+
+	scene_entity entity = tracker->getTrackedEntity(0);
+	ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
+
+	image_point_cloud pointCloud;
+	projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, colorCameraDistortion, depthToColorTexture, depthBuffer, readbackBuffer, colorCameraUnprojectTable, pointCloud);
+
+
+
 
 
 
@@ -513,7 +625,7 @@ bool projector_system_calibration::calibrate()
 
 projector_system_calibration::projector_system_calibration(depth_tracker* tracker)
 {
-	if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.colorSensor.active)
+	if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
 	{
 		LOG_ERROR("Tracker/camera is not initialized");
 		return;
@@ -521,6 +633,22 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 
 	this->tracker = tracker;
 	this->state = calibration_state_none;
+
+
+	{
+		auto desc = CREATE_GRAPHICS_PIPELINE
+			.renderTargets(DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_D16_UNORM)
+			.inputLayout(inputLayout_position_uv_normal_tangent)
+			.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+
+		depthToColorPipeline = createReloadablePipeline(desc, { "calibration_depth_to_color_vs", "calibration_depth_to_color_ps"});
+	}
+
+	depthToColorTexture = createTexture(0, tracker->camera.colorSensor.width, tracker->camera.colorSensor.height, DXGI_FORMAT_R32G32B32A32_FLOAT, false, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
+	depthBuffer = createDepthTexture(tracker->camera.colorSensor.width, tracker->camera.colorSensor.height, DXGI_FORMAT_D16_UNORM);
+
+	uint32 texturePitch = alignTo(depthToColorTexture->width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+	readbackBuffer = createReadbackBuffer(sizeof(vec4), texturePitch * tracker->camera.colorSensor.height);
 }
 
 bool projector_system_calibration::edit()

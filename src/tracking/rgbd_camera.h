@@ -1,3 +1,5 @@
+#pragma once
+
 #include "core/math.h"
 #include "core/camera.h"
 

@@ -51,5 +51,10 @@ private:
 
 	bool isProjectorIndex[MAX_NUM_PROJECTORS] = {};
 	bool calibrateIndex[MAX_NUM_PROJECTORS] = {};
+
+
+	ref<dx_texture> depthToColorTexture;
+	ref<dx_texture> depthBuffer;
+	ref<dx_buffer> readbackBuffer;
 };
 
