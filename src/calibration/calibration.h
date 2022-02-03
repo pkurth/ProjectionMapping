@@ -20,7 +20,9 @@ private:
 	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, uint32 projectorIndex);
 
 	bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<struct pixel_correspondence> pixelCorrespondences,
-		const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, vec3& outPosition, quat& outRotation);
+		const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight,
+		const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight,
+		vec3& outPosition, quat& outRotation);
 
 	enum calibration_state
 	{

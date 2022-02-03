@@ -686,7 +686,9 @@ static vec3d switchCoordinateSystem(const vec3d& v)
 	return vec3d{ v.x, -v.y, -v.z };
 }
 
-static bool testRotationTranslationCombination(const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, quat r, vec3 t, const std::vector<pixel_correspondence>& pc)
+static bool testRotationTranslationCombination(const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight, 
+	const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight, 
+	quat r, vec3 t, const std::vector<pixel_correspondence>& pc)
 {
 	quat rotation = conjugate(r);
 	vec3 origin = -(rotation * t);
@@ -718,7 +720,7 @@ static bool testRotationTranslationCombination(const camera_intrinsics& camIntri
 #else
 
 	float distance;
-	vec3 pCS = triangulateStereo(camIntrinsics, projIntrinsics, origin, rotation, vec2(1280.f / 2.f, 720.f / 2.f), vec2(1920.f / 2.f, 1200.f / 2.f), distance, triangulate_center_point);
+	vec3 pCS = triangulateStereo(camIntrinsics, projIntrinsics, origin, rotation, vec2(camWidth * 0.5f, camHeight * 0.5f), vec2(projWidth * 0.5f, projHeight * 0.5f), distance, triangulate_center_point);
 	vec3 pPS = r * pCS + t;
 
 	bool result = pCS.z < 0.f && pPS.z < 0.f;
@@ -728,7 +730,9 @@ static bool testRotationTranslationCombination(const camera_intrinsics& camIntri
 }
 
 bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixel_correspondence> pixelCorrespondences,
-	const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, vec3& outPosition, quat& outRotation)
+	const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight, 
+	const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight, 
+	vec3& outPosition, quat& outRotation)
 {
 #if 0
 	std::cout << "std::vector<pixel_correspondence> pixelCorrespondences = { \n";
@@ -800,10 +804,10 @@ bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEs
 
 	// Determine correct combination of rotation and translation.
 	int combinationIndex = 0;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation1, ourTranslation1, pixelCorrespondences) << 0;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation1, ourTranslation2, pixelCorrespondences) << 1;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation2, ourTranslation1, pixelCorrespondences) << 2;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation2, ourTranslation2, pixelCorrespondences) << 3;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation1, ourTranslation1, pixelCorrespondences) << 0;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation1, ourTranslation2, pixelCorrespondences) << 1;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation2, ourTranslation1, pixelCorrespondences) << 2;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation2, ourTranslation2, pixelCorrespondences) << 3;
 
 	quat estimatedRot;
 	vec3 estimatedTransDirection;
@@ -920,9 +924,21 @@ bool projector_system_calibration::calibrate()
 		{
 			auto& seq0 = calibInput.projectors[projID].sequences[0];
 
-			std::vector<pixel_correspondence> pixelCorrespondences;
+			std::vector<pixel_correspondence> validPixelCorrespondences;
+			validPixelCorrespondences.reserve(seq0.allPixelCorrespondences.size());
 
-			std::sample(seq0.allPixelCorrespondences.begin(), seq0.allPixelCorrespondences.end(), std::back_inserter(pixelCorrespondences),
+			auto& vpm = calibData.perSequence[seq0.globalSequenceID].validPointMask;
+			for (auto& pc : seq0.allPixelCorrespondences)
+			{
+				if (vpm((int)pc.camera.y, (int)pc.camera.x) != 0)
+				{
+					validPixelCorrespondences.push_back(pc);
+				}
+			}
+
+			std::vector<pixel_correspondence> pixelCorrespondencesSample;
+			pixelCorrespondencesSample.reserve(128);
+			std::sample(validPixelCorrespondences.begin(), validPixelCorrespondences.end(), std::back_inserter(pixelCorrespondencesSample),
 				128, std::mt19937{ std::random_device{}() });
 
 			uint32 width = calibInput.projectors[projID].width;
@@ -933,7 +949,7 @@ bool projector_system_calibration::calibrate()
 			vec3 projPosition;
 			quat projRotation;
 
-			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondences, camIntrinsics, initialProjIntrinsics, projPosition, projRotation))
+			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, camIntrinsics, camWidth, camHeight, initialProjIntrinsics, width, height, projPosition, projRotation))
 			{
 				int a = 0;
 			}
