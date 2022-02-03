@@ -9,10 +9,14 @@ struct projector_system_calibration
 	projector_system_calibration(depth_tracker* tracker);
 	bool edit();
 
+	void visualizeIntermediateResults(struct ldr_render_pass* renderPass);
+
 private:
 
 	bool projectCalibrationPatterns();
 	bool calibrate();
+
+	void submitPointCloudForVisualization(const struct image_point_cloud& pc, uint32 projectorIndex);
 
 	enum calibration_state
 	{
@@ -56,5 +60,15 @@ private:
 	ref<dx_texture> depthToColorTexture;
 	ref<dx_texture> depthBuffer;
 	ref<dx_buffer> readbackBuffer;
+
+
+	struct point_cloud_visualization
+	{
+		ref<dx_vertex_buffer> vertexBuffer;
+		uint32 projectorIndex;
+	};
+
+	std::mutex visualizationMutex;
+	std::vector<point_cloud_visualization> pointCloudsToVisualize;
 };
 

@@ -33,6 +33,16 @@ void image_point_cloud::constructFromRendering(const image<vec4>& rendering, con
 	}
 }
 
+image<uint8> image_point_cloud::createValidMask()
+{
+	image<uint8> result;
+	result.convertFrom(entries, [](const point_cloud_entry& entry) -> uint8
+		{
+			return entry.position.z != 0.f ? 255 : 0;
+		});
+	return result;
+}
+
 static void writeHeaderToFile(std::ofstream& outfile, uint32 numPoints, bool writeNormals, bool writeColors, uint32 numLines = 0)
 {
 	const char* format_header = "binary_little_endian 1.0";
@@ -128,11 +138,7 @@ static bool outputEntriesArray(const fs::path& path, const point_cloud_entry* en
 
 bool image_point_cloud::writeToImage(const fs::path& path)
 {
-	image<uint8> output(entries.width, entries.height);
-	output.convertFrom(entries, [](const point_cloud_entry& entry) -> uint8
-		{
-			return entry.position.z != 0.f ? 255 : 0;
-		});
+	image<uint8> output = createValidMask();
 
 	DirectX::Image image;
 	image.width = output.width;

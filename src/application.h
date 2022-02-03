@@ -45,6 +45,7 @@ private:
 	main_renderer* renderer;
 	projector_manager* projectorManager;
 	depth_tracker* tracker;
+	projector_system_calibration* projectorCalibration;
 
 	game_scene scene;
 	scene_editor editor;

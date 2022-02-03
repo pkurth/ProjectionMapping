@@ -55,6 +55,7 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	this->renderer = renderer;
 	this->projectorManager = projectorManager;
 	this->tracker = tracker;
+	this->projectorCalibration = projectorCalibration;
 
 	if (dxContext.featureSupport.raytracing())
 	{
@@ -394,6 +395,7 @@ void application::update(const user_input& input, float dt)
 		}
 
 		tracker->visualizeDepth(&ldrRenderPass);
+		projectorCalibration->visualizeIntermediateResults(&ldrRenderPass);
 
 		if (selectedEntity)
 		{

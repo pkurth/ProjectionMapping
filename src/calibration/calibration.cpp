@@ -3,23 +3,39 @@
 #include "graycode.h"
 #include "calibration_internal.h"
 #include "point_cloud.h"
+#include "fundamental.h"
+#include "svd.h"
+#include "reconstruction.h"
 
 #include "core/imgui.h"
 #include "core/log.h"
 #include "core/image.h"
 #include "core/color.h"
+#include "core/cpu_profiling.h"
+
 #include "window/window.h"
 #include "window/software_window.h"
 
 #include "dx/dx_context.h"
 #include "dx/dx_render_target.h"
 #include "dx/dx_command_list.h"
+#include "dx/dx_profiling.h"
 #include "dx/dx_pipeline.h"
+
+#include "rendering/material.h"
+#include "rendering/render_command.h"
+#include "rendering/render_utils.h"
+#include "rendering/render_resources.h"
 
 #include "calibration_rs.hlsli"
 
+#include <random>
+
 static const fs::path calibrationBaseDirectory = "calibration_temp";
+
 static dx_pipeline depthToColorPipeline;
+static dx_pipeline visualizePointCloudPipeline;
+
 
 static inline std::string getTime()
 {
@@ -484,13 +500,12 @@ static bool loadAndDecodeImageSequences(const fs::path& workingDir, const std::v
 	return calibInput.projectors.size() > 0;
 }
 
-static void projectDepthIntoColorFrame(const ref<composite_mesh>& mesh, 
+static image_point_cloud projectDepthIntoColorFrame(const ref<composite_mesh>& mesh,
 	const mat4& trackingMat, 
 	const mat4& colorCameraViewMat,
 	const mat4& colorCameraProjMat, const camera_distortion& colorCameraDistortion,
 	ref<dx_texture>& colorBuffer, ref<dx_texture>& depthBuffer, ref<dx_buffer>& readbackBuffer,
-	const image<vec2>& colorCameraUnprojectTable,
-	image_point_cloud& outPointCloud)
+	const image<vec2>& colorCameraUnprojectTable)
 {
 	auto renderTarget = dx_render_target(colorBuffer->width, colorBuffer->height)
 		.colorAttachment(colorBuffer)
@@ -553,9 +568,254 @@ static void projectDepthIntoColorFrame(const ref<composite_mesh>& mesh,
 
 	unmapBuffer(readbackBuffer, false);
 
-	outPointCloud.constructFromRendering(output, colorCameraUnprojectTable);
-	outPointCloud.writeToFile(calibrationBaseDirectory / "test.ply");
-	outPointCloud.writeToImage(calibrationBaseDirectory / "test.png");
+	image_point_cloud pc;
+	pc.constructFromRendering(output, colorCameraUnprojectTable);
+	return pc;
+}
+
+
+struct per_sequence_data
+{
+	mat4						trackingMat;
+	mat4						invTrackingMat;
+
+	image_point_cloud			positionPC;
+	image<uint8>				validPointMask;
+	int							numValidPositions;
+};
+
+struct calibration_data
+{
+	std::vector<per_sequence_data> perSequence;
+};
+
+static calibration_data initializeCalibrationData(const calibration_input& calibInput)
+{
+	calibration_data result;
+
+	result.perSequence.resize(calibInput.numGlobalSequences);
+
+
+	for (int projID = 0; projID < calibInput.projectors.size(); ++projID)
+	{
+		int screenID = calibInput.projectors[projID].screenID;
+		const std::string& uniqueID = calibInput.projectors[projID].uniqueID;
+		int projWidth = calibInput.projectors[projID].width;
+		int projHeight = calibInput.projectors[projID].height;
+
+		//outArrays.allColorToProjCalibs[projID] = initializeRGBCamToProjectorData(colorIntrinsics, projWidth, projHeight); // set to default
+
+		const std::vector<calibration_sequence>& calibSequences = calibInput.projectors[projID].sequences;
+		//std::vector<calibration_temp>& tempData = outArrays.allTempData[projID];
+		//tempData.resize(calibSequences.size());
+
+		for (int cs = 0; cs < calibSequences.size(); ++cs)
+		{
+			//tempData[cs].perTracking = nullptr;
+			//tempData[cs].sequence = &calibSequences[cs];
+
+			auto& perSequence = result.perSequence[calibSequences[cs].globalSequenceID];
+			perSequence.trackingMat = calibSequences[cs].trackingMat;
+			perSequence.invTrackingMat = invertAffine(calibSequences[cs].trackingMat);
+
+			//for (int ptd = 0; ptd < result.perSequence.size(); ++ptd)
+			//{
+			//	if (ptd == calibSequences[cs].globalSequenceID)
+			//	{
+			//		result.perSequence[ptd].trackingMat = calibSequences[cs].trackingMat;
+			//		result.perSequence[ptd].invTrackingMat = invertAffine(calibSequences[cs].trackingMat);
+			//		//tempData[cs].perTracking = &outArrays.allPerTrackingData[ptd];
+			//		break;
+			//	}
+			//}
+
+			//if (!tempData[cs].perTracking)
+			//{
+			//	LOG_ERROR("No per-sequence data available");
+			//	return;
+			//}
+		}
+
+
+		//std::string& projDir = outArrays.allProjDirs[projID];
+		//projDir = wd + "projector" + std::to_string(screenID) + "/";
+		//createDirectory(projDir);
+		//
+		//std::vector<std::string>& outputDirs = outArrays.allOutputDirs[projID];
+		//outputDirs.resize(calibSequences.size());
+		//for (int i = 0; i < calibSequences.size(); ++i)
+		//{
+		//	outputDirs[i] = projDir + "results_of_sequence_" + std::to_string(i) + "/";
+		//	createDirectory(outputDirs[i]);
+		//}
+
+		//outputPatternImage(calibSequences[calibSequences.size() - 1].patternImage, projWidth, projHeight, projDir);
+	}
+
+	return result;
+}
+
+static mat3 cameraMatrix(const camera_intrinsics& intrinsics)
+{
+	mat3 result = mat3::identity;
+	result.m00 = intrinsics.fx;
+	result.m11 = intrinsics.fy;
+	result.m02 = intrinsics.cx;
+	result.m12 = intrinsics.cy;
+	return result;
+}
+
+static mat3 switchCoordinateSystem(const mat3& m)
+{
+	mat3 r;
+	r.m00 = m.m00;
+	r.m11 = m.m11;
+	r.m12 = m.m12;
+	r.m21 = m.m21;
+	r.m22 = m.m22;
+	r.m10 = -m.m10;
+	r.m20 = -m.m20;
+	r.m01 = -m.m01;
+	r.m02 = -m.m02;
+	return r;
+}
+
+static vec3 switchCoordinateSystem(const vec3& v)
+{
+	return vec3(v.x, -v.y, -v.z);
+}
+
+static bool testRotationTranslationCombination(const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, quat r, vec3 t, const std::vector<pixel_correspondence>& pc)
+{
+	const uint32 numTests = (uint32)pc.size();
+
+	bool result = false;
+
+	quat rotation = conjugate(r);
+	vec3 origin = -(rotation * t);
+
+	for (uint32 i = 0; i < numTests; ++i)
+	{
+		vec3 pCS, pPS;
+
+		vec2 camPixel = pc[i].camera;
+		vec2 projPixel = pc[i].projector;
+		float distance;
+
+		pCS = triangulateStereo(camIntrinsics, projIntrinsics, origin, rotation, camPixel, projPixel, distance);
+		pPS = r * pCS + t;
+
+		bool inFront = pCS.z < 0.f && pPS.z < 0.f;
+
+		if (i > 0 && result != inFront)
+		{
+			std::cerr << "Something is wrong!" << std::endl;
+		}
+		result = inFront;
+	}
+	return result;
+}
+
+static bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixel_correspondence> pixelCorrespondences, 
+	const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, vec3& outPosition, quat& outRotation)
+{
+	std::vector<uint8> mask;
+	mat3 fundamentalMat = computeFundamentalMatrix(pixelCorrespondences, mask);
+
+	uint32 maskedNumCorrespondingPoints = 0;
+
+	// Sort out outliers.
+	for (int i = 0, j = 0; i < pixelCorrespondences.size(); ++i)
+	{
+		if (mask[i] == 1)
+		{
+			pixelCorrespondences[j] = pixelCorrespondences[i];
+			++j;
+			++maskedNumCorrespondingPoints;
+		}
+	}
+
+	pixelCorrespondences.resize(maskedNumCorrespondingPoints);
+
+	mat3 projK = cameraMatrix(projIntrinsics);
+	mat3 camK = cameraMatrix(camIntrinsics);
+
+	mat3 essentialMat = transpose(projK) * fundamentalMat * camK;
+
+	svd3 svd = computeSVD(essentialMat);
+
+	const mat3& u = svd.U;
+	mat3 vt = transpose(svd.V);
+
+	mat3 W(0, -1, 0, 1, 0, 0, 0, 0, 1); //HZ 9.13
+
+	mat3 rotation1 = (u * W * vt); //HZ 9.19
+	mat3 rotation2 = (u * transpose(W) * vt); //HZ 9.19
+
+	vec3 translation1 = col(u, 2);
+	vec3 translation2 = -translation1;
+
+
+	if ((determinant(rotation1) > 0) != (determinant(rotation2) > 0))
+	{
+		LOG_ERROR("One matrix is mirror and the other is not (determinants don't match)");
+		return false;
+	}
+
+	if (determinant(rotation1) < 0)
+	{
+		rotation1 *= -1.f;
+		rotation2 *= -1.f; // This seems to always work, but is this the correct way to do this?
+	}
+
+	quat ourRotation1 = mat3ToQuaternion(switchCoordinateSystem(rotation1));
+	quat ourRotation2 = mat3ToQuaternion(switchCoordinateSystem(rotation2));
+	vec3 ourTranslation1 = switchCoordinateSystem(translation1);
+	vec3 ourTranslation2 = switchCoordinateSystem(translation2);
+
+	// Determine correct combination of rotation and translation.
+	int combinationIndex = 0;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation1, ourTranslation1, pixelCorrespondences) << 0;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation1, ourTranslation2, pixelCorrespondences) << 1;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation2, ourTranslation1, pixelCorrespondences) << 2;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation2, ourTranslation2, pixelCorrespondences) << 3;
+
+	quat estimatedRot;
+	vec3 estimatedTransDirection;
+	switch (combinationIndex)
+	{
+		case 1:
+			estimatedRot = ourRotation1;
+			estimatedTransDirection = ourTranslation1;
+			break;
+		case 2:
+			estimatedRot = ourRotation1;
+			estimatedTransDirection = ourTranslation2;
+			break;
+		case 4:
+			estimatedRot = ourRotation2;
+			estimatedTransDirection = ourTranslation1;
+			break;
+		case 8:
+			estimatedRot = ourRotation2;
+			estimatedTransDirection = ourTranslation2;
+			break;
+		default:
+			LOG_ERROR("More or fewer than one combination is valid");
+			return false;
+	}
+
+
+	quat rotation = conjugate(estimatedRot);
+	vec3 origin = -(rotation * estimatedTransDirection);
+
+	LOG_MESSAGE("Initial estimated projector origin: [%.3f, %.3f, %.3f]", origin.x, origin.y, origin.z);
+	LOG_MESSAGE("Initial estimated projector rotation: [%.3f, %.3f, %.3f, %.3f]", rotation.x, rotation.y, rotation.z, rotation.w);
+
+	outRotation = rotation;
+	outPosition = origin;
+
+	return true;
 }
 
 bool projector_system_calibration::calibrate()
@@ -578,49 +838,113 @@ bool projector_system_calibration::calibrate()
 
 	state = calibration_state_calibrating;
 
-	calibration_input calibInput;
-	if (!loadAndDecodeImageSequences(calibrationBaseDirectory, projectors, calibInput))
+
+	std::thread thread([this, projectors]()
 	{
+		calibration_input calibInput;
+		if (!loadAndDecodeImageSequences(calibrationBaseDirectory, projectors, calibInput))
+		{
+			state = calibration_state_none;
+			return;
+		}
+
+		calibration_data calibData = initializeCalibrationData(calibInput);
+
+		auto& colorSensor = tracker->camera.colorSensor;
+
+		uint32 camWidth = (uint32)calibInput.camWidth;
+		uint32 camHeight = (uint32)calibInput.camHeight;
+
+		assert(colorSensor.width == camWidth);
+		assert(colorSensor.height == camHeight);
+
+		mat4 colorCameraViewMat = createViewMatrix(colorSensor.position, colorSensor.rotation);
+		mat4 colorCameraProjMat = createPerspectiveProjectionMatrix((float)colorSensor.width, (float)colorSensor.height,
+			colorSensor.intrinsics.fx, colorSensor.intrinsics.fy, colorSensor.intrinsics.cx, colorSensor.intrinsics.cy, 0.01f, -1.f);
+		camera_distortion colorCameraDistortion = colorSensor.distortion;
+
+		image<vec2> colorCameraUnprojectTable(colorSensor.width, colorSensor.height, colorSensor.unprojectTable);
+
+		proj_calibration_sequence& proj = calibInput.projectors[0];
+		calibration_sequence& seq = proj.sequences[0];
+		const mat4& trackingMat = seq.trackingMat;
+
+		assert(tracker->getNumberOfTrackedEntities() > 0);
+
+		scene_entity entity = tracker->getTrackedEntity(0);
+		ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
+
+
+		for (auto& perSequence : calibData.perSequence)
+		{
+			perSequence.positionPC = projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, colorCameraDistortion, depthToColorTexture, depthBuffer, 
+				readbackBuffer, colorCameraUnprojectTable);
+			perSequence.validPointMask = perSequence.positionPC.createValidMask();
+
+			submitPointCloudForVisualization(perSequence.positionPC, 0);
+		}
+
+
+		for (uint32 projID = 0; projID < (uint32)calibInput.projectors.size(); ++projID)
+		{
+			auto& seq0 = calibInput.projectors[projID].sequences[0];
+
+			std::vector<pixel_correspondence> pixelCorrespondences;
+
+			std::sample(seq.allPixelCorrespondences.begin(), seq.allPixelCorrespondences.end(), std::back_inserter(pixelCorrespondences),
+				128, std::mt19937{ std::random_device{}() });
+
+			uint32 width = calibInput.projectors[projID].width;
+			uint32 height = calibInput.projectors[projID].height;
+
+			camera_intrinsics initialIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
+
+			vec3 projPosition;
+			quat projRotation;
+
+			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondences, colorSensor.intrinsics, initialIntrinsics, projPosition, projRotation))
+			{
+				int a = 0;
+			}
+			int b = 0;
+		}
+
+		cancel = false;
 		state = calibration_state_none;
-		return false;
-	}
+	});
 
-	auto& colorSensor = tracker->camera.colorSensor;
-
-	uint32 camWidth = (uint32)calibInput.camWidth;
-	uint32 camHeight = (uint32)calibInput.camHeight;
-
-	assert(colorSensor.width == camWidth);
-	assert(colorSensor.height == camHeight);
-
-	mat4 colorCameraViewMat = createViewMatrix(colorSensor.position, colorSensor.rotation);
-	mat4 colorCameraProjMat = createPerspectiveProjectionMatrix((float)colorSensor.width, (float)colorSensor.height, 
-		colorSensor.intrinsics.fx, colorSensor.intrinsics.fy, colorSensor.intrinsics.cx, colorSensor.intrinsics.cy, 0.01f, -1.f);
-	camera_distortion colorCameraDistortion = colorSensor.distortion;
-
-	image<vec2> colorCameraUnprojectTable(colorSensor.width, colorSensor.height, colorSensor.unprojectTable);
-
-	proj_calibration_sequence& proj = calibInput.projectors[0];
-	calibration_sequence& seq = proj.sequences[0];
-	const mat4& trackingMat = seq.trackingMat;
-
-	assert(tracker->getNumberOfTrackedEntities() > 0);
-
-	scene_entity entity = tracker->getTrackedEntity(0);
-	ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
-
-	image_point_cloud pointCloud;
-	projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, colorCameraDistortion, depthToColorTexture, depthBuffer, readbackBuffer, colorCameraUnprojectTable, pointCloud);
-
-
-
-
-
-
-	cancel = false;
-	state = calibration_state_none;
+	thread.detach();
 
 	return true;
+}
+
+void projector_system_calibration::submitPointCloudForVisualization(const image_point_cloud& pc, uint32 projectorIndex)
+{
+	struct position_normal
+	{
+		vec3 position;
+		vec3 normal;
+	};
+
+	std::vector<position_normal> vertices;
+	vertices.reserve(pc.numEntries);
+
+	for (uint32 i = 0; i < pc.entries.width * pc.entries.height; ++i)
+	{
+		auto& e = pc.entries.data[i];
+		if (e.position.z != 0.f)
+		{
+			vertices.push_back({ e.position, e.normal });
+		}
+	}
+
+	assert(vertices.size() == pc.numEntries);
+
+	ref<dx_vertex_buffer> vb = createVertexBuffer(sizeof(position_normal), pc.numEntries, vertices.data());
+
+	visualizationMutex.lock();
+	pointCloudsToVisualize.push_back({ vb, projectorIndex });
+	visualizationMutex.unlock();
 }
 
 projector_system_calibration::projector_system_calibration(depth_tracker* tracker)
@@ -642,6 +966,20 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 			.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
 
 		depthToColorPipeline = createReloadablePipeline(desc, { "calibration_depth_to_color_vs", "calibration_depth_to_color_ps"});
+	}
+
+	{
+		static D3D12_INPUT_ELEMENT_DESC inputLayout_position_normal_nonInterleaved[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+			{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		};
+
+		auto desc = CREATE_GRAPHICS_PIPELINE
+			.inputLayout(inputLayout_position_normal_nonInterleaved)
+			.renderTargets(ldrFormat, depthStencilFormat)
+			.primitiveTopology(D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT);
+
+		visualizePointCloudPipeline = createReloadablePipeline(desc, { "calibration_visualize_point_cloud_vs", "calibration_visualize_point_cloud_ps" });
 	}
 
 	depthToColorTexture = createTexture(0, tracker->camera.colorSensor.width, tracker->camera.colorSensor.height, DXGI_FORMAT_R32G32B32A32_FLOAT, false, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -702,10 +1040,20 @@ bool projector_system_calibration::edit()
 
 	ImGui::Separator();
 
-	if (ImGui::DisableableButton("Clear temp data", uiActive))
+	if (ImGui::DisableableButton("Clear temp directory", uiActive))
 	{
 		fs::remove_all(calibrationBaseDirectory);
 	}
+
+	ImGui::SameLine();
+
+	if (ImGui::DisableableButton("Clear visualizations", uiActive))
+	{
+		visualizationMutex.lock();
+		pointCloudsToVisualize.clear();
+		visualizationMutex.unlock();
+	}
+
 
 	if (ImGui::BeginProperties())
 	{
@@ -755,4 +1103,53 @@ bool projector_system_calibration::edit()
 	}
 
 	return true;
+}
+
+
+struct visualize_point_cloud_material
+{
+	vec4 color;
+};
+
+struct visualize_point_cloud_pipeline
+{
+	using material_t = visualize_point_cloud_material;
+
+	PIPELINE_SETUP_DECL;
+	PIPELINE_RENDER_DECL;
+};
+
+PIPELINE_SETUP_IMPL(visualize_point_cloud_pipeline)
+{
+	cl->setPipelineState(*visualizePointCloudPipeline.pipeline);
+	cl->setGraphicsRootSignature(*visualizePointCloudPipeline.rootSignature);
+	cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
+}
+
+PIPELINE_RENDER_IMPL(visualize_point_cloud_pipeline)
+{
+	DX_PROFILE_BLOCK(cl, "Render depth camera image");
+
+	visualize_point_cloud_cb cb;
+	cb.mvp = viewProj * rc.transform;
+	cb.color = rc.material.color;
+	
+	cl->setGraphics32BitConstants(VISUALIZE_POINT_CLOUD_RS_CB, cb);
+	cl->setVertexBuffer(0, rc.vertexBuffer.positions);
+
+	cl->draw(rc.submesh.numVertices, 1, 0, 0);
+}
+
+
+void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass* renderPass)
+{
+	mat4 colorM = createModelMatrix(tracker->globalCameraPosition, tracker->globalCameraRotation) * createModelMatrix(tracker->camera.colorSensor.position, tracker->camera.colorSensor.rotation);
+
+	visualizationMutex.lock();
+	for (auto& v : pointCloudsToVisualize)
+	{
+		renderPass->renderObject<visualize_point_cloud_pipeline>(colorM, { v.vertexBuffer }, {}, submesh_info{ 0, 0, 0, v.vertexBuffer->elementCount },
+			visualize_point_cloud_material{ vec4(1.f, 0.f, 1.f, 1.f) });
+	}
+	visualizationMutex.unlock();
 }
