@@ -26,6 +26,7 @@
 #include "rendering/render_command.h"
 #include "rendering/render_utils.h"
 #include "rendering/render_resources.h"
+#include "rendering/debug_visualization.h"
 
 #include "calibration_rs.hlsli"
 
@@ -655,9 +656,9 @@ static calibration_data initializeCalibrationData(const calibration_input& calib
 	return result;
 }
 
-static mat3 cameraMatrix(const camera_intrinsics& intrinsics)
+static mat3d cameraMatrix(const camera_intrinsics& intrinsics)
 {
-	mat3 result = mat3::identity;
+	mat3d result = mat3d::identity;
 	result.m00 = intrinsics.fx;
 	result.m11 = intrinsics.fy;
 	result.m02 = intrinsics.cx;
@@ -665,9 +666,9 @@ static mat3 cameraMatrix(const camera_intrinsics& intrinsics)
 	return result;
 }
 
-static mat3 switchCoordinateSystem(const mat3& m)
+static mat3d switchCoordinateSystem(const mat3d& m)
 {
-	mat3 r;
+	mat3d r;
 	r.m00 = m.m00;
 	r.m11 = m.m11;
 	r.m12 = m.m12;
@@ -680,19 +681,22 @@ static mat3 switchCoordinateSystem(const mat3& m)
 	return r;
 }
 
-static vec3 switchCoordinateSystem(const vec3& v)
+static vec3d switchCoordinateSystem(const vec3d& v)
 {
-	return vec3(v.x, -v.y, -v.z);
+	return vec3d{ v.x, -v.y, -v.z };
 }
 
-static bool testRotationTranslationCombination(const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, quat r, vec3 t, const std::vector<pixel_correspondence>& pc)
+static bool testRotationTranslationCombination(const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight, 
+	const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight, 
+	quat r, vec3 t, const std::vector<pixel_correspondence>& pc)
 {
+	quat rotation = conjugate(r);
+	vec3 origin = -(rotation * t);
+
+#if 0
 	const uint32 numTests = (uint32)pc.size();
 
 	bool result = false;
-
-	quat rotation = conjugate(r);
-	vec3 origin = -(rotation * t);
 
 	for (uint32 i = 0; i < numTests; ++i)
 	{
@@ -713,14 +717,34 @@ static bool testRotationTranslationCombination(const camera_intrinsics& camIntri
 		}
 		result = inFront;
 	}
+#else
+
+	float distance;
+	vec3 pCS = triangulateStereo(camIntrinsics, projIntrinsics, origin, rotation, vec2(camWidth * 0.5f, camHeight * 0.5f), vec2(projWidth * 0.5f, projHeight * 0.5f), distance, triangulate_center_point);
+	vec3 pPS = r * pCS + t;
+
+	bool result = pCS.z < 0.f && pPS.z < 0.f;
+
+#endif
 	return result;
 }
 
-static bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixel_correspondence> pixelCorrespondences, 
-	const camera_intrinsics& camIntrinsics, const camera_intrinsics& projIntrinsics, vec3& outPosition, quat& outRotation)
+bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixel_correspondence> pixelCorrespondences,
+	const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight, 
+	const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight, 
+	vec3& outPosition, quat& outRotation)
 {
+#if 0
+	std::cout << "std::vector<pixel_correspondence> pixelCorrespondences = { \n";
+	for (auto& pc : pixelCorrespondences)
+	{
+		std::cout << "{ { " << pc.camera.x << ", " << pc.camera.y << " }, { " << pc.projector.x << ", " << pc.projector.y << " } }, \n";
+	}
+	std::cout << "};\n";
+#endif
+
 	std::vector<uint8> mask;
-	mat3 fundamentalMat = computeFundamentalMatrix(pixelCorrespondences, mask);
+	mat3d fundamentalMat = computeFundamentalMatrix(pixelCorrespondences, mask);
 
 	uint32 maskedNumCorrespondingPoints = 0;
 
@@ -737,23 +761,23 @@ static bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixe
 
 	pixelCorrespondences.resize(maskedNumCorrespondingPoints);
 
-	mat3 projK = cameraMatrix(projIntrinsics);
-	mat3 camK = cameraMatrix(camIntrinsics);
+	mat3d projK = cameraMatrix(projIntrinsics);
+	mat3d camK = cameraMatrix(camIntrinsics);
 
-	mat3 essentialMat = transpose(projK) * fundamentalMat * camK;
+	mat3d essentialMat = transpose(projK) * fundamentalMat * camK;
 
 	svd3 svd = computeSVD(essentialMat);
 
-	const mat3& u = svd.U;
-	mat3 vt = transpose(svd.V);
+	const mat3d& u = svd.U;
+	mat3d vt = transpose(svd.V);
 
-	mat3 W(0, -1, 0, 1, 0, 0, 0, 0, 1); //HZ 9.13
+	mat3d W(0, -1, 0, 1, 0, 0, 0, 0, 1); //HZ 9.13
 
-	mat3 rotation1 = (u * W * vt); //HZ 9.19
-	mat3 rotation2 = (u * transpose(W) * vt); //HZ 9.19
+	mat3d rotation1 = (u * W * vt); //HZ 9.19
+	mat3d rotation2 = (u * transpose(W) * vt); //HZ 9.19
 
-	vec3 translation1 = col(u, 2);
-	vec3 translation2 = -translation1;
+	vec3d translation1 = col(u, 2);
+	vec3d translation2 = -translation1;
 
 
 	if ((determinant(rotation1) > 0) != (determinant(rotation2) > 0))
@@ -764,21 +788,26 @@ static bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixe
 
 	if (determinant(rotation1) < 0)
 	{
-		rotation1 *= -1.f;
-		rotation2 *= -1.f; // This seems to always work, but is this the correct way to do this?
+		rotation1 = rotation1 * -1.f;
+		rotation2 = rotation2 * -1.f; // This seems to always work, but is this the correct way to do this?
 	}
 
-	quat ourRotation1 = mat3ToQuaternion(switchCoordinateSystem(rotation1));
-	quat ourRotation2 = mat3ToQuaternion(switchCoordinateSystem(rotation2));
-	vec3 ourTranslation1 = switchCoordinateSystem(translation1);
-	vec3 ourTranslation2 = switchCoordinateSystem(translation2);
+	quatd ourRotation1d = mat3ToQuaternion(switchCoordinateSystem(rotation1));
+	quatd ourRotation2d = mat3ToQuaternion(switchCoordinateSystem(rotation2));
+	vec3d ourTranslation1d = switchCoordinateSystem(translation1);
+	vec3d ourTranslation2d = switchCoordinateSystem(translation2);
+
+	quat ourRotation1 = { (float)ourRotation1d.x, (float)ourRotation1d.y, (float)ourRotation1d.z, (float)ourRotation1d.w };
+	quat ourRotation2 = { (float)ourRotation2d.x, (float)ourRotation2d.y, (float)ourRotation2d.z, (float)ourRotation2d.w };
+	vec3 ourTranslation1 = { (float)ourTranslation1d.x, (float)ourTranslation1d.y, (float)ourTranslation1d.z };
+	vec3 ourTranslation2 = { (float)ourTranslation2d.x, (float)ourTranslation2d.y, (float)ourTranslation2d.z };
 
 	// Determine correct combination of rotation and translation.
 	int combinationIndex = 0;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation1, ourTranslation1, pixelCorrespondences) << 0;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation1, ourTranslation2, pixelCorrespondences) << 1;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation2, ourTranslation1, pixelCorrespondences) << 2;
-	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, projIntrinsics, ourRotation2, ourTranslation2, pixelCorrespondences) << 3;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation1, ourTranslation1, pixelCorrespondences) << 0;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation1, ourTranslation2, pixelCorrespondences) << 1;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation2, ourTranslation1, pixelCorrespondences) << 2;
+	combinationIndex |= (int)testRotationTranslationCombination(camIntrinsics, camWidth, camHeight, projIntrinsics, projWidth, projHeight, ourRotation2, ourTranslation2, pixelCorrespondences) << 3;
 
 	quat estimatedRot;
 	vec3 estimatedTransDirection;
@@ -804,6 +833,12 @@ static bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixe
 			LOG_ERROR("More or fewer than one combination is valid");
 			return false;
 	}
+
+
+	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation1), conjugate(ourRotation1), 1920, 1200, projIntrinsics, 0);
+	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation2), conjugate(ourRotation1), 1920, 1200, projIntrinsics, 0);
+	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation1), conjugate(ourRotation2), 1920, 1200, projIntrinsics, 0);
+	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation2), conjugate(ourRotation2), 1920, 1200, projIntrinsics, 0);
 
 
 	quat rotation = conjugate(estimatedRot);
@@ -850,37 +885,37 @@ bool projector_system_calibration::calibrate()
 
 		calibration_data calibData = initializeCalibrationData(calibInput);
 
-		auto& colorSensor = tracker->camera.colorSensor;
+		auto& camera = tracker->camera.colorSensor;
 
 		uint32 camWidth = (uint32)calibInput.camWidth;
 		uint32 camHeight = (uint32)calibInput.camHeight;
 
-		assert(colorSensor.width == camWidth);
-		assert(colorSensor.height == camHeight);
+		assert(camera.width == camWidth);
+		assert(camera.height == camHeight);
 
-		mat4 colorCameraViewMat = createViewMatrix(colorSensor.position, colorSensor.rotation);
-		mat4 colorCameraProjMat = createPerspectiveProjectionMatrix((float)colorSensor.width, (float)colorSensor.height,
-			colorSensor.intrinsics.fx, colorSensor.intrinsics.fy, colorSensor.intrinsics.cx, colorSensor.intrinsics.cy, 0.01f, -1.f);
-		camera_distortion colorCameraDistortion = colorSensor.distortion;
+		camera_intrinsics camIntrinsics = camera.intrinsics;
+		camera_distortion camDistortion = camera.distortion;
 
-		image<vec2> colorCameraUnprojectTable(colorSensor.width, colorSensor.height, colorSensor.unprojectTable);
-
-		proj_calibration_sequence& proj = calibInput.projectors[0];
-		calibration_sequence& seq = proj.sequences[0];
-		const mat4& trackingMat = seq.trackingMat;
-
+		mat4 colorCameraViewMat = createViewMatrix(camera.position, camera.rotation);
+		mat4 colorCameraProjMat = createPerspectiveProjectionMatrix((float)camWidth, (float)camHeight,
+			camIntrinsics.fx, camIntrinsics.fy, camIntrinsics.cx, camIntrinsics.cy, 0.01f, -1.f);
+		
+		image<vec2> colorCameraUnprojectTable(camWidth, camHeight, camera.unprojectTable);
+		
 		assert(tracker->getNumberOfTrackedEntities() > 0);
-
+		
 		scene_entity entity = tracker->getTrackedEntity(0);
 		ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
 
 
 		for (auto& perSequence : calibData.perSequence)
 		{
-			perSequence.positionPC = projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, colorCameraDistortion, depthToColorTexture, depthBuffer, 
+			const mat4& trackingMat = perSequence.trackingMat;
+
+			perSequence.positionPC = projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, camDistortion, depthToColorTexture, depthBuffer,
 				readbackBuffer, colorCameraUnprojectTable);
 			perSequence.validPointMask = perSequence.positionPC.createValidMask();
-
+		
 			submitPointCloudForVisualization(perSequence.positionPC, 0);
 		}
 
@@ -889,24 +924,38 @@ bool projector_system_calibration::calibrate()
 		{
 			auto& seq0 = calibInput.projectors[projID].sequences[0];
 
-			std::vector<pixel_correspondence> pixelCorrespondences;
+			std::vector<pixel_correspondence> validPixelCorrespondences;
+			validPixelCorrespondences.reserve(seq0.allPixelCorrespondences.size());
 
-			std::sample(seq.allPixelCorrespondences.begin(), seq.allPixelCorrespondences.end(), std::back_inserter(pixelCorrespondences),
+			auto& vpm = calibData.perSequence[seq0.globalSequenceID].validPointMask;
+			for (auto& pc : seq0.allPixelCorrespondences)
+			{
+				if (vpm((int)pc.camera.y, (int)pc.camera.x) != 0)
+				{
+					validPixelCorrespondences.push_back(pc);
+				}
+			}
+
+			std::vector<pixel_correspondence> pixelCorrespondencesSample;
+			pixelCorrespondencesSample.reserve(128);
+			std::sample(validPixelCorrespondences.begin(), validPixelCorrespondences.end(), std::back_inserter(pixelCorrespondencesSample),
 				128, std::mt19937{ std::random_device{}() });
 
 			uint32 width = calibInput.projectors[projID].width;
 			uint32 height = calibInput.projectors[projID].height;
 
-			camera_intrinsics initialIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
+			camera_intrinsics initialProjIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
 
 			vec3 projPosition;
 			quat projRotation;
 
-			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondences, colorSensor.intrinsics, initialIntrinsics, projPosition, projRotation))
+			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, camIntrinsics, camWidth, camHeight, initialProjIntrinsics, width, height, projPosition, projRotation))
 			{
 				int a = 0;
 			}
 			int b = 0;
+
+			//submitFrustumForVisualization(projPosition, projRotation, width, height, initialProjIntrinsics, projID);
 		}
 
 		cancel = false;
@@ -947,6 +996,13 @@ void projector_system_calibration::submitPointCloudForVisualization(const image_
 	visualizationMutex.unlock();
 }
 
+void projector_system_calibration::submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, uint32 projectorIndex)
+{
+	visualizationMutex.lock();
+	frustaToVisualize.push_back({ rotation, position, width, height, intrinsics, projectorIndex });
+	visualizationMutex.unlock();
+}
+
 projector_system_calibration::projector_system_calibration(depth_tracker* tracker)
 {
 	if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
@@ -954,6 +1010,9 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 		LOG_ERROR("Tracker/camera is not initialized");
 		return;
 	}
+
+	uint32 width = tracker->camera.colorSensor.width;
+	uint32 height = tracker->camera.colorSensor.height;
 
 	this->tracker = tracker;
 	this->state = calibration_state_none;
@@ -982,11 +1041,11 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 		visualizePointCloudPipeline = createReloadablePipeline(desc, { "calibration_visualize_point_cloud_vs", "calibration_visualize_point_cloud_ps" });
 	}
 
-	depthToColorTexture = createTexture(0, tracker->camera.colorSensor.width, tracker->camera.colorSensor.height, DXGI_FORMAT_R32G32B32A32_FLOAT, false, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
-	depthBuffer = createDepthTexture(tracker->camera.colorSensor.width, tracker->camera.colorSensor.height, DXGI_FORMAT_D16_UNORM);
+	depthToColorTexture = createTexture(0, width, height, DXGI_FORMAT_R32G32B32A32_FLOAT, false, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
+	depthBuffer = createDepthTexture(width, height, DXGI_FORMAT_D16_UNORM);
 
 	uint32 texturePitch = alignTo(depthToColorTexture->width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-	readbackBuffer = createReadbackBuffer(sizeof(vec4), texturePitch * tracker->camera.colorSensor.height);
+	readbackBuffer = createReadbackBuffer(sizeof(vec4), texturePitch * height);
 }
 
 bool projector_system_calibration::edit()
@@ -1051,6 +1110,7 @@ bool projector_system_calibration::edit()
 	{
 		visualizationMutex.lock();
 		pointCloudsToVisualize.clear();
+		frustaToVisualize.clear();
 		visualizationMutex.unlock();
 	}
 
@@ -1143,6 +1203,11 @@ PIPELINE_RENDER_IMPL(visualize_point_cloud_pipeline)
 
 void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass* renderPass)
 {
+	if (state == calibration_state_uninitialized)
+	{
+		return;
+	}
+
 	mat4 colorM = createModelMatrix(tracker->globalCameraPosition, tracker->globalCameraRotation) * createModelMatrix(tracker->camera.colorSensor.position, tracker->camera.colorSensor.rotation);
 
 	visualizationMutex.lock();
@@ -1151,5 +1216,15 @@ void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass*
 		renderPass->renderObject<visualize_point_cloud_pipeline>(colorM, { v.vertexBuffer }, {}, submesh_info{ 0, 0, 0, v.vertexBuffer->elementCount },
 			visualize_point_cloud_material{ vec4(1.f, 0.f, 1.f, 1.f) });
 	}
+
+	for (auto& v : frustaToVisualize)
+	{
+		render_camera camera;
+		camera.initializeCalibrated(tracker->globalCameraRotation * v.position + tracker->globalCameraPosition, tracker->globalCameraRotation * v.rotation, v.width, v.height, v.intrinsics, 0.1f, 4.f);
+		camera.updateMatrices();
+		renderCameraFrustum(camera, vec4(1.f, 0.f, 1.f, 1.f), renderPass);
+	}
+
+
 	visualizationMutex.unlock();
 }

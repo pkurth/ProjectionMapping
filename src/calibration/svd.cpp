@@ -1,69 +1,68 @@
 #include "pch.h"
 #include "svd.h"
 
-#define _gamma 5.828427124f // FOUR_GAMMA_SQUARED = sqrt(8)+3;
-#define _cstar 0.923879532f // cos(pi/8)
-#define _sstar 0.3826834323f // sin(p/8)
-#define EPSILON 1e-6f
+#define _gamma 5.828427124 // FOUR_GAMMA_SQUARED = sqrt(8)+3;
+#define _cstar 0.923879532 // cos(pi/8)
+#define _sstar 0.3826834323 // sin(p/8)
+#define EPSILOND 1e-6
 
-static void condSwap(bool c, float& X, float& Y)
+static void condSwap(bool c, double& X, double& Y)
 {
-	float Z = X;
+	double Z = X;
 	X = c ? Y : X;
 	Y = c ? Z : Y;
 }
 
-static void condNegSwap(bool c, float& X, float& Y)
+static void condNegSwap(bool c, double& X, double& Y)
 {
-	float Z = -X;
+	double Z = -X;
 	X = c ? Y : X;
 	Y = c ? Z : Y;
 }
 
-static void approximateGivensQuaternion(float a11, float a12, float a22, float& ch, float& sh)
+static void approximateGivensQuaternion(double a11, double a12, double a22, double& ch, double& sh)
 {
 	// Given givens angle computed by approximateGivensAngles,
 	// compute the corresponding rotation quaternion.
 	ch = 2 * (a11 - a22);
 	sh = a12;
 	bool b = _gamma * sh * sh < ch* ch;
-	float w = 1.f / sqrt(ch * ch + sh * sh);
+	double w = 1. / sqrt(ch * ch + sh * sh);
 	ch = b ? w * ch : _cstar;
 	sh = b ? w * sh : _sstar;
 }
-static void QRGivensQuaternion(float a1, float a2, float& ch, float& sh)
+static void QRGivensQuaternion(double a1, double a2, double& ch, double& sh)
 {
 	// a1 = pivot point on diagonal
 	// a2 = lower triangular entry we want to annihilate
-	float epsilon = EPSILON;
-	float rho = sqrt(a1 * a1 + a2 * a2);
+	double rho = sqrt(a1 * a1 + a2 * a2);
 
-	sh = rho > epsilon ? a2 : 0;
-	ch = fabs(a1) + fmax(rho, epsilon);
+	sh = rho > EPSILOND ? a2 : 0;
+	ch = fabs(a1) + fmax(rho, EPSILOND);
 	bool b = a1 < 0;
 	condSwap(b, sh, ch);
-	float w = 1.f / sqrt(ch * ch + sh * sh);
+	double w = 1. / sqrt(ch * ch + sh * sh);
 	ch *= w;
 	sh *= w;
 }
 
 static void jacobiConjugation(const int x, const int y, const int z,
-	float& s11,
-	float& s21, float& s22,
-	float& s31, float& s32, float& s33,
-	quat& q)
+	double& s11,
+	double& s21, double& s22,
+	double& s31, double& s32, double& s33,
+	quatd& q)
 {
-	float ch, sh;
+	double ch, sh;
 	approximateGivensQuaternion(s11, s21, s22, ch, sh);
 
-	float scale = ch * ch + sh * sh;
-	float a = (ch * ch - sh * sh) / scale;
-	float b = (2 * sh * ch) / scale;
+	double scale = ch * ch + sh * sh;
+	double a = (ch * ch - sh * sh) / scale;
+	double b = (2 * sh * ch) / scale;
 
 	// make temp copy of S
-	float _s11 = s11;
-	float _s21 = s21; float _s22 = s22;
-	float _s31 = s31; float _s32 = s32; float _s33 = s33;
+	double _s11 = s11;
+	double _s21 = s21; double _s22 = s22;
+	double _s31 = s31; double _s32 = s32; double _s33 = s33;
 
 	// perform conjugation S = Q'*S*Q
 	// Q already implicitly solved from a, b
@@ -72,7 +71,7 @@ static void jacobiConjugation(const int x, const int y, const int z,
 	s31 = a * _s31 + b * _s32;								s32 = -b * _s31 + a * _s32; s33 = _s33;
 
 	// update cumulative rotation qV
-	float tmp[3];
+	double tmp[3];
 	tmp[0] = q.x * sh;
 	tmp[1] = q.y * sh;
 	tmp[2] = q.z * sh;
@@ -85,10 +84,10 @@ static void jacobiConjugation(const int x, const int y, const int z,
 
 	// (x,y,z) corresponds to ((0,1,2),(1,2,0),(2,0,1))
 	// for (p,q) = ((0,1),(1,2),(0,2))
-	q.v4.data[z] += sh;
+	q.data[z] += sh;
 	q.w -= tmp[z]; // w
-	q.v4.data[x] += tmp[y];
-	q.v4.data[y] -= tmp[x];
+	q.data[x] += tmp[y];
+	q.data[y] -= tmp[x];
 
 	// re-arrange matrix for next iteration
 	_s11 = s22;
@@ -100,13 +99,13 @@ static void jacobiConjugation(const int x, const int y, const int z,
 }
 
 static void jacobiEigenanlysis(
-	float& s11,
-	float& s21, float& s22,
-	float& s31, float& s32, float& s33,
+	double& s11,
+	double& s21, double& s22,
+	double& s31, double& s32, double& s33,
 	// quaternion representation of V
-	quat& q)
+	quatd& q)
 {
-	q = quat::identity;
+	q = quatd::identity;
 	for (int i = 0; i < 4; ++i)
 	{
 		// We wish to eliminate the maximum off-diagonal element
@@ -119,18 +118,18 @@ static void jacobiEigenanlysis(
 	}
 }
 
-static float dist2(float x, float y, float z)
+static double dist2(double x, double y, double z)
 {
 	return x * x + y * y + z * z;
 }
 
-static void sortSingularValues(mat3& B, mat3& V)
+static void sortSingularValues(mat3d& B, mat3d& V)
 {
-	float* Bm = B.m;
-	float* Vm = V.m;
-	float rho1 = dist2(Bm[0], Bm[1], Bm[2]);
-	float rho2 = dist2(Bm[3], Bm[4], Bm[5]);
-	float rho3 = dist2(Bm[6], Bm[7], Bm[8]);
+	double* Bm = B.m;
+	double* Vm = V.m;
+	double rho1 = dist2(Bm[0], Bm[1], Bm[2]);
+	double rho2 = dist2(Bm[3], Bm[4], Bm[5]);
+	double rho3 = dist2(Bm[6], Bm[7], Bm[8]);
 
 	bool c = rho1 < rho2;
 	condNegSwap(c, Bm[0], Bm[3]); condNegSwap(c, Vm[0], Vm[3]);
@@ -148,10 +147,10 @@ static void sortSingularValues(mat3& B, mat3& V)
 	condNegSwap(c, Bm[5], Bm[8]); condNegSwap(c, Vm[5], Vm[8]);
 }
 
-static void QRDecomposition(mat3& B, mat3& Q, mat3& R)
+static void QRDecomposition(mat3d& B, mat3d& Q, mat3d& R)
 {
-	float ch1, sh1, ch2, sh2, ch3, sh3;
-	float a, b;
+	double ch1, sh1, ch2, sh2, ch3, sh3;
+	double a, b;
 
 	// first givens rotation (ch,0,0,sh)
 	QRGivensQuaternion(B.m00, B.m10, ch1, sh1);
@@ -159,8 +158,8 @@ static void QRDecomposition(mat3& B, mat3& Q, mat3& R)
 	b = 2 * ch1 * sh1;
 
 	// Apply B = Q' * B.
-	float* Rm = R.m;
-	float* Bm = B.m;
+	double* Rm = R.m;
+	double* Bm = B.m;
 	Rm[0] = a * Bm[0] + b * Bm[1];  Rm[3] = a * Bm[3] + b * Bm[4];  Rm[6] = a * Bm[6] + b * Bm[7];
 	Rm[1] = -b * Bm[0] + a * Bm[1]; Rm[4] = -b * Bm[3] + a * Bm[4]; Rm[7] = -b * Bm[6] + a * Bm[7];
 	Rm[2] = Bm[2];          Rm[5] = Bm[5];          Rm[8] = Bm[8];
@@ -185,14 +184,14 @@ static void QRDecomposition(mat3& B, mat3& Q, mat3& R)
 	Rm[2] = -b * Bm[1] + a * Bm[2];    Rm[5] = -b * Bm[4] + a * Bm[5];  Rm[8] = -b * Bm[7] + a * Bm[8];
 
 	// Construct the cumulative rotation Q=Q1 * Q2 * Q3.
-	// The number of floating point operations for three quaternion multiplications
+	// The number of doubleing point operations for three quaternion multiplications
 	// is more or less comparable to the explicit form of the joined matrix.
 	// Certainly more memory-efficient!
-	float sh12 = sh1 * sh1;
-	float sh22 = sh2 * sh2;
-	float sh32 = sh3 * sh3;
+	double sh12 = sh1 * sh1;
+	double sh22 = sh2 * sh2;
+	double sh32 = sh3 * sh3;
 
-	float* Qm = Q.m;
+	double* Qm = Q.m;
 	Qm[0] = (-1 + 2 * sh12) * (-1 + 2 * sh22);
 	Qm[3] = 4 * ch2 * ch3 * (-1 + 2 * sh12) * sh2 * sh3 + 2 * ch1 * sh1 * (-1 + 2 * sh32);
 	Qm[6] = 4 * ch1 * ch3 * sh1 * sh3 - 2 * ch2 * (-1 + 2 * sh12) * sh2 * (-1 + 2 * sh32);
@@ -206,21 +205,21 @@ static void QRDecomposition(mat3& B, mat3& Q, mat3& R)
 	Qm[8] = (-1 + 2 * sh22) * (-1 + 2 * sh32);
 }
 
-svd3 computeSVD(const mat3& A)
+svd3 computeSVD(const mat3d& A)
 {
-	mat3 ATA = transpose(A) * A;
+	mat3d ATA = transpose(A) * A;
 
-	mat3 U, V;
+	mat3d U, V;
 
-	quat q;
+	quatd q;
 	jacobiEigenanlysis(ATA.m00, ATA.m10, ATA.m11, ATA.m20, ATA.m21, ATA.m22, q);
 	V = quaternionToMat3(q);
 
-	mat3 B = A * V;
+	mat3d B = A * V;
 
 	sortSingularValues(B, V);
-	mat3 S;
+	mat3d S;
 	QRDecomposition(B, U, S);
 
-	return { U, V, vec3(S.m00, S.m11, S.m22) };
+	return { U, V, vec3d{S.m00, S.m11, S.m22} };
 }
