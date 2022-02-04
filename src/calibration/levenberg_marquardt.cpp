@@ -10,7 +10,7 @@ struct sine_param_set
 
 static float evaluate(const sine_param_set& params, float x)
 {
-	return params.amplitude* sin(params.frequency * x + params.phase);
+	return params.amplitude * sin(params.frequency * x + params.phase);
 }
 
 struct lm_sine_test : least_squares_residual<sine_param_set>

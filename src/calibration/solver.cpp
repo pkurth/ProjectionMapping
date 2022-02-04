@@ -15,6 +15,8 @@ struct param_set
 	camera_intrinsics intrinsics;
 };
 
+static_assert(sizeof(param_set) / sizeof(float) == 10);
+
 struct backprojection_residual : least_squares_residual<param_set, 2>
 {
 	vec3 camPos;
@@ -23,11 +25,12 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 	void value(const param_set& params, float out[2]) const override
 	{
 		quat rotation = eulerToQuat(params.rotation);
+		vec3 translation = params.translation;
 
-		vec3 projPos = rotation * camPos + params.translation;
+		vec3 projPos = rotation * camPos + translation;
 		vec2 projPixel = project(projPos, params.intrinsics);
 
-		vec2 error = projPixel - observedProjPixel;
+		vec2 error = observedProjPixel - projPixel;
 
 		out[0] = error.x;
 		out[1] = error.y;
@@ -36,10 +39,10 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 	void grad(const param_set& params, float out[2][10]) const override
 	{
 		camera_intrinsics i = params.intrinsics;
-		quat R = eulerToQuat(params.rotation);
+		quat rotation = eulerToQuat(params.rotation);
 		vec3 translation = params.translation;
 
-		vec3 projPos = R * camPos + translation;
+		vec3 projPos = rotation * camPos + translation;
 
 		float px = projPos.x;
 		float py = projPos.y;
@@ -50,29 +53,24 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		float cy = camPos.y;
 		float cz = camPos.z;
 
+		float sex = sin(0.5f * params.rotation.x);
+		float cex = cos(0.5f * params.rotation.x);
+		float sey = sin(0.5f * params.rotation.y);
+		float cey = cos(0.5f * params.rotation.y);
+		float sez = sin(0.5f * params.rotation.z);
+		float cez = cos(0.5f * params.rotation.z);
 
-		float ex = 0.5f * params.rotation.x;
-		float ey = 0.5f * params.rotation.y;
-		float ez = 0.5f * params.rotation.z;
-
-		float sex = sin(ex);
-		float cex = sin(ex);
-		float sey = sin(ey);
-		float cey = sin(ey);
-		float sez = sin(ez);
-		float cez = sin(ez);
-
-		float Rx = R.x;
-		float Ry = R.y;
-		float Rz = R.z;
-		float Rw = R.w;
+		float Rx = rotation.x;
+		float Ry = rotation.y;
+		float Rz = rotation.z;
+		float Rw = rotation.w;
 
 		float Rx_x = 0.5f * (sey * cez * -sex - cey * sez * cex);
 		float Ry_x = 0.5f * (cey * sez * -sex + sey * cez * cex);
 		float Rz_x = 0.5f * (cey * cez * cex - sey * sez * -sex);
 		float Rw_x = 0.5f * (cey * cez * -sex + sey * sez * cex);
 
-		float Rx_y = 0.5f * (cey * cez * cex - -sey * sez * sex);
+		float Rx_y = 0.5f * (cey * cez * cex - (-sey) * sez * sex);
 		float Ry_y = 0.5f * (-sey * sez * cex + cey * cez * sex);
 		float Rz_y = 0.5f * (-sey * cez * sex - cey * sez * cex);
 		float Rw_y = 0.5f * (-sey * cez * cex + cey * sez * sex);
@@ -87,6 +85,7 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 #define t_y(ci, R0i, R1i) (c##ci * (R##R0i * R##R1i##_y + R##R0i##_y * R##R1i))
 #define t_z(ci, R0i, R1i) (c##ci * (R##R0i * R##R1i##_z + R##R0i##_z * R##R1i))
 
+
 		float px_x = t_x(x, w, w) + t_x(z, y, w) - t_x(y, z, w) + t_x(x, x, x) + t_x(y, x, y) + t_x(z, x, z) 
 			- t_x(y, z, w) - t_x(x, z, z) + t_x(z, x, z) + t_x(z, y, w) + t_x(y, x, y) - t_x(x, y, y);
 
@@ -96,6 +95,7 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		float pz_x = t_x(z, w, w) + t_x(y, x, w) - t_x(x, y, w) + t_x(x, x, z) + t_x(y, y, z) + t_x(z, z, z)
 			- t_x(x, y, w) - t_x(z, y, y) + t_x(y, y, z) + t_x(y, x, w) + t_x(x, x, z) - t_x(z, x, x);
 
+
 		float px_y = t_y(x, w, w) + t_y(z, y, w) - t_y(y, z, w) + t_y(x, x, x) + t_y(y, x, y) + t_y(z, x, z)
 			- t_y(y, z, w) - t_y(x, z, z) + t_y(z, x, z) + t_y(z, y, w) + t_y(y, x, y) - t_y(x, y, y);
 
@@ -104,6 +104,7 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 
 		float pz_y = t_y(z, w, w) + t_y(y, x, w) - t_y(x, y, w) + t_y(x, x, z) + t_y(y, y, z) + t_y(z, z, z)
 			- t_y(x, y, w) - t_y(z, y, y) + t_y(y, y, z) + t_y(y, x, w) + t_y(x, x, z) - t_y(z, x, x);
+
 
 		float px_z = t_z(x, w, w) + t_z(z, y, w) - t_z(y, z, w) + t_z(x, x, x) + t_z(y, x, y) + t_z(z, x, z)
 			- t_z(y, z, w) - t_z(x, z, z) + t_z(z, x, z) + t_z(z, y, w) + t_z(y, x, y) - t_z(x, y, y);
@@ -118,25 +119,31 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 #undef t_y
 #undef t_z
 
+
 		// First output.
 		out[0][0] = -i.fx / pz2 * (pz * px_x - pz_x * px);			// Rotation X.
 		out[0][1] = -i.fx / pz2 * (pz * px_y - pz_y * px);			// Rotation Y.
 		out[0][2] = -i.fx / pz2 * (pz * px_z - pz_z * px);			// Rotation Z.
-		out[0][3] = i.fx * -translation.x / pz;						// Translation X.
+
+		out[0][3] = -i.fx / pz;										// Translation X.
 		out[0][4] = 0.f;											// Translation Y.
 		out[0][5] = i.fx * px / pz2;								// Translation Z.
+
 		out[0][6] = -px / pz;										// Fx.
 		out[0][7] = 0.f;											// Fy.
 		out[0][8] = 1.f;											// Cx.
 		out[0][9] = 0.f;											// Cy.
 
+
 		// Second output.
 		out[1][0] = i.fx / pz2 * (pz * py_x - pz_x * py);			// Rotation X.
 		out[1][1] = i.fx / pz2 * (pz * py_y - pz_y * py);			// Rotation Y.
 		out[1][2] = i.fx / pz2 * (pz * py_z - pz_z * py);			// Rotation Z.
+
 		out[1][3] = 0.f;											// Translation X.
-		out[1][4] = i.fy * translation.y / pz;						// Translation Y.
+		out[1][4] = i.fy / pz;										// Translation Y.
 		out[1][5] = -i.fy * py / pz2;								// Translation Z.
+
 		out[1][6] = 0.f;											// Fx.
 		out[1][7] = py / pz;										// Fy.
 		out[1][8] = 0.f;											// Cx.
@@ -179,11 +186,19 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 
 	LOG_MESSAGE("Solver finished");
 
+	quat oldRotation = projRotation;
+	vec3 oldPosition = projPosition;
+	camera_intrinsics oldIntrinsics = projIntrinsics;
+
 	projRotation = conjugate(eulerToQuat(params.rotation));
 	projPosition = -(projRotation * params.translation);
 	projIntrinsics = params.intrinsics;
 
 	LOG_MESSAGE("Final projector intrinsics: [%.3f, %.3f, %.3f, %.3f]", projIntrinsics.fx, projIntrinsics.fy, projIntrinsics.cx, projIntrinsics.cy);
+	LOG_MESSAGE("Final projector position: [%.3f, %.3f, %.3f]", projPosition.x, projPosition.y, projPosition.z);
+	LOG_MESSAGE("Final projector rotation: [%.3f, %.3f, %.3f, %.3f]", projRotation.x, projRotation.y, projRotation.z, projRotation.w);
+
+	delete[] residuals;
 }
 
 

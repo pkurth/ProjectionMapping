@@ -758,7 +758,6 @@ quat eulerToQuat(vec3 euler)
 	float yaw = euler.y;
 	float roll = euler.z;
 
-	// Abbreviations for the various angular functions
 	float cx = cos(pitch * 0.5f);
 	float sx = sin(pitch * 0.5f);
 	float cy = cos(yaw * 0.5f);

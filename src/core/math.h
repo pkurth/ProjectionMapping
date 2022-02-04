@@ -607,8 +607,8 @@ static quat operator+(quat a, quat b) { quat result = { a.f4 + b.f4 }; return re
 static quat operator*(quat a, quat b)
 {
 	quat result;
-	result.w = a.w * b.w - dot(a.v, b.v);
 	result.v = a.v * b.w + b.v * a.w + cross(a.v, b.v);
+	result.w = a.w * b.w - dot(a.v, b.v);
 	return result;
 }
 
