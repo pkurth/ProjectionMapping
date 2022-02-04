@@ -759,18 +759,18 @@ quat eulerToQuat(vec3 euler)
 	float roll = euler.z;
 
 	// Abbreviations for the various angular functions
-	float cy = cos(pitch * 0.5f);
-	float sy = sin(pitch * 0.5f);
-	float cp = cos(roll * 0.5f);
-	float sp = sin(roll * 0.5f);
-	float cr = cos(yaw * 0.5f);
-	float sr = sin(yaw * 0.5f);
+	float cx = cos(pitch * 0.5f);
+	float sx = sin(pitch * 0.5f);
+	float cy = cos(yaw * 0.5f);
+	float sy = sin(yaw * 0.5f);
+	float cz = cos(roll * 0.5f);
+	float sz = sin(roll * 0.5f);
 
 	quat q;
-	q.w = cr * cp * cy + sr * sp * sy;
-	q.x = sr * cp * cy - cr * sp * sy;
-	q.y = cr * sp * cy + sr * cp * sy;
-	q.z = cr * cp * sy - sr * sp * cy;
+	q.x = sy * cz * cx - cy * sz * sx;
+	q.y = cy * sz * cx + sy * cz * sx;
+	q.z = cy * cz * sx - sy * sz * cx;
+	q.w = cy * cz * cx + sy * sz * sx;
 
 	return q;
 }

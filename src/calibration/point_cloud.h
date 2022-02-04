@@ -7,9 +7,6 @@
 
 struct point_cloud_entry
 {
-	vec2 cam;
-	vec2 proj;
-
 	vec3 position;
 	vec3 normal;
 };

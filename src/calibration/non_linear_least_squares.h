@@ -181,7 +181,7 @@ static float chiSquared(param_set& params, least_squares_residual_array<residual
 }
 
 template <typename param_set, typename residual_t, uint32 numSubResiduals, uint32 numParams>
-static void levenbergMarquardtInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
+static void levenbergMarquardtInternal(const param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
 	float(&H)[numParams][numParams], float(&g)[numParams])
 {
 	for (uint32 i = 0; i < residualArray.count; ++i)

@@ -161,24 +161,6 @@ static image<vec2b> estimateDirectLight(const std::vector<image<uint8>>& images,
 	return directLight;
 }
 
-constexpr uint32 BIT_UNCERTAIN = -1;
-constexpr float PIXEL_UNCERTAIN = -1.f;
-
-static bool validPixel(float p)
-{
-	return p != PIXEL_UNCERTAIN;
-}
-
-static bool validPixel(vec2 p)
-{
-	return validPixel(p.x) && validPixel(p.y);
-}
-
-static bool validPixel(float p1, float p2)
-{
-	return validPixel(p1) && validPixel(p2);
-}
-
 // https://www.cs.purdue.edu/cgvlab/papers/aliaga/gi07.pdf, See table 2.
 static inline uint32 getRobustBit(uint32 value1, uint32 value2, uint32 Ld, uint32 Lg, uint32 m)
 {
@@ -407,23 +389,22 @@ bool decodeGraycodeCaptures(const std::vector<image<uint8>>& images, uint32 proj
 }
 
 
-bool decodeGraycodeCaptures(const std::vector<image<uint8>>& images, uint32 projWidth, uint32 projHeight, std::vector<pixel_correspondence>& outPixelCorrespondences)
+bool decodeGraycodeCaptures(const std::vector<image<uint8>>& images, uint32 projWidth, uint32 projHeight, image<vec2>& outPCImage, std::vector<pixel_correspondence>& outPCVector)
 {
-	outPixelCorrespondences.clear();
+	outPCVector.clear();
 
-	image<vec2> pc;
-	if (decodeGraycodeCaptures(images, projWidth, projHeight, pc))
+	if (decodeGraycodeCaptures(images, projWidth, projHeight, outPCImage))
 	{
-		for (uint32 y = 0; y < pc.height; ++y)
+		for (uint32 y = 0; y < outPCImage.height; ++y)
 		{
-			for (uint32 x = 0; x < pc.width; ++x)
+			for (uint32 x = 0; x < outPCImage.width; ++x)
 			{
-				vec2 proj = pc(y, x);
+				vec2 proj = outPCImage(y, x);
 
 				if (validPixel(proj))
 				{
 					vec2 cam = { (float)x, (float)y };
-					outPixelCorrespondences.push_back({ cam, proj });
+					outPCVector.push_back({ cam, proj });
 				}
 			}
 		}

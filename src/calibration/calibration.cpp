@@ -6,6 +6,7 @@
 #include "fundamental.h"
 #include "svd.h"
 #include "reconstruction.h"
+#include "solver.h"
 
 #include "core/imgui.h"
 #include "core/log.h"
@@ -248,6 +249,7 @@ struct calibration_sequence
 	mat4 trackingMat;
 	int globalSequenceID;
 
+	image<vec2> perPixelCorrespondences;
 	std::vector<pixel_correspondence> allPixelCorrespondences;
 
 	calibration_sequence() {}
@@ -256,6 +258,7 @@ struct calibration_sequence
 	{
 		trackingMat = c.trackingMat;
 		allPixelCorrespondences = std::move(c.allPixelCorrespondences);
+		perPixelCorrespondences = std::move(c.perPixelCorrespondences);
 		globalSequenceID = c.globalSequenceID;
 	}
 };
@@ -458,7 +461,7 @@ static bool loadAndDecodeImageSequences(const fs::path& workingDir, const std::v
 					calibInput.camHeight = camHeight;
 				}
 
-				if (!decodeGraycodeCaptures(imageSequence, projWidth, projHeight, calibSequence.allPixelCorrespondences))
+				if (!decodeGraycodeCaptures(imageSequence, projWidth, projHeight, calibSequence.perPixelCorrespondences, calibSequence.allPixelCorrespondences))
 				{
 					LOG_ERROR("Could not decode gray code sequence '%ws'", proj.c_str());
 					continue;
@@ -955,7 +958,7 @@ bool projector_system_calibration::calibrate()
 				readbackBuffer, colorCameraUnprojectTable);
 			perSequence.validPointMask = perSequence.positionPC.createValidMask();
 		
-			submitPointCloudForVisualization(perSequence.positionPC, 0);
+			submitPointCloudForVisualization(perSequence.positionPC, vec4(1.f, 0.f, 1.f, 0.f));
 		}
 
 
@@ -991,11 +994,12 @@ bool projector_system_calibration::calibrate()
 
 			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, positionPC, camIntrinsics, camWidth, camHeight, initialProjIntrinsics, width, height, projPosition, projRotation))
 			{
-				int a = 0;
+				continue;
 			}
-			int b = 0;
 
-			//submitFrustumForVisualization(projPosition, projRotation, width, height, initialProjIntrinsics, projID);
+			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, initialProjIntrinsics);
+
+			submitFrustumForVisualization(projPosition, projRotation, width, height, initialProjIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
 		}
 
 		cancel = false;

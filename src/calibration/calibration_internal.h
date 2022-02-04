@@ -229,4 +229,22 @@ struct camera_distortionwN
 	simd_t p2;
 };
 
+constexpr uint32 BIT_UNCERTAIN = -1;
+constexpr float PIXEL_UNCERTAIN = -1.f;
+
+static bool validPixel(float p)
+{
+	return p != PIXEL_UNCERTAIN;
+}
+
+static bool validPixel(vec2 p)
+{
+	return validPixel(p.x) && validPixel(p.y);
+}
+
+static bool validPixel(float p1, float p2)
+{
+	return validPixel(p1) && validPixel(p2);
+}
+
 
