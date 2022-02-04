@@ -729,7 +729,9 @@ static bool testRotationTranslationCombination(const camera_intrinsics& camIntri
 	return result;
 }
 
-bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<pixel_correspondence> pixelCorrespondences,
+bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEstimate(
+	std::vector<pixel_correspondence> pixelCorrespondences,
+	const image_point_cloud& renderedPointCloud,
 	const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight, 
 	const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight, 
 	vec3& outPosition, quat& outRotation)
@@ -771,10 +773,9 @@ bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEs
 	const mat3d& u = svd.U;
 	mat3d vt = transpose(svd.V);
 
-	mat3d W(0, -1, 0, 1, 0, 0, 0, 0, 1); //HZ 9.13
-
-	mat3d rotation1 = (u * W * vt); //HZ 9.19
-	mat3d rotation2 = (u * transpose(W) * vt); //HZ 9.19
+	mat3d W(0, -1, 0, 1, 0, 0, 0, 0, 1);		// HZ 9.13
+	mat3d rotation1 = (u * W * vt);				// HZ 9.19
+	mat3d rotation2 = (u * transpose(W) * vt);	// HZ 9.19
 
 	vec3d translation1 = col(u, 2);
 	vec3d translation2 = -translation1;
@@ -835,17 +836,55 @@ bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEs
 	}
 
 
-	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation1), conjugate(ourRotation1), 1920, 1200, projIntrinsics, 0);
-	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation2), conjugate(ourRotation1), 1920, 1200, projIntrinsics, 0);
-	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation1), conjugate(ourRotation2), 1920, 1200, projIntrinsics, 0);
-	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation2), conjugate(ourRotation2), 1920, 1200, projIntrinsics, 0);
+	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation1), conjugate(ourRotation1), projWidth, projHeight, projIntrinsics, combinationIndex & 1 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation2), conjugate(ourRotation1), projWidth, projHeight, projIntrinsics, combinationIndex & 2 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation1), conjugate(ourRotation2), projWidth, projHeight, projIntrinsics, combinationIndex & 4 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation2), conjugate(ourRotation2), projWidth, projHeight, projIntrinsics, combinationIndex & 8 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
 
 
 	quat rotation = conjugate(estimatedRot);
 	vec3 origin = -(rotation * estimatedTransDirection);
 
-	LOG_MESSAGE("Initial estimated projector origin: [%.3f, %.3f, %.3f]", origin.x, origin.y, origin.z);
+	LOG_MESSAGE("Initial unscaled estimated projector origin: [%.3f, %.3f, %.3f]", origin.x, origin.y, origin.z);
 	LOG_MESSAGE("Initial estimated projector rotation: [%.3f, %.3f, %.3f, %.3f]", rotation.x, rotation.y, rotation.z, rotation.w);
+
+
+
+
+
+	// Compute scale.
+
+	float scale = 0.f;
+
+	vec3 normOrigin = normalize(origin);
+
+	for (const auto& pc : pixelCorrespondences)
+	{
+		vec3 world = renderedPointCloud.entries((int)pc.camera.y, (int)pc.camera.x).position;
+		assert(world.z != 0.f);
+
+		vec3 camRay = normalize(unproject(pc.camera, camIntrinsics));
+		vec3 projRay = normalize(rotation * unproject(pc.projector, projIntrinsics));
+
+		float camAngle = acos(clamp(dot(camRay, normOrigin), -1.f, 1.f));		// Alpha.
+		float projAngle = acos(clamp(dot(projRay, -normOrigin), -1.f, 1.f));	// Beta.
+		float worldAngle = M_PI - camAngle - projAngle;							// Gamma.
+
+		float worldLength = length(world);
+
+		float lambda = worldLength / sin(projAngle);
+		float s = lambda * sin(worldAngle);
+
+		scale += s;
+	}
+
+	scale /= (float)pixelCorrespondences.size();
+
+	origin *= scale;
+
+	LOG_MESSAGE("Scaling origin by %.3f. Scaled origin: [%.3f, %.3f, %.3f]", scale, origin.x, origin.y, origin.z);
+
+	submitFrustumForVisualization(origin, rotation, projWidth, projHeight, projIntrinsics, vec4(0.f, 0.f, 1.f, 1.f));
 
 	outRotation = rotation;
 	outPosition = origin;
@@ -928,6 +967,7 @@ bool projector_system_calibration::calibrate()
 			validPixelCorrespondences.reserve(seq0.allPixelCorrespondences.size());
 
 			auto& vpm = calibData.perSequence[seq0.globalSequenceID].validPointMask;
+			auto& positionPC = calibData.perSequence[seq0.globalSequenceID].positionPC;
 			for (auto& pc : seq0.allPixelCorrespondences)
 			{
 				if (vpm((int)pc.camera.y, (int)pc.camera.x) != 0)
@@ -949,7 +989,7 @@ bool projector_system_calibration::calibrate()
 			vec3 projPosition;
 			quat projRotation;
 
-			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, camIntrinsics, camWidth, camHeight, initialProjIntrinsics, width, height, projPosition, projRotation))
+			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, positionPC, camIntrinsics, camWidth, camHeight, initialProjIntrinsics, width, height, projPosition, projRotation))
 			{
 				int a = 0;
 			}
@@ -967,7 +1007,7 @@ bool projector_system_calibration::calibrate()
 	return true;
 }
 
-void projector_system_calibration::submitPointCloudForVisualization(const image_point_cloud& pc, uint32 projectorIndex)
+void projector_system_calibration::submitPointCloudForVisualization(const image_point_cloud& pc, vec4 color)
 {
 	struct position_normal
 	{
@@ -992,14 +1032,14 @@ void projector_system_calibration::submitPointCloudForVisualization(const image_
 	ref<dx_vertex_buffer> vb = createVertexBuffer(sizeof(position_normal), pc.numEntries, vertices.data());
 
 	visualizationMutex.lock();
-	pointCloudsToVisualize.push_back({ vb, projectorIndex });
+	pointCloudsToVisualize.push_back({ vb, color });
 	visualizationMutex.unlock();
 }
 
-void projector_system_calibration::submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, uint32 projectorIndex)
+void projector_system_calibration::submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, vec4 color)
 {
 	visualizationMutex.lock();
-	frustaToVisualize.push_back({ rotation, position, width, height, intrinsics, projectorIndex });
+	frustaToVisualize.push_back({ rotation, position, width, height, intrinsics, color });
 	visualizationMutex.unlock();
 }
 
@@ -1214,7 +1254,7 @@ void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass*
 	for (auto& v : pointCloudsToVisualize)
 	{
 		renderPass->renderObject<visualize_point_cloud_pipeline>(colorM, { v.vertexBuffer }, {}, submesh_info{ 0, 0, 0, v.vertexBuffer->elementCount },
-			visualize_point_cloud_material{ vec4(1.f, 0.f, 1.f, 1.f) });
+			visualize_point_cloud_material{ v.color });
 	}
 
 	for (auto& v : frustaToVisualize)
@@ -1222,7 +1262,7 @@ void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass*
 		render_camera camera;
 		camera.initializeCalibrated(tracker->globalCameraRotation * v.position + tracker->globalCameraPosition, tracker->globalCameraRotation * v.rotation, v.width, v.height, v.intrinsics, 0.1f, 4.f);
 		camera.updateMatrices();
-		renderCameraFrustum(camera, vec4(1.f, 0.f, 1.f, 1.f), renderPass);
+		renderCameraFrustum(camera, v.color, renderPass);
 	}
 
 

@@ -16,10 +16,12 @@ private:
 	bool projectCalibrationPatterns();
 	bool calibrate();
 
-	void submitPointCloudForVisualization(const struct image_point_cloud& pc, uint32 projectorIndex);
-	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, uint32 projectorIndex);
+	void submitPointCloudForVisualization(const struct image_point_cloud& pc, vec4 color);
+	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, vec4 color);
 
-	bool computeInitialExtrinsicProjectorCalibrationEstimate(std::vector<struct pixel_correspondence> pixelCorrespondences,
+	bool computeInitialExtrinsicProjectorCalibrationEstimate(
+		std::vector<struct pixel_correspondence> pixelCorrespondences,
+		const struct image_point_cloud& renderedPointCloud,
 		const camera_intrinsics& camIntrinsics, uint32 camWidth, uint32 camHeight,
 		const camera_intrinsics& projIntrinsics, uint32 projWidth, uint32 projHeight,
 		vec3& outPosition, quat& outRotation);
@@ -71,7 +73,7 @@ private:
 	struct point_cloud_visualization
 	{
 		ref<dx_vertex_buffer> vertexBuffer;
-		uint32 projectorIndex;
+		vec4 color;
 	};
 
 	struct frustum_visualization
@@ -80,7 +82,7 @@ private:
 		vec3 position;
 		uint32 width, height;
 		camera_intrinsics intrinsics;
-		uint32 projectorIndex;
+		vec4 color;
 	};
 
 	std::mutex visualizationMutex;
