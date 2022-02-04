@@ -59,14 +59,14 @@ ps_output main(ps_input IN)
 			float distance = length(V);
 			V /= distance;
 			
-			float physicalIntensity = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
+			float physicalAttenuation = getAngleAttenuation(N, V) * getDistanceAttenuation(distance, cb.referenceDistance);
 
 			float3 renderResult = renderResults[projIndex].SampleLevel(borderSampler, uv, 0).rgb; // Software intensity is baked into this already.
 			renderResult = sRGBToLinear(renderResult);
 
-			//renderResult += (float3)0.01f; // Black level.
+			renderResult += (float3)0.01f; // Black level.
 
-			color += renderResult * physicalIntensity;
+			color += renderResult * physicalAttenuation;
 		}
 	}
 
