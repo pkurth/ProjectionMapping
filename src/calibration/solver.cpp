@@ -24,11 +24,12 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 
 	void value(const param_set& params, float out[2]) const override
 	{
+		camera_intrinsics i = params.intrinsics;
 		quat rotation = eulerToQuat(params.rotation);
 		vec3 translation = params.translation;
 
 		vec3 projPos = rotation * camPos + translation;
-		vec2 projPixel = project(projPos, params.intrinsics);
+		vec2 projPixel = project(projPos, i);
 
 		vec2 error = observedProjPixel - projPixel;
 
