@@ -1003,7 +1003,7 @@ bool projector_system_calibration::calibrate()
 				continue;
 			}
 
-			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, projIntrinsics);
+			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, projIntrinsics, solverSettings);
 
 			submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
 
@@ -1187,6 +1187,7 @@ bool projector_system_calibration::edit()
 			ImGui::BeginDisabled();
 		}
 		ImGui::PropertySlider("White value", whiteValue);
+		ImGui::PropertySlider("Rel. solver correspondence count", solverSettings.percentageOfCorrespondencesToUse);
 		if (!uiActive)
 		{
 			ImGui::EndDisabled();

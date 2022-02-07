@@ -5,6 +5,7 @@
 #include "reconstruction.h"
 #include "math_double.h"
 
+#include "core/random.h"
 #include "core/log.h"
 
 struct camera_intrinsicsd
@@ -190,7 +191,8 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 };
 
 void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, const image<vec2>& pixelCorrespondences, 
-	vec3& projPosition, quat& projRotation, camera_intrinsics& projIntrinsics)
+	vec3& projPosition, quat& projRotation, camera_intrinsics& projIntrinsics,
+	calibration_solver_settings settings)
 {
 	quat R = conjugate(projRotation);
 	vec3 t = -(R * projPosition);
@@ -210,6 +212,8 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 
 	backprojection_residual* residuals = new backprojection_residual[renderedPC.numEntries];
 
+	random_number_generator rng = { 61923 };
+
 	uint32 numResiduals = 0;
 	for (uint32 y = 0, i = 0; y < renderedPC.entries.height; ++y)
 	{
@@ -218,21 +222,24 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 			const auto& e = renderedPC.entries.data[i];
 			vec2 proj = pixelCorrespondences(y, x);
 
-			if (e.position.z != 0.f && validPixel(proj))
+			if (rng.randomFloat01() < settings.percentageOfCorrespondencesToUse)
 			{
-				residuals[numResiduals].camPos = { e.position.x, e.position.y, e.position.z };
-				residuals[numResiduals].observedProjPixel = { proj.x, proj.y };
-				++numResiduals;
+				if (e.position.z != 0.f && validPixel(proj))
+				{
+					residuals[numResiduals].camPos = { e.position.x, e.position.y, e.position.z };
+					residuals[numResiduals].observedProjPixel = { proj.x, proj.y };
+					++numResiduals;
+				}
 			}
 		}
 	}
 
-	levenberg_marquardt_settings settings;
-	settings.maxNumIterations = 300;
+	levenberg_marquardt_settings lmSettings;
+	lmSettings.maxNumIterations = 300;
 
 	LOG_MESSAGE("Solving for projector parameters with %u residuals", numResiduals);
 
-	levenberg_marquardt_result lmResult = levenbergMarquardt(settings, params, residuals, numResiduals);
+	levenberg_marquardt_result lmResult = levenbergMarquardt(lmSettings, params, residuals, numResiduals);
 
 	LOG_MESSAGE("Solver finished");
 

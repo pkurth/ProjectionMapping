@@ -3,6 +3,7 @@
 #include "scene/scene.h"
 #include "tracking/tracking.h"
 #include "projection_mapping/projector_manager.h"
+#include "solver.h"
 
 
 struct projector_system_calibration
@@ -39,24 +40,6 @@ private:
 		calibration_state_calibrating,
 	};
 
-	struct calibration_solver_params
-	{
-		uint32	numIterations = 4;
-		float	distanceBetweenFeatures = 0.08f;
-		uint32	numNeighborsForFeatureDetection = 250;
-		float	depthWeight = 1000.f;
-		float	scale = 1.f;
-
-		float	maxDistance = 0.3f;
-
-		float	icpPercentage = 0.3f;
-		float	solverPercentage = 0.15f;
-
-		int32	startSolvingForDistortionOnIteration = -1;	// -1 means don't solve for distortion
-		int32	recomputeFeaturesEveryNIterations = -1;		// -1 means never recompute
-		int32	maxNumFeatureRecomputations = -1;			// -1 means recompute as often as necessary
-	};
-
 	volatile bool cancel = false;
 
 	calibration_state state = calibration_state_uninitialized;
@@ -64,6 +47,7 @@ private:
 	projector_manager* manager;
 
 	float whiteValue = 0.5f;
+	calibration_solver_settings solverSettings;
 
 	static constexpr uint32 MAX_NUM_PROJECTORS = 16;
 
