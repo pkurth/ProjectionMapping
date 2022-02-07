@@ -253,12 +253,6 @@ void solveForCameraToProjectorParameters(const std::vector<calibration_solver_in
 
 	LOG_MESSAGE("Solver finished");
 
-	quat oldRotation = projRotation;
-	vec3 oldPosition = projPosition;
-	camera_intrinsics oldIntrinsics = projIntrinsics;
-
-
-
 
 	alpha = params.rotation.x;
 	beta = params.rotation.y;
