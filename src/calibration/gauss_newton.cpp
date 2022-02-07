@@ -4,28 +4,28 @@
 
 struct gn_param_set
 {
-	float b0, b1;
+	double b0, b1;
 };
 
 struct gn_test_residual : least_squares_residual<gn_param_set>
 {
-	float x;
-	float y;
+	double x;
+	double y;
 
-	void value(const gn_param_set& params, float out[1]) const override
+	void value(const gn_param_set& params, double out[1]) const override
 	{
-		float v = params.b0 * x / (params.b1 + x);
+		double v = params.b0 * x / (params.b1 + x);
 		out[0] = y - v;
 	}
 
-	void grad(const gn_param_set& params, float out[1][2]) const override
+	void grad(const gn_param_set& params, double out[1][2]) const override
 	{
 		out[0][0] = -x / (params.b1 + x);
 		out[0][1] = (params.b0 * x) / ((params.b1 + x) * (params.b1 + x));
 	}
 };
 
-static gn_test_residual createResidual(float x, float y)
+static gn_test_residual createResidual(double x, double y)
 {
 	gn_test_residual result;
 	result.x = x;

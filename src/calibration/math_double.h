@@ -1,5 +1,10 @@
 #pragma once
 
+struct vec2d
+{
+	double x, y;
+};
+
 struct vec3d
 {
 	double x, y, z;
@@ -77,6 +82,7 @@ static vec3d row(const mat3d& a, uint32 r) { return { a.m[r], a.m[r + 3], a.m[r 
 static vec3d col(const mat3d& a, uint32 c) { return a.cols[c]; }
 #endif
 
+static vec2d operator-(vec2d a, vec2d b) { vec2d result = { a.x - b.x, a.y - b.y }; return result; }
 
 static vec3d operator+(vec3d a, vec3d b) { vec3d result = { a.x + b.x, a.y + b.y, a.z + b.z }; return result; }
 static vec3d& operator+=(vec3d& a, vec3d b) { a = a + b; return a; }

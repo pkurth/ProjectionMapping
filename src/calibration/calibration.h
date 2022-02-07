@@ -2,11 +2,12 @@
 
 #include "scene/scene.h"
 #include "tracking/tracking.h"
+#include "projection_mapping/projector_manager.h"
 
 
 struct projector_system_calibration
 {
-	projector_system_calibration(depth_tracker* tracker);
+	projector_system_calibration(depth_tracker* tracker, projector_manager* manager);
 	bool edit();
 
 	void visualizeIntermediateResults(struct ldr_render_pass* renderPass);
@@ -56,6 +57,7 @@ private:
 
 	calibration_state state = calibration_state_uninitialized;
 	depth_tracker* tracker;
+	projector_manager* manager;
 
 	float whiteValue = 0.5f;
 

@@ -3,28 +3,28 @@
 
 struct sine_param_set
 {
-	float phase;
-	float amplitude;
-	float frequency;
+	double phase;
+	double amplitude;
+	double frequency;
 };
 
-static float evaluate(const sine_param_set& params, float x)
+static double evaluate(const sine_param_set& params, double x)
 {
 	return params.amplitude * sin(params.frequency * x + params.phase);
 }
 
 struct lm_sine_test : least_squares_residual<sine_param_set>
 {
-	float x;
-	float y;
+	double x;
+	double y;
 
-	void value(const sine_param_set& params, float out[1]) const override
+	void value(const sine_param_set& params, double out[1]) const override
 	{
-		float v = evaluate(params, x);
+		double v = evaluate(params, x);
 		out[0] = y - v;
 	}
 
-	void grad(const sine_param_set& params, float out[1][3]) const override
+	void grad(const sine_param_set& params, double out[1][3]) const override
 	{
 		out[0][0] = params.amplitude * cos(params.frequency * x + params.phase);
 		out[0][1] = sin(params.frequency * x + params.phase);
@@ -32,7 +32,7 @@ struct lm_sine_test : least_squares_residual<sine_param_set>
 	}
 };
 
-static lm_sine_test createResidual(sine_param_set params, float x)
+static lm_sine_test createResidual(sine_param_set params, double x)
 {
 	lm_sine_test result;
 	result.x = x;

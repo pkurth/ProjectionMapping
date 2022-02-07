@@ -3,45 +3,61 @@
 #include "non_linear_least_squares.h"
 #include "point_cloud.h"
 #include "reconstruction.h"
+#include "math_double.h"
 
 #include "core/log.h"
 
+struct camera_intrinsicsd
+{
+	double fx, fy, cx, cy;
+};
+
+static vec2d project(const vec3d& p, const camera_intrinsicsd& intr)
+{
+	double x = -p.x / p.z;
+	double y = p.y / p.z;
+
+	x = intr.fx * x + intr.cx;
+	y = intr.fy * y + intr.cy;
+
+	return vec2d{ x, y };
+}
 
 struct param_set
 {
 	// View transform, not model!
-	camera_intrinsics intrinsics;
+	camera_intrinsicsd intrinsics;
 	
-	static inline vec3 rotation;
-	static inline vec3 translation;
+	/*static inline*/ vec3d rotation;
+	/*static inline*/ vec3d translation;
 };
 
-static constexpr uint32 numParams = sizeof(param_set) / sizeof(float);
+static constexpr uint32 numParams = sizeof(param_set) / sizeof(double);
 //static_assert(numParams == 10);
 
 struct backprojection_residual : least_squares_residual<param_set, 2>
 {
-	vec3 camPos;
-	vec2 observedProjPixel;
+	vec3d camPos;
+	vec2d observedProjPixel;
 
-	void value(const param_set& params, float out[2]) const override
+	void value(const param_set& params, double out[2]) const override
 	{
-		camera_intrinsics i = params.intrinsics;
-		vec3 translation = params.translation;
+		camera_intrinsicsd i = params.intrinsics;
+		vec3d translation = params.translation;
 
-		float alpha = params.rotation.x;
-		float beta = params.rotation.y;
-		float gamma = params.rotation.z;
+		double alpha = params.rotation.x;
+		double beta = params.rotation.y;
+		double gamma = params.rotation.z;
 
-		float c1 = cos(alpha);
-		float c2 = cos(beta);
-		float c3 = cos(gamma);
+		double c1 = cos(alpha);
+		double c2 = cos(beta);
+		double c3 = cos(gamma);
 
-		float s1 = sin(alpha);
-		float s2 = sin(beta);
-		float s3 = sin(gamma);
+		double s1 = sin(alpha);
+		double s2 = sin(beta);
+		double s3 = sin(gamma);
 
-		mat3 r;
+		mat3d r;
 		r.m00 = c1 * c3 - c2 * s1 * s3;
 		r.m10 = c3 * s1 + c1 * c2 * s3;
 		r.m20 = s2 * s3;
@@ -52,33 +68,33 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		r.m12 = -c1 * s2;
 		r.m22 = c2;
 
-		vec3 projPos = r * camPos + translation;
-		vec2 projPixel = project(projPos, i);
+		vec3d projPos = r * camPos + translation;
+		vec2d projPixel = project(projPos, i);
 
-		vec2 error = observedProjPixel - projPixel;
+		vec2d error = observedProjPixel - projPixel;
 
 		out[0] = error.x;
 		out[1] = error.y;
 	}
 
-	void grad(const param_set& params, float out[2][numParams]) const override
+	void grad(const param_set& params, double out[2][numParams]) const override
 	{
-		camera_intrinsics i = params.intrinsics;
-		vec3 translation = params.translation;
+		camera_intrinsicsd i = params.intrinsics;
+		vec3d translation = params.translation;
 
-		float alpha = params.rotation.x;
-		float beta = params.rotation.y;
-		float gamma = params.rotation.z;
+		double alpha = params.rotation.x;
+		double beta = params.rotation.y;
+		double gamma = params.rotation.z;
 
-		float c1 = cos(alpha);
-		float c2 = cos(beta);
-		float c3 = cos(gamma);
+		double c1 = cos(alpha);
+		double c2 = cos(beta);
+		double c3 = cos(gamma);
 
-		float s1 = sin(alpha);
-		float s2 = sin(beta);
-		float s3 = sin(gamma);
+		double s1 = sin(alpha);
+		double s2 = sin(beta);
+		double s3 = sin(gamma);
 
-		mat3 r;
+		mat3d r;
 		r.m00 = c1 * c3 - c2 * s1 * s3;
 		r.m10 = c3 * s1 + c1 * c2 * s3;
 		r.m20 = s2 * s3;
@@ -89,33 +105,39 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		r.m12 = -c1 * s2;
 		r.m22 = c2;
 
-		vec3 projPos = r * camPos + translation;
+		vec3d projPos = r * camPos + translation;
 
-		float px = projPos.x;
-		float py = projPos.y;
-		float pz = projPos.z;
-		float pz2 = pz * pz;
+		double px = projPos.x;
+		double py = projPos.y;
+		double pz = projPos.z;
+		double pz2 = pz * pz;
 
-		float cx = camPos.x;
-		float cy = camPos.y;
-		float cz = camPos.z;
+		double cx = camPos.x;
+		double cy = camPos.y;
+		double cz = camPos.z;
 
-		float tx = translation.x;
-		float ty = translation.y;
-		float tz = translation.z;
+		double tx = translation.x;
+		double ty = translation.y;
+		double tz = translation.z;
 
 #if 1
 
 		/*
+		* In the formulas:
+		* - x,y,z = euler angles
+		* - f = fx/fy
+		* - u,v,w = camPos components
+		* - m = tx/ty
+		* - n = tz
+		* - c = cx/cy
+		* 
+		* e = -fx * camPos.x / camPos.z + cx
+		* https://www.wolframalpha.com/input?i=differentiate+-f+*+%28cos%28x%29cos%28z%29u+-+cos%28y%29sin%28x%29sin%28z%29u+-+cos%28x%29sin%28z%29v+-+cos%28y%29cos%28z%29sin%28x%29v+%2B+sin%28x%29sin%28y%29w+%2B+m%29+%2F+%28sin%28y%29sin%28z%29u+%2B+cos%28z%29sin%28y%29v+%2B+cos%28y%29w+%2B+n%29+%2B+c
+		* 
+		* e = fy * camPos.y / camPos.z + cy
+		* https://www.wolframalpha.com/input?i=differentiate+f+*+%28cos%28z%29sin%28x%29u+%2B+cos%28x%29cos%28y%29sin%28z%29u+%2B+cos%28x%29cos%28y%29cos%28z%29v+-+sin%28x%29sin%28z%29v+-+cos%28x%29sin%28y%29w+%2B+m%29+%2F+%28sin%28y%29sin%28z%29u+%2B+cos%28z%29sin%28y%29v+%2B+cos%28y%29w+%2B+n%29+%2B+c
+		* 
 		
-		(f (cos(x) (cos(y) (u sin(z) + v cos(z)) - w sin(y)) + sin(x) (u cos(z) - v sin(z))))/                         (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))
-		(f ((cos(y) (u sin(z) + v cos(z)) - w sin(y)) (m - sin(x) cos(y) (u sin(z) + v cos(z)) + cos(x) (u cos(z) - v sin(z)) + w sin(x) sin(y)) - sin(x) (sin(y) (u sin(z) + v cos(z)) + w cos(y)) (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
-		(f ((u cos(z) - v sin(z)) (sin(y) (m + w sin(x) sin(y)) + n sin(x) cos(y) + w sin(x) cos^2(y)) + cos(x) (sin(z) (n u + (u^2 + v^2) sin(y) sin(z) + u w cos(y)) + v cos(z) (n + w cos(y)) + (u^2 + v^2) sin(y) cos^2(z))))/             (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
-		
-		
-		(f (sin(x) (w sin(y) - cos(y) (u sin(z) + v cos(z))) + cos(x) (u cos(z) - v sin(z))))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))
-		(f (-(cos(y) (u sin(z) + v cos(z)) - w sin(y)) (m + cos(x) (cos(y) (u sin(z) + v cos(z)) - w sin(y)) + u sin(x) cos(z) - v sin(x) sin(z)) - cos(x) (sin(y) (u sin(z) + v cos(z)) + w cos(y)) (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
-		-(f (sin(z) (sin(x) (n u + (u^2 + v^2) sin(y) sin(z) + u w cos(y)) - m v sin(y)) + cos(z) (m u sin(y) + v sin(x) (n + w cos(y))) - cos(x) (n cos(y) + w sin^2(y) + w cos^2(y)) (u cos(z) - v sin(z)) + (u^2 + v^2) sin(x) sin(y) cos^2(z)))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
 		*/
 
 
@@ -176,15 +198,15 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 
 
 	mat3 mat = quaternionToMat3(R);
-	float alpha = atan2(mat.m02, -mat.m12);
-	float beta = atan2(sqrt(1.f - mat.m22 * mat.m22), mat.m22);
-	float gamma = atan2(mat.m20, mat.m21);
+	double alpha = atan2(mat.m02, -mat.m12);
+	double beta = atan2(sqrt(1.f - mat.m22 * mat.m22), mat.m22);
+	double gamma = atan2(mat.m20, mat.m21);
 
 
 	param_set params;
-	params.intrinsics = projIntrinsics;
-	params.rotation = vec3(alpha, beta, gamma);
-	params.translation = t;
+	params.intrinsics = { projIntrinsics.fx, projIntrinsics.fy, projIntrinsics.cx, projIntrinsics.cy };
+	params.rotation = { alpha, beta, gamma };
+	params.translation = { t.x, t.y, t.z };
 
 	backprojection_residual* residuals = new backprojection_residual[renderedPC.numEntries];
 
@@ -198,18 +220,19 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 
 			if (e.position.z != 0.f && validPixel(proj))
 			{
-				residuals[numResiduals].camPos = e.position;
-				residuals[numResiduals].observedProjPixel = proj;
+				residuals[numResiduals].camPos = { e.position.x, e.position.y, e.position.z };
+				residuals[numResiduals].observedProjPixel = { proj.x, proj.y };
 				++numResiduals;
 			}
 		}
 	}
 
 	levenberg_marquardt_settings settings;
+	settings.maxNumIterations = 300;
 
 	LOG_MESSAGE("Solving for projector parameters with %u residuals", numResiduals);
 
-	levenbergMarquardt(settings, params, residuals, numResiduals);
+	levenberg_marquardt_result lmResult = levenbergMarquardt(settings, params, residuals, numResiduals);
 
 	LOG_MESSAGE("Solver finished");
 
@@ -224,13 +247,13 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 	beta = params.rotation.y;
 	gamma = params.rotation.z;
 
-	float c1 = cos(alpha);
-	float c2 = cos(beta);
-	float c3 = cos(gamma);
+	float c1 = (float)cos(alpha);
+	float c2 = (float)cos(beta);
+	float c3 = (float)cos(gamma);
 
-	float s1 = sin(alpha);
-	float s2 = sin(beta);
-	float s3 = sin(gamma);
+	float s1 = (float)sin(alpha);
+	float s2 = (float)sin(beta);
+	float s3 = (float)sin(gamma);
 
 	mat3 r;
 	r.m00 = c1 * c3 - c2 * s1 * s3;
@@ -246,9 +269,10 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 
 
 	projRotation = conjugate(mat3ToQuaternion(r));
-	projPosition = -(projRotation * params.translation);
-	projIntrinsics = params.intrinsics;
+	projPosition = -(projRotation * vec3((float)params.translation.x, (float)params.translation.y, (float)params.translation.z));
+	projIntrinsics = { (float)params.intrinsics.fx, (float)params.intrinsics.fy, (float)params.intrinsics.cx, (float)params.intrinsics.cy };
 
+	LOG_MESSAGE("Solver finished after %u iterations. Remaining error: %f (avg %f)", lmResult.numIterations, lmResult.epsilon, lmResult.epsilon / numResiduals);
 	LOG_MESSAGE("Final projector intrinsics: [%.3f, %.3f, %.3f, %.3f]", projIntrinsics.fx, projIntrinsics.fy, projIntrinsics.cx, projIntrinsics.cy);
 	LOG_MESSAGE("Final projector position: [%.3f, %.3f, %.3f]", projPosition.x, projPosition.y, projPosition.z);
 	LOG_MESSAGE("Final projector rotation: [%.3f, %.3f, %.3f, %.3f]", projRotation.x, projRotation.y, projRotation.z, projRotation.w);

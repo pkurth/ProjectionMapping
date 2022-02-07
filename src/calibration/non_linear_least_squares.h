@@ -4,11 +4,11 @@ template <typename param_set_, uint32 numResiduals_ = 1>
 struct least_squares_residual
 {
 	using param_set = param_set_;
-	static const uint32 numParams = sizeof(param_set) / sizeof(float);
+	static const uint32 numParams = sizeof(param_set) / sizeof(double);
 	static const uint32 numResiduals = numResiduals_;
 
-	virtual void value(const param_set& params, float out[numResiduals]) const = 0;
-	virtual void grad(const param_set& params, float out[numResiduals][numParams]) const = 0;
+	virtual void value(const param_set& params, double out[numResiduals]) const = 0;
+	virtual void grad(const param_set& params, double out[numResiduals][numParams]) const = 0;
 };
 
 template <typename residual_t, typename param_set = residual_t::param_set, uint32 numResiduals = residual_t::numResiduals>
@@ -30,16 +30,22 @@ struct gauss_newton_settings
 struct levenberg_marquardt_settings
 {
 	uint32 maxNumIterations = 20;
-	float lambda = 0.001f; 
-	float termEpsilon = 0.01f;
+	double lambda = 0.001f; 
+	double termEpsilon = 0.01f;
+};
+
+struct levenberg_marquardt_result
+{
+	uint32 numIterations;
+	double epsilon;
 };
 
 
 
 
-static float dot(float* a, float* b, uint32 N)
+static double dot(double* a, double* b, uint32 N)
 {
-	float result = 0.f;
+	double result = 0.f;
 	for (uint32 i = 0; i < N; ++i)
 	{
 		result += a[i] * b[i];
@@ -48,19 +54,19 @@ static float dot(float* a, float* b, uint32 N)
 }
 
 template <uint32 N>
-static void conjugateGradient(const float (&A)[N][N], const float (&b)[N], float (&x)[N], uint32 numIterations)
+static void conjugateGradient(const double (&A)[N][N], const double (&b)[N], double (&x)[N], uint32 numIterations)
 {
 	memset(x, 0, sizeof(x));
 
-	float r[N], p[N];
+	double r[N], p[N];
 	memcpy(r, b, sizeof(b));
 	memcpy(p, b, sizeof(b));
 
-	float rdotr = dot(r, r, N);
+	double rdotr = dot(r, r, N);
 
 	for (uint32 cgIt = 0; cgIt < numIterations; ++cgIt)
 	{
-		float Ap[N];
+		double Ap[N];
 
 		for (uint32 y = 0; y < N; ++y)
 		{
@@ -71,23 +77,23 @@ static void conjugateGradient(const float (&A)[N][N], const float (&b)[N], float
 			}
 		}
 
-		float pAp = dot(p, Ap, N);
+		double pAp = dot(p, Ap, N);
 
-		float alpha = rdotr / pAp;
+		double alpha = rdotr / pAp;
 		for (uint32 i = 0; i < N; ++i)
 		{
 			x[i] += p[i] * alpha;
 			r[i] -= Ap[i] * alpha;
 		}
 
-		float oldrdotr = rdotr;
+		double oldrdotr = rdotr;
 		rdotr = dot(r, r, N);
 		if (rdotr < 1e-7f)
 		{
 			break;
 		}
 
-		float beta = rdotr / oldrdotr;
+		double beta = rdotr / oldrdotr;
 		for (uint32 i = 0; i < N; ++i)
 		{
 			p[i] = r[i] + p[i] * beta;
@@ -98,14 +104,14 @@ static void conjugateGradient(const float (&A)[N][N], const float (&b)[N], float
 
 template <typename param_set, typename residual_t, uint32 numSubResiduals, uint32 numParams>
 static void gaussNewtonInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
-	float(&JTJ)[numParams][numParams], float(&negJTr)[numParams])
+	double(&JTJ)[numParams][numParams], double(&negJTr)[numParams])
 {
 	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
-		float grad[numSubResiduals][numParams];
+		double grad[numSubResiduals][numParams];
 		residualArray.residuals[i].grad(params, grad);
 
-		float value[numSubResiduals];
+		double value[numSubResiduals];
 		residualArray.residuals[i].value(params, value);
 
 		for (uint32 s = 0; s < numSubResiduals; ++s)
@@ -127,21 +133,21 @@ template <typename param_set, typename... residual_t, uint32... numSubResiduals>
 void gaussNewton(gauss_newton_settings settings, param_set& params, 
 	least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArrays)
 {
-	const uint32 numParams = sizeof(param_set) / sizeof(float);
+	const uint32 numParams = sizeof(param_set) / sizeof(double);
 
 	for (uint32 gnIt = 0; gnIt < settings.maxNumIterations; ++gnIt)
 	{
-		float JTJ[numParams][numParams] = {};
-		float negJTr[numParams] = {};
+		double JTJ[numParams][numParams] = {};
+		double negJTr[numParams] = {};
 
 		(gaussNewtonInternal(params, residualArrays, JTJ, negJTr), ...);
 
-		float x[numParams] = {}; // Step
+		double x[numParams] = {}; // Step
 		conjugateGradient(JTJ, negJTr, x, 5);
 
 		for (uint32 i = 0; i < numParams; ++i)
 		{
-			float& n = ((float*)&params)[i];
+			double& n = ((double*)&params)[i];
 			n += x[i];
 		}
 	}
@@ -155,17 +161,17 @@ void gaussNewton(gauss_newton_settings settings, param_set& params, const residu
 }
 
 template <typename param_set, typename residual_t, uint32 numSubResiduals>
-static float chiSquaredInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray)
+static double chiSquaredInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray)
 {
-	float sum = 0.f;
+	double sum = 0.f;
 
 	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
-		float value[numSubResiduals];
+		double value[numSubResiduals];
 		residualArray.residuals[i].value(params, value);
 		for (uint32 s = 0; s < numSubResiduals; ++s)
 		{
-			float d = value[s];
+			double d = value[s];
 			//d = d / s[i];
 			sum = sum + (d * d);
 		}
@@ -175,24 +181,24 @@ static float chiSquaredInternal(param_set& params, least_squares_residual_array<
 }
 
 template <typename param_set, typename... residual_t, uint32... numSubResiduals>
-static float chiSquared(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArray)
+static double chiSquared(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArray)
 {
 	return (chiSquaredInternal(params, residualArray) + ...);
 }
 
 template <typename param_set, typename residual_t, uint32 numSubResiduals, uint32 numParams>
 static void levenbergMarquardtInternal(const param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
-	float(&H)[numParams][numParams], float(&g)[numParams])
+	double(&H)[numParams][numParams], double(&g)[numParams])
 {
 	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
-		float grad[numSubResiduals][numParams];
+		double grad[numSubResiduals][numParams];
 		residualArray.residuals[i].grad(params, grad);
 
-		float value[numSubResiduals];
+		double value[numSubResiduals];
 		residualArray.residuals[i].value(params, value);
 
-		float oos2 = 1.f; // Squared observation weight.
+		double oos2 = 1.f; // Squared observation weight.
 
 		for (uint32 s = 0; s < numSubResiduals; ++s)
 		{
@@ -210,21 +216,26 @@ static void levenbergMarquardtInternal(const param_set& params, least_squares_re
 }
 
 template <typename param_set, typename... residual_t, uint32... numSubResiduals>
-void levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, 
+levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params,
 	least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArrays)
 {
 	// http://scribblethink.org/Computer/Javanumeric/LM.java
 
-	const uint32 numParams = sizeof(param_set) / sizeof(float);
+	const uint32 numParams = sizeof(param_set) / sizeof(double);
 
-	float e0 = chiSquared(params, residualArrays...);
+	double e0 = chiSquared(params, residualArrays...);
+	double e1;
 
 	uint32 term = 0;
 
+	levenberg_marquardt_result result = {};
+
 	for (uint32 lmIt = 0; lmIt < settings.maxNumIterations; ++lmIt)
 	{
-		float H[numParams][numParams] = {};
-		float g[numParams] = {};
+		++result.numIterations;
+
+		double H[numParams][numParams] = {};
+		double g[numParams] = {};
 
 		// Hessian approximation and gradient.
 		(levenbergMarquardtInternal(params, residualArrays, H, g), ...);
@@ -235,18 +246,19 @@ void levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params
 			H[r][r] *= (1.f + settings.lambda);
 		}
 
-		float x[numParams] = {};
-		conjugateGradient(H, g, x, 5);
+		double x[numParams] = {};
+		conjugateGradient(H, g, x, 10);
 
 		param_set newParams = params;
 		for (uint32 i = 0; i < numParams; ++i)
 		{
-			float& n = ((float*)&newParams)[i];
+			double& n = ((double*)&newParams)[i];
 			n += x[i];
 		}
 
 
-		float e1 = chiSquared(newParams, residualArrays...);
+		e1 = chiSquared(newParams, residualArrays...);
+		result.epsilon = abs(e1 - e0);
 
 		bool done = false;
 
@@ -282,12 +294,14 @@ void levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params
 			break;
 		}
 	}
+
+	return result;
 }
 
 template <typename param_set, typename residual_t>
-void levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, const residual_t* residuals, uint32 numResiduals)
+levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, const residual_t* residuals, uint32 numResiduals)
 {
 	least_squares_residual_array<residual_t> arr(residuals, numResiduals);
-	levenbergMarquardt(settings, params, arr);
+	return levenbergMarquardt(settings, params, arr);
 }
 

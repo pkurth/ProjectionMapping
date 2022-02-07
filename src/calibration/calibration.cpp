@@ -987,19 +987,19 @@ bool projector_system_calibration::calibrate()
 			uint32 width = calibInput.projectors[projID].width;
 			uint32 height = calibInput.projectors[projID].height;
 
-			camera_intrinsics initialProjIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
+			camera_intrinsics projIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
 
 			vec3 projPosition;
 			quat projRotation;
 
-			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, positionPC, camIntrinsics, camWidth, camHeight, initialProjIntrinsics, width, height, projPosition, projRotation))
+			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, positionPC, camIntrinsics, camWidth, camHeight, projIntrinsics, width, height, projPosition, projRotation))
 			{
 				continue;
 			}
 
-			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, initialProjIntrinsics);
+			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, projIntrinsics);
 
-			submitFrustumForVisualization(projPosition, projRotation, width, height, initialProjIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
+			submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
 		}
 
 		cancel = false;
@@ -1047,7 +1047,7 @@ void projector_system_calibration::submitFrustumForVisualization(vec3 position, 
 	visualizationMutex.unlock();
 }
 
-projector_system_calibration::projector_system_calibration(depth_tracker* tracker)
+projector_system_calibration::projector_system_calibration(depth_tracker* tracker, projector_manager* manager)
 {
 	if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
 	{
@@ -1059,6 +1059,7 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 	uint32 height = tracker->camera.colorSensor.height;
 
 	this->tracker = tracker;
+	this->manager = manager;
 	this->state = calibration_state_none;
 
 
@@ -1143,7 +1144,7 @@ bool projector_system_calibration::edit()
 
 	ImGui::Separator();
 
-	if (ImGui::DisableableButton("Clear temp directory", uiActive))
+	if (ImGui::DisableableButton("Clear disk cache", uiActive))
 	{
 		fs::remove_all(calibrationBaseDirectory);
 	}

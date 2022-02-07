@@ -130,7 +130,7 @@ int main(int argc, char** argv)
 	projector_renderer::initializeCommon();
 	projector_manager projectorManager(app.getScene());
 	depth_tracker tracker;
-	projector_system_calibration calibration(&tracker);
+	projector_system_calibration calibration(&tracker, &projectorManager);
 
 	initializeTransformationGizmos();
 	initializeRenderUtils();
