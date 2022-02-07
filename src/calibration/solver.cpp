@@ -205,19 +205,18 @@ void solveForCameraToProjectorParameters(const std::vector<calibration_solver_in
 	params.rotation = { alpha, beta, gamma };
 	params.translation = { t.x, t.y, t.z };
 
-	uint32 maxNumResiduals = 0;
+	uint32 expectedNumResiduals = 0;
 	for (const calibration_solver_input& in : input)
 	{
-		maxNumResiduals += in.renderedPC.numEntries;
+		expectedNumResiduals += in.renderedPC.numEntries;
 	}
 
-	maxNumResiduals = (uint32)(maxNumResiduals * settings.percentageOfCorrespondencesToUse * 3); // Times 3 just to be safe.
+	expectedNumResiduals = (uint32)(expectedNumResiduals * settings.percentageOfCorrespondencesToUse * 2); // Times 2 just to be safe.
 
-	backprojection_residual* residuals = new backprojection_residual[maxNumResiduals];
+	std::vector<backprojection_residual> residuals;
+	residuals.reserve(expectedNumResiduals);
 
 	random_number_generator rng = { 61923 };
-
-	uint32 numResiduals = 0;
 
 	for (const calibration_solver_input& in : input)
 	{
@@ -228,30 +227,29 @@ void solveForCameraToProjectorParameters(const std::vector<calibration_solver_in
 				const auto& e = in.renderedPC.entries.data[i];
 				vec2 proj = in.pixelCorrespondences(y, x);
 
-				if (numResiduals < maxNumResiduals && rng.randomFloat01() < settings.percentageOfCorrespondencesToUse)
+				if (e.position.z != 0.f && validPixel(proj))
 				{
-					if (e.position.z != 0.f && validPixel(proj))
+					if (rng.randomFloat01() < settings.percentageOfCorrespondencesToUse)
 					{
-						residuals[numResiduals].camPos = { e.position.x, e.position.y, e.position.z };
-						residuals[numResiduals].observedProjPixel = { proj.x, proj.y };
-						++numResiduals;
+						backprojection_residual r;
+						r.camPos = { e.position.x, e.position.y, e.position.z };
+						r.observedProjPixel = { proj.x, proj.y };
+
+						residuals.push_back(r);
 					}
 				}
 			}
 		}
 	}
 
-	if (numResiduals == maxNumResiduals)
-	{
-		LOG_WARNING("Number of residuals reached maximum allowed number (%u). Some residuals might be unused", maxNumResiduals);
-	}
-
 	levenberg_marquardt_settings lmSettings;
-	lmSettings.maxNumIterations = 300;
+	lmSettings.maxNumIterations = settings.maxNumIterations;
+
+	uint32 numResiduals = (uint32)residuals.size();
 
 	LOG_MESSAGE("Solving for projector parameters with %u residuals", numResiduals);
 
-	levenberg_marquardt_result lmResult = levenbergMarquardt(lmSettings, params, residuals, numResiduals);
+	levenberg_marquardt_result lmResult = levenbergMarquardt(lmSettings, params, residuals.data(), numResiduals);
 
 	LOG_MESSAGE("Solver finished");
 
@@ -295,8 +293,6 @@ void solveForCameraToProjectorParameters(const std::vector<calibration_solver_in
 	LOG_MESSAGE("Final projector intrinsics: [%.3f, %.3f, %.3f, %.3f]", projIntrinsics.fx, projIntrinsics.fy, projIntrinsics.cx, projIntrinsics.cy);
 	LOG_MESSAGE("Final projector position: [%.3f, %.3f, %.3f]", projPosition.x, projPosition.y, projPosition.z);
 	LOG_MESSAGE("Final projector rotation: [%.3f, %.3f, %.3f, %.3f]", projRotation.x, projRotation.y, projRotation.z, projRotation.w);
-
-	delete[] residuals;
 }
 
 

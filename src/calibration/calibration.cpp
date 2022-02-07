@@ -235,7 +235,6 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		delete[] pattern;
 
 		cancel = false;
-
 		state = calibration_state_none;
 	});
 
@@ -818,6 +817,13 @@ bool projector_system_calibration::calibrate()
 			return;
 		}
 
+		if (cancel)
+		{
+			cancel = false;
+			state = calibration_state_none;
+			return;
+		}
+
 		auto& camera = tracker->camera.colorSensor;
 
 		uint32 camWidth = (uint32)calibInput.camWidth;
@@ -861,6 +867,13 @@ bool projector_system_calibration::calibrate()
 
 			//ps.renderedPointCloud.writeToFile(calibrationBaseDirectory / "test.ply");
 			//submitPointCloudForVisualization(ps.renderedPointCloud, vec4(1.f, 0.f, 1.f, 0.f));
+		}
+
+		if (cancel)
+		{
+			cancel = false;
+			state = calibration_state_none;
+			return;
 		}
 
 
@@ -908,12 +921,21 @@ bool projector_system_calibration::calibrate()
 				std::sample(validPixelCorrespondences.begin(), validPixelCorrespondences.end(), std::back_inserter(pixelCorrespondencesSample),
 					128, std::mt19937{ std::random_device{}() });
 
-				if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, renderedPointCloud, camIntrinsics, camWidth, camHeight, projIntrinsics, width, height, projPosition, projRotation))
+				if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, renderedPointCloud, camIntrinsics, camWidth, camHeight, 
+					projIntrinsics, width, height, projPosition, projRotation))
 				{
 					continue;
 				}
 			}
 
+
+			if (cancel)
+			{
+				break;
+			}
+
+
+			// Solve for all projector parameters.
 			std::vector<calibration_solver_input> solverInput;
 
 			for (uint32 seqID = 0; seqID < (uint32)proj.sequences.size(); ++seqID)
@@ -938,6 +960,12 @@ bool projector_system_calibration::calibrate()
 			projPosition = globalRotation * projPosition + globalTranslation;
 
 			submitFinalCalibration(proj.uniqueID, projPosition, projRotation, width, height, projIntrinsics);
+
+
+			if (cancel)
+			{
+				break;
+			}
 		}
 
 		cancel = false;
@@ -1112,6 +1140,7 @@ bool projector_system_calibration::edit()
 		}
 		ImGui::PropertySlider("White value", whiteValue);
 		ImGui::PropertySlider("Rel. solver correspondence count", solverSettings.percentageOfCorrespondencesToUse);
+		ImGui::PropertyDrag("Max num solver iterations", solverSettings.maxNumIterations);
 		if (!uiActive)
 		{
 			ImGui::EndDisabled();
