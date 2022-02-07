@@ -18,13 +18,13 @@ struct lm_sine_test : least_squares_residual<sine_param_set>
 	double x;
 	double y;
 
-	void value(const sine_param_set& params, double out[1]) const override
+	void value(const sine_param_set& params, double out[1]) const
 	{
 		double v = evaluate(params, x);
 		out[0] = y - v;
 	}
 
-	void grad(const sine_param_set& params, double out[1][3]) const override
+	void grad(const sine_param_set& params, double out[1][3]) const
 	{
 		out[0][0] = params.amplitude * cos(params.frequency * x + params.phase);
 		out[0][1] = sin(params.frequency * x + params.phase);

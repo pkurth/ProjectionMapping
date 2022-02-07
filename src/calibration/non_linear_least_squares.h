@@ -1,14 +1,32 @@
 #include "core/math.h"
 
-template <typename param_set_, uint32 numResiduals_ = 1>
+
+struct default_precompute_t
+{
+	template <typename T>
+	void precompute(const T&) {}
+};
+
+template <typename param_set_, uint32 numResiduals_ = 1, typename precompute_t_ = default_precompute_t>
 struct least_squares_residual
 {
 	using param_set = param_set_;
+	using precompute_t = precompute_t_;
 	static const uint32 numParams = sizeof(param_set) / sizeof(double);
 	static const uint32 numResiduals = numResiduals_;
 
-	virtual void value(const param_set& params, double out[numResiduals]) const = 0;
-	virtual void grad(const param_set& params, double out[numResiduals][numParams]) const = 0;
+	/*
+	* A residual must provide two functions 'value' and 'grad'.
+	* - void value(const param_set& params, double out[numResiduals]) const
+	* - void grad(const param_set& params, double out[numResiduals][numParams]) const
+	* 
+	* Optionally, you can pass a 'precompute_t' type, in which case your functions can take a third argument of type 'precompute_t':
+	* - void value(const param_set& params, const precompute_t& precompute, double out[numResiduals]) const
+	* - void grad(const param_set& params, const precompute_t& precompute, double out[numResiduals][numParams]) const
+	* 
+	* The type 'precompute_t' must implement a function 'precompute(const param_set&)', which is called from the solver before each iteration. 
+	* You can use this to compute some common data.
+	*/
 };
 
 template <typename residual_t, typename param_set = residual_t::param_set, uint32 numResiduals = residual_t::numResiduals>
@@ -25,6 +43,7 @@ struct least_squares_residual_array
 struct gauss_newton_settings
 {
 	uint32 maxNumIterations = 20;
+	uint32 numCGIterations = 10;
 };
 
 struct levenberg_marquardt_settings
@@ -32,6 +51,7 @@ struct levenberg_marquardt_settings
 	uint32 maxNumIterations = 20;
 	double lambda = 0.001f; 
 	double termEpsilon = 0.01f;
+	uint32 numCGIterations = 10;
 };
 
 struct levenberg_marquardt_result
@@ -106,13 +126,24 @@ template <typename param_set, typename residual_t, uint32 numSubResiduals, uint3
 static void gaussNewtonInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
 	double(&JTJ)[numParams][numParams], double(&negJTr)[numParams])
 {
+	residual_t::precompute_t precompute;
+	precompute.precompute(params);
+
 	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
 		double grad[numSubResiduals][numParams];
-		residualArray.residuals[i].grad(params, grad);
-
 		double value[numSubResiduals];
-		residualArray.residuals[i].value(params, value);
+
+		if constexpr (std::is_same_v<default_precompute_t, residual_t::precompute_t>)
+		{
+			residualArray.residuals[i].grad(params, grad);
+			residualArray.residuals[i].value(params, value);
+		}
+		else
+		{
+			residualArray.residuals[i].grad(params, precompute, grad);
+			residualArray.residuals[i].value(params, precompute, value);
+		}
 
 		for (uint32 s = 0; s < numSubResiduals; ++s)
 		{
@@ -143,7 +174,7 @@ void gaussNewton(gauss_newton_settings settings, param_set& params,
 		(gaussNewtonInternal(params, residualArrays, JTJ, negJTr), ...);
 
 		double x[numParams] = {}; // Step
-		conjugateGradient(JTJ, negJTr, x, 5);
+		conjugateGradient(JTJ, negJTr, x, settings.numCGIterations);
 
 		for (uint32 i = 0; i < numParams; ++i)
 		{
@@ -161,42 +192,58 @@ void gaussNewton(gauss_newton_settings settings, param_set& params, const residu
 }
 
 template <typename param_set, typename residual_t, uint32 numSubResiduals>
-static double chiSquaredInternal(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray)
+static double chiSquared(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray)
 {
+	residual_t::precompute_t precompute;
+	precompute.precompute(params);
+
 	double sum = 0.f;
 
 	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
 		double value[numSubResiduals];
-		residualArray.residuals[i].value(params, value);
+
+		if constexpr (std::is_same_v<default_precompute_t, residual_t::precompute_t>)
+		{
+			residualArray.residuals[i].value(params, value);
+		}
+		else
+		{
+			residualArray.residuals[i].value(params, precompute, value);
+		}
+
 		for (uint32 s = 0; s < numSubResiduals; ++s)
 		{
 			double d = value[s];
-			//d = d / s[i];
-			sum = sum + (d * d);
+			sum += d * d;
 		}
 	}
 
 	return sum;
 }
 
-template <typename param_set, typename... residual_t, uint32... numSubResiduals>
-static double chiSquared(param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals>... residualArray)
-{
-	return (chiSquaredInternal(params, residualArray) + ...);
-}
-
 template <typename param_set, typename residual_t, uint32 numSubResiduals, uint32 numParams>
 static void levenbergMarquardtInternal(const param_set& params, least_squares_residual_array<residual_t, param_set, numSubResiduals> residualArray,
 	double(&H)[numParams][numParams], double(&g)[numParams])
 {
+	residual_t::precompute_t precompute;
+	precompute.precompute(params);
+
 	for (uint32 i = 0; i < residualArray.count; ++i)
 	{
 		double grad[numSubResiduals][numParams];
-		residualArray.residuals[i].grad(params, grad);
-
 		double value[numSubResiduals];
-		residualArray.residuals[i].value(params, value);
+		
+		if constexpr (std::is_same_v<default_precompute_t, residual_t::precompute_t>)
+		{
+			residualArray.residuals[i].grad(params, grad);
+			residualArray.residuals[i].value(params, value);
+		}
+		else
+		{
+			residualArray.residuals[i].grad(params, precompute, grad);
+			residualArray.residuals[i].value(params, precompute, value);
+		}
 
 		double oos2 = 1.f; // Squared observation weight.
 
@@ -223,8 +270,7 @@ levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings setti
 
 	const uint32 numParams = sizeof(param_set) / sizeof(double);
 
-	double e0 = chiSquared(params, residualArrays...);
-	double e1;
+	double e0 = (chiSquared(params, residualArrays) + ...);
 
 	uint32 term = 0;
 
@@ -247,7 +293,7 @@ levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings setti
 		}
 
 		double x[numParams] = {};
-		conjugateGradient(H, g, x, 10);
+		conjugateGradient(H, g, x, settings.numCGIterations);
 
 		param_set newParams = params;
 		for (uint32 i = 0; i < numParams; ++i)
@@ -257,7 +303,7 @@ levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings setti
 		}
 
 
-		e1 = chiSquared(newParams, residualArrays...);
+		double e1 = (chiSquared(params, residualArrays) + ...);
 		result.epsilon = abs(e1 - e0);
 
 		bool done = false;
@@ -299,7 +345,8 @@ levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings setti
 }
 
 template <typename param_set, typename residual_t>
-levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, const residual_t* residuals, uint32 numResiduals)
+levenberg_marquardt_result levenbergMarquardt(levenberg_marquardt_settings settings, param_set& params, 
+	const residual_t* residuals, uint32 numResiduals)
 {
 	least_squares_residual_array<residual_t> arr(residuals, numResiduals);
 	return levenbergMarquardt(settings, params, arr);

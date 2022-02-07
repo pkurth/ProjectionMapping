@@ -26,39 +26,40 @@ static vec2d project(const vec3d& p, const camera_intrinsicsd& intr)
 
 struct param_set
 {
-	// View transform, not model!
 	camera_intrinsicsd intrinsics;
-	
-	/*static inline*/ vec3d rotation;
-	/*static inline*/ vec3d translation;
+
+	// View transform, not model!
+	vec3d rotation;
+	vec3d translation;
 };
 
 static constexpr uint32 numParams = sizeof(param_set) / sizeof(double);
-//static_assert(numParams == 10);
 
-struct backprojection_residual : least_squares_residual<param_set, 2>
+struct precompute_data
 {
-	vec3d camPos;
-	vec2d observedProjPixel;
+	double c1;
+	double c2;
+	double c3;
+	double s1;
+	double s2;
+	double s3;
 
-	void value(const param_set& params, double out[2]) const override
+	mat3d r;
+
+	void precompute(const param_set& params)
 	{
-		camera_intrinsicsd i = params.intrinsics;
-		vec3d translation = params.translation;
-
 		double alpha = params.rotation.x;
 		double beta = params.rotation.y;
 		double gamma = params.rotation.z;
 
-		double c1 = cos(alpha);
-		double c2 = cos(beta);
-		double c3 = cos(gamma);
+		c1 = cos(alpha);
+		c2 = cos(beta);
+		c3 = cos(gamma);
 
-		double s1 = sin(alpha);
-		double s2 = sin(beta);
-		double s3 = sin(gamma);
+		s1 = sin(alpha);
+		s2 = sin(beta);
+		s3 = sin(gamma);
 
-		mat3d r;
 		r.m00 = c1 * c3 - c2 * s1 * s3;
 		r.m10 = c3 * s1 + c1 * c2 * s3;
 		r.m20 = s2 * s3;
@@ -68,8 +69,20 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		r.m02 = s1 * s2;
 		r.m12 = -c1 * s2;
 		r.m22 = c2;
+	}
+};
 
-		vec3d projPos = r * camPos + translation;
+struct backprojection_residual : least_squares_residual<param_set, 2, precompute_data>
+{
+	vec3d camPos;
+	vec2d observedProjPixel;
+
+	void value(const param_set& params, const precompute_data& precompute, double out[2]) const
+	{
+		camera_intrinsicsd i = params.intrinsics;
+		vec3d translation = params.translation;
+
+		vec3d projPos = precompute.r * camPos + translation;
 		vec2d projPixel = project(projPos, i);
 
 		vec2d error = observedProjPixel - projPixel;
@@ -78,35 +91,20 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		out[1] = error.y;
 	}
 
-	void grad(const param_set& params, double out[2][numParams]) const override
+	void grad(const param_set& params, const precompute_data& precompute, double out[2][numParams]) const
 	{
 		camera_intrinsicsd i = params.intrinsics;
 		vec3d translation = params.translation;
 
-		double alpha = params.rotation.x;
-		double beta = params.rotation.y;
-		double gamma = params.rotation.z;
+		double c1 = precompute.c1;
+		double c2 = precompute.c2;
+		double c3 = precompute.c3;
 
-		double c1 = cos(alpha);
-		double c2 = cos(beta);
-		double c3 = cos(gamma);
+		double s1 = precompute.s1;
+		double s2 = precompute.s2;
+		double s3 = precompute.s3;
 
-		double s1 = sin(alpha);
-		double s2 = sin(beta);
-		double s3 = sin(gamma);
-
-		mat3d r;
-		r.m00 = c1 * c3 - c2 * s1 * s3;
-		r.m10 = c3 * s1 + c1 * c2 * s3;
-		r.m20 = s2 * s3;
-		r.m01 = -c1 * s3 - c2 * c3 * s1;
-		r.m11 = c1 * c2 * c3 - s1 * s3;
-		r.m21 = c3 * s2;
-		r.m02 = s1 * s2;
-		r.m12 = -c1 * s2;
-		r.m22 = c2;
-
-		vec3d projPos = r * camPos + translation;
+		vec3d projPos = precompute.r * camPos + translation;
 
 		double px = projPos.x;
 		double py = projPos.y;
@@ -120,8 +118,6 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		double tx = translation.x;
 		double ty = translation.y;
 		double tz = translation.z;
-
-#if 1
 
 		/*
 		* In the formulas:
@@ -186,7 +182,6 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 				out[1][9] = -i.fy * py / pz2;
 			}
 		}
-#endif
 	}
 };
 
