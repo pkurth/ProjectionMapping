@@ -10,12 +10,14 @@
 struct param_set
 {
 	// View transform, not model!
-	vec3 rotation;
-	vec3 translation;
 	camera_intrinsics intrinsics;
+	
+	static inline vec3 rotation;
+	static inline vec3 translation;
 };
 
-static_assert(sizeof(param_set) / sizeof(float) == 10);
+static constexpr uint32 numParams = sizeof(param_set) / sizeof(float);
+//static_assert(numParams == 10);
 
 struct backprojection_residual : least_squares_residual<param_set, 2>
 {
@@ -25,10 +27,32 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 	void value(const param_set& params, float out[2]) const override
 	{
 		camera_intrinsics i = params.intrinsics;
-		quat rotation = eulerToQuat(params.rotation);
 		vec3 translation = params.translation;
 
-		vec3 projPos = rotation * camPos + translation;
+		float alpha = params.rotation.x;
+		float beta = params.rotation.y;
+		float gamma = params.rotation.z;
+
+		float c1 = cos(alpha);
+		float c2 = cos(beta);
+		float c3 = cos(gamma);
+
+		float s1 = sin(alpha);
+		float s2 = sin(beta);
+		float s3 = sin(gamma);
+
+		mat3 r;
+		r.m00 = c1 * c3 - c2 * s1 * s3;
+		r.m10 = c3 * s1 + c1 * c2 * s3;
+		r.m20 = s2 * s3;
+		r.m01 = -c1 * s3 - c2 * c3 * s1;
+		r.m11 = c1 * c2 * c3 - s1 * s3;
+		r.m21 = c3 * s2;
+		r.m02 = s1 * s2;
+		r.m12 = -c1 * s2;
+		r.m22 = c2;
+
+		vec3 projPos = r * camPos + translation;
 		vec2 projPixel = project(projPos, i);
 
 		vec2 error = observedProjPixel - projPixel;
@@ -37,13 +61,35 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		out[1] = error.y;
 	}
 
-	void grad(const param_set& params, float out[2][10]) const override
+	void grad(const param_set& params, float out[2][numParams]) const override
 	{
 		camera_intrinsics i = params.intrinsics;
-		quat rotation = eulerToQuat(params.rotation);
 		vec3 translation = params.translation;
 
-		vec3 projPos = rotation * camPos + translation;
+		float alpha = params.rotation.x;
+		float beta = params.rotation.y;
+		float gamma = params.rotation.z;
+
+		float c1 = cos(alpha);
+		float c2 = cos(beta);
+		float c3 = cos(gamma);
+
+		float s1 = sin(alpha);
+		float s2 = sin(beta);
+		float s3 = sin(gamma);
+
+		mat3 r;
+		r.m00 = c1 * c3 - c2 * s1 * s3;
+		r.m10 = c3 * s1 + c1 * c2 * s3;
+		r.m20 = s2 * s3;
+		r.m01 = -c1 * s3 - c2 * c3 * s1;
+		r.m11 = c1 * c2 * c3 - s1 * s3;
+		r.m21 = c3 * s2;
+		r.m02 = s1 * s2;
+		r.m12 = -c1 * s2;
+		r.m22 = c2;
+
+		vec3 projPos = r * camPos + translation;
 
 		float px = projPos.x;
 		float py = projPos.y;
@@ -54,101 +100,70 @@ struct backprojection_residual : least_squares_residual<param_set, 2>
 		float cy = camPos.y;
 		float cz = camPos.z;
 
-		float sex = sin(0.5f * params.rotation.x);
-		float cex = cos(0.5f * params.rotation.x);
-		float sey = sin(0.5f * params.rotation.y);
-		float cey = cos(0.5f * params.rotation.y);
-		float sez = sin(0.5f * params.rotation.z);
-		float cez = cos(0.5f * params.rotation.z);
+		float tx = translation.x;
+		float ty = translation.y;
+		float tz = translation.z;
 
-		float Rx = rotation.x;
-		float Ry = rotation.y;
-		float Rz = rotation.z;
-		float Rw = rotation.w;
+#if 1
 
-		float Rx_x = 0.5f * (sey * cez * -sex - cey * sez * cex);
-		float Ry_x = 0.5f * (cey * sez * -sex + sey * cez * cex);
-		float Rz_x = 0.5f * (cey * cez * cex - sey * sez * -sex);
-		float Rw_x = 0.5f * (cey * cez * -sex + sey * sez * cex);
-
-		float Rx_y = 0.5f * (cey * cez * cex - (-sey) * sez * sex);
-		float Ry_y = 0.5f * (-sey * sez * cex + cey * cez * sex);
-		float Rz_y = 0.5f * (-sey * cez * sex - cey * sez * cex);
-		float Rw_y = 0.5f * (-sey * cez * cex + cey * sez * sex);
-
-		float Rx_z = 0.5f * (sey * -sez * cex - cey * cez * sex);
-		float Ry_z = 0.5f * (cey * cez * cex + sey * -sez * sex);
-		float Rz_z = 0.5f * (cey * -sez * sex - sey * cez * cex);
-		float Rw_z = 0.5f * (cey * -sez * cex + sey * cez * sex);
-
-		// For input (x, y, z) this macro computes: cx * Ry * Rz_x + cx * Ry_x + Rz.
-#define t_x(ci, R0i, R1i) (c##ci * (R##R0i * R##R1i##_x + R##R0i##_x * R##R1i))
-#define t_y(ci, R0i, R1i) (c##ci * (R##R0i * R##R1i##_y + R##R0i##_y * R##R1i))
-#define t_z(ci, R0i, R1i) (c##ci * (R##R0i * R##R1i##_z + R##R0i##_z * R##R1i))
+		/*
+		
+		(f (cos(x) (cos(y) (u sin(z) + v cos(z)) - w sin(y)) + sin(x) (u cos(z) - v sin(z))))/                         (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))
+		(f ((cos(y) (u sin(z) + v cos(z)) - w sin(y)) (m - sin(x) cos(y) (u sin(z) + v cos(z)) + cos(x) (u cos(z) - v sin(z)) + w sin(x) sin(y)) - sin(x) (sin(y) (u sin(z) + v cos(z)) + w cos(y)) (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
+		(f ((u cos(z) - v sin(z)) (sin(y) (m + w sin(x) sin(y)) + n sin(x) cos(y) + w sin(x) cos^2(y)) + cos(x) (sin(z) (n u + (u^2 + v^2) sin(y) sin(z) + u w cos(y)) + v cos(z) (n + w cos(y)) + (u^2 + v^2) sin(y) cos^2(z))))/             (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
+		
+		
+		(f (sin(x) (w sin(y) - cos(y) (u sin(z) + v cos(z))) + cos(x) (u cos(z) - v sin(z))))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))
+		(f (-(cos(y) (u sin(z) + v cos(z)) - w sin(y)) (m + cos(x) (cos(y) (u sin(z) + v cos(z)) - w sin(y)) + u sin(x) cos(z) - v sin(x) sin(z)) - cos(x) (sin(y) (u sin(z) + v cos(z)) + w cos(y)) (n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
+		-(f (sin(z) (sin(x) (n u + (u^2 + v^2) sin(y) sin(z) + u w cos(y)) - m v sin(y)) + cos(z) (m u sin(y) + v sin(x) (n + w cos(y))) - cos(x) (n cos(y) + w sin^2(y) + w cos^2(y)) (u cos(z) - v sin(z)) + (u^2 + v^2) sin(x) sin(y) cos^2(z)))/(n + u sin(y) sin(z) + v sin(y) cos(z) + w cos(y))^2
+		*/
 
 
-		float px_x = t_x(x, w, w) + t_x(z, y, w) - t_x(y, z, w) + t_x(x, x, x) + t_x(y, x, y) + t_x(z, x, z) 
-			- t_x(y, z, w) - t_x(x, z, z) + t_x(z, x, z) + t_x(z, y, w) + t_x(y, x, y) - t_x(x, y, y);
+		// Intrinsics.
+		out[0][0] = -px / pz;
+		out[0][1] = 0.f;
+		out[0][2] = 1.f;
+		out[0][3] = 0.f;
 
-		float py_x = t_x(y, w, w) + t_x(x, z, w) - t_x(z, x, w) + t_x(x, x, y) + t_x(y, y, y) + t_x(z, y, z)
-			- t_x(z, x, w) - t_x(y, x, x) + t_x(x, x, y) + t_x(x, z, w) + t_x(z, y, z) - t_x(y, z, z);
+		if constexpr (numParams > 4)
+		{
+			// Rotation.
+			out[0][4] = (i.fx * (c1 * (c2 * (cx * s3 + cy * c3) - pz * s2) + s1 * (cx * c3 - cy * s3))) / pz;
+			out[0][5] = (i.fx * ((c2 * (cx * s3 + cy * c3) - pz * s2) * (tx - s1 * c2 * (cx * s3 + cy * c3) + c1 * (cx * c3 - cy * s3) + cz * s1 * s2) - s1 * (s2 * (cx * s3 + cy * c3) + cz * c2) * (tz + cx * s2 * s3 + cy * s2 * c3 + cz * c2))) / pz2;
+			out[0][6] = (i.fx * ((cx * c3 - cy * s3) * (s2 * (tx + pz * s1 * s2) + tz * s1 * c2 + cz * s1 * c2 * c2) + c1 * (s3 * (tz * cx + (cx * cx + cy * cy) * s2 * s3 + cx * cz * c2) + cy * c3 * (tz + cz * c2) + (cx * cx + cy * cy) * s2 * c2 * c2))) / pz2;
 
-		float pz_x = t_x(z, w, w) + t_x(y, x, w) - t_x(x, y, w) + t_x(x, x, z) + t_x(y, y, z) + t_x(z, z, z)
-			- t_x(x, y, w) - t_x(z, y, y) + t_x(y, y, z) + t_x(y, x, w) + t_x(x, x, z) - t_x(z, x, x);
-
-
-		float px_y = t_y(x, w, w) + t_y(z, y, w) - t_y(y, z, w) + t_y(x, x, x) + t_y(y, x, y) + t_y(z, x, z)
-			- t_y(y, z, w) - t_y(x, z, z) + t_y(z, x, z) + t_y(z, y, w) + t_y(y, x, y) - t_y(x, y, y);
-
-		float py_y = t_y(y, w, w) + t_y(x, z, w) - t_y(z, x, w) + t_y(x, x, y) + t_y(y, y, y) + t_y(z, y, z)
-			- t_y(z, x, w) - t_y(y, x, x) + t_y(x, x, y) + t_y(x, z, w) + t_y(z, y, z) - t_y(y, z, z);
-
-		float pz_y = t_y(z, w, w) + t_y(y, x, w) - t_y(x, y, w) + t_y(x, x, z) + t_y(y, y, z) + t_y(z, z, z)
-			- t_y(x, y, w) - t_y(z, y, y) + t_y(y, y, z) + t_y(y, x, w) + t_y(x, x, z) - t_y(z, x, x);
-
-
-		float px_z = t_z(x, w, w) + t_z(z, y, w) - t_z(y, z, w) + t_z(x, x, x) + t_z(y, x, y) + t_z(z, x, z)
-			- t_z(y, z, w) - t_z(x, z, z) + t_z(z, x, z) + t_z(z, y, w) + t_z(y, x, y) - t_z(x, y, y);
-
-		float py_z = t_z(y, w, w) + t_z(x, z, w) - t_z(z, x, w) + t_z(x, x, y) + t_z(y, y, y) + t_z(z, y, z)
-			- t_z(z, x, w) - t_z(y, x, x) + t_z(x, x, y) + t_z(x, z, w) + t_z(z, y, z) - t_z(y, z, z);
-
-		float pz_z = t_z(z, w, w) + t_z(y, x, w) - t_z(x, y, w) + t_z(x, x, z) + t_z(y, y, z) + t_z(z, z, z)
-			- t_z(x, y, w) - t_z(z, y, y) + t_z(y, y, z) + t_z(y, x, w) + t_z(x, x, z) - t_z(z, x, x);
-
-#undef t_x
-#undef t_y
-#undef t_z
+			if constexpr (numParams > 7)
+			{
+				// Translation.
+				out[0][7] = -i.fx / pz;
+				out[0][8] = 0.f;
+				out[0][9] = i.fx * px / pz2;
+			}
+		}
 
 
-		// First output.
-		out[0][0] = -i.fx / pz2 * (pz * px_x - pz_x * px);			// Rotation X.
-		out[0][1] = -i.fx / pz2 * (pz * px_y - pz_y * px);			// Rotation Y.
-		out[0][2] = -i.fx / pz2 * (pz * px_z - pz_z * px);			// Rotation Z.
+		// Intrinsics.
+		out[1][0] = 0.f;
+		out[1][1] = py / pz;
+		out[1][2] = 0.f;
+		out[1][3] = 1.f;
 
-		out[0][3] = -i.fx / pz;										// Translation X.
-		out[0][4] = 0.f;											// Translation Y.
-		out[0][5] = i.fx * px / pz2;								// Translation Z.
+		if constexpr (numParams > 4)
+		{
+			// Rotation.
+			out[1][4] = (i.fy * (s1 * (cz * s2 - c2 * (cx * s3 + cy * c3)) + c1 * (cx * c3 - cy * s3))) / pz;
+			out[1][5] = (i.fy * (-(c2 * (cx * s3 + cy * c3) - cz * s2) * (ty + c1 * (c2 * (cx * s3 + cy * c3) - cz * s2) + cx * s1 * c3 - cy * s1 * s3) - c1 * (s2 * (cx * s3 + cy * c3) + cz * c2) * (tz + cx * s2 * s3 + cy * s2 * c3 + cz * c2))) / pz2;
+			out[1][6] = -(i.fy * (s3 * (s1 * (tz * cx + (cx * cx + cy * cy) * s2 * s3 + cx * cz * c2) - ty * cy * s2) + c3 * (ty * cx * s2 + cy * s1 * (tz + cz * c2)) - c1 * (tz * c2 + cz * s2 * s2 + cz * c2 * c2) * (cx * c3 - cy * s3) + (cx * cx + cy * cy) * s1 * s2 * c3 * c3)) / pz2;
 
-		out[0][6] = -px / pz;										// Fx.
-		out[0][7] = 0.f;											// Fy.
-		out[0][8] = 1.f;											// Cx.
-		out[0][9] = 0.f;											// Cy.
-
-
-		// Second output.
-		out[1][0] = i.fx / pz2 * (pz * py_x - pz_x * py);			// Rotation X.
-		out[1][1] = i.fx / pz2 * (pz * py_y - pz_y * py);			// Rotation Y.
-		out[1][2] = i.fx / pz2 * (pz * py_z - pz_z * py);			// Rotation Z.
-
-		out[1][3] = 0.f;											// Translation X.
-		out[1][4] = i.fy / pz;										// Translation Y.
-		out[1][5] = -i.fy * py / pz2;								// Translation Z.
-
-		out[1][6] = 0.f;											// Fx.
-		out[1][7] = py / pz;										// Fy.
-		out[1][8] = 0.f;											// Cx.
-		out[1][9] = 1.f;											// Cy.
+			if constexpr (numParams > 7)
+			{
+				// Translation.
+				out[1][7] = 0.f;
+				out[1][8] = i.fy / pz;
+				out[1][9] = -i.fy * py / pz2;
+			}
+		}
+#endif
 	}
 };
 
@@ -158,7 +173,18 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 	quat R = conjugate(projRotation);
 	vec3 t = -(R * projPosition);
 
-	param_set params = { quatToEuler(R), t, projIntrinsics };
+
+
+	mat3 mat = quaternionToMat3(R);
+	float alpha = atan2(mat.m02, -mat.m12);
+	float beta = atan2(sqrt(1.f - mat.m22 * mat.m22), mat.m22);
+	float gamma = atan2(mat.m20, mat.m21);
+
+
+	param_set params;
+	params.intrinsics = projIntrinsics;
+	params.rotation = vec3(alpha, beta, gamma);
+	params.translation = t;
 
 	backprojection_residual* residuals = new backprojection_residual[renderedPC.numEntries];
 
@@ -191,7 +217,35 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 	vec3 oldPosition = projPosition;
 	camera_intrinsics oldIntrinsics = projIntrinsics;
 
-	projRotation = conjugate(eulerToQuat(params.rotation));
+
+
+
+	alpha = params.rotation.x;
+	beta = params.rotation.y;
+	gamma = params.rotation.z;
+
+	float c1 = cos(alpha);
+	float c2 = cos(beta);
+	float c3 = cos(gamma);
+
+	float s1 = sin(alpha);
+	float s2 = sin(beta);
+	float s3 = sin(gamma);
+
+	mat3 r;
+	r.m00 = c1 * c3 - c2 * s1 * s3;
+	r.m10 = c3 * s1 + c1 * c2 * s3;
+	r.m20 = s2 * s3;
+	r.m01 = -c1 * s3 - c2 * c3 * s1;
+	r.m11 = c1 * c2 * c3 - s1 * s3;
+	r.m21 = c3 * s2;
+	r.m02 = s1 * s2;
+	r.m12 = -c1 * s2;
+	r.m22 = c2;
+
+
+
+	projRotation = conjugate(mat3ToQuaternion(r));
 	projPosition = -(projRotation * params.translation);
 	projIntrinsics = params.intrinsics;
 
