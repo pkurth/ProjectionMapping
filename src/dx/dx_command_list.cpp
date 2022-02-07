@@ -108,6 +108,25 @@ void dx_command_list::copyTextureRegionToBuffer(const ref<dx_texture>& from, con
 
 #else
 
+#if 0
+	const auto desc = from->resource->GetDesc();
+
+	uint64 totalResourceSize = 0;
+	uint64 rowPitch = 0;
+	uint32 rowCount = 0;
+	// Get the rowcount, pitch and size of the top mip
+	dxContext.device->GetCopyableFootprints(
+		&desc,
+		0,
+		1,
+		0,
+		nullptr,
+		&rowCount,
+		&rowPitch,
+		&totalResourceSize);
+#endif
+
+
 	uint32 numPixelsToCopy = width * height;
 
 	uint32 numRows = bucketize(numPixelsToCopy, from->width);

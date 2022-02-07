@@ -114,6 +114,8 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 	{
 		if (!projector.window.open && !projector.headless)
 		{
+			LOG_MESSAGE("Deleting projector");
+
 			scene_entity entity = { entityHandle, *scene };
 			scene->deleteEntity(entity);
 			setSelectedEntity({});

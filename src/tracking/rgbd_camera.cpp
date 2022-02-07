@@ -313,6 +313,13 @@ static void getCalibration(const rs2_stream_profile* streamProfile, const rs2_st
     result.position = position;
 }
 
+static int exposureLevelToMilliseconds(int exposureLevel)
+{
+    exposureLevel = std::min(exposureLevel, 0);
+    exposureLevel = std::max(exposureLevel, -8);
+    return (int)(powf(2.f, static_cast<float>(exposureLevel)) * 10000.f); // https://forums.intel.com/s/question/0D70P0000069GAJSA2
+}
+
 bool rgbd_camera::initializeAzure(uint32 deviceIndex, bool alignDepthToColor)
 {
     shutdown();
@@ -415,8 +422,8 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, bool alignDepthToColor
         depthSensor.active = true;
         colorSensor.active = true;
 
-        uint32 colorWidth = 1280;
-        uint32 colorHeight = 720;
+        uint32 colorWidth = 1920;
+        uint32 colorHeight = 1080;
 
         uint32 depthWidth = 640;
         uint32 depthHeight = 480;
@@ -494,7 +501,20 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, bool alignDepthToColor
                 depthScale = rs2_get_depth_scale(sensor, &e);
                 assertRealsenseSuccess(e);
                 //depthScale = rs2_get_option((const rs2_options*)sensor, RS2_OPTION_DEPTH_UNITS, &e);
-                break;
+            }
+            else
+            {
+                rs2_options* options = (rs2_options*)sensor;
+
+                if (rs2_supports_option(options, RS2_OPTION_EXPOSURE, &e))
+                {
+                    float expMin, expMax, step, def;
+                    rs2_get_option_range(options, RS2_OPTION_EXPOSURE, &expMin, &expMax, &step, &def, &e);
+                    assertRealsenseSuccess(e);
+
+                    rs2_set_option(options, RS2_OPTION_EXPOSURE, (float)exposureLevelToMilliseconds(-7), &e);
+                    assertRealsenseSuccess(e);
+                }
             }
         }
 

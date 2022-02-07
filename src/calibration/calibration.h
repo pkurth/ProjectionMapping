@@ -10,6 +10,8 @@ struct projector_system_calibration
 	projector_system_calibration(depth_tracker* tracker, projector_manager* manager);
 	bool edit();
 
+	void update();
+
 	void visualizeIntermediateResults(struct ldr_render_pass* renderPass);
 
 private:
@@ -19,6 +21,8 @@ private:
 
 	void submitPointCloudForVisualization(const struct image_point_cloud& pc, vec4 color);
 	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, vec4 color);
+
+	void submitFinalCalibration(const std::string& uniqueID, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics);
 
 	bool computeInitialExtrinsicProjectorCalibrationEstimate(
 		std::vector<struct pixel_correspondence> pixelCorrespondences,
@@ -87,8 +91,18 @@ private:
 		vec4 color;
 	};
 
-	std::mutex visualizationMutex;
+	struct final_calibration
+	{
+		std::string uniqueID;
+		quat rotation;
+		vec3 position;
+		uint32 width, height;
+		camera_intrinsics intrinsics;
+	};
+
+	std::mutex mutex;
 	std::vector<point_cloud_visualization> pointCloudsToVisualize;
 	std::vector<frustum_visualization> frustaToVisualize;
+	std::vector<final_calibration> finalCalibrations;
 };
 

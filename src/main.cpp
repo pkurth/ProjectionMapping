@@ -254,6 +254,9 @@ int main(int argc, char** argv)
 
 
 		// Update and render.
+
+		calibration.update();
+
 		projector_renderer::beginFrameCommon();
 		projectorManager.beginFrame();
 

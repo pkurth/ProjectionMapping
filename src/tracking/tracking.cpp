@@ -1091,6 +1091,12 @@ scene_entity depth_tracker::drawSettings()
 		}
 
 		ImGui::Image(renderedColorTexture);
+
+		if (camera.colorSensor.active && ImGui::BeginTree("Color image"))
+		{
+			ImGui::Image(cameraColorTexture);
+			ImGui::EndTree();
+		}
 	}
 
 	return result;

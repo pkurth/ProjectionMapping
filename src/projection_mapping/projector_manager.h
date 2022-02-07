@@ -18,6 +18,8 @@ struct projector_manager
 	void onMessageFromClient(const std::vector<std::string>& remoteMonitors);
 	void onMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
 
+	void reportLocalCalibration(const std::string& monitor, camera_intrinsics intrinsics, uint32 width, uint32 height, vec3 position, quat rotation);
+
 	projector_solver solver;
 	projector_context context;
 
@@ -28,7 +30,10 @@ private:
 	void createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
 	void createProjector(const std::string& monitorID, bool local);
 
-	void sendInformationToClients();
+	std::vector<std::string> getLocalProjectors();
+	std::vector<std::string> getRemoteProjectors();
+
+	void notifyClients(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
 
 	game_scene* scene;
 

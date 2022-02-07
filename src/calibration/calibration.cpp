@@ -551,7 +551,7 @@ static image_point_cloud projectDepthIntoColorFrame(const ref<composite_mesh>& m
 	uint64 fence = dxContext.executeCommandList(cl);
 
 	dxContext.renderQueue.waitForFence(fence);
-
+	
 
 
 
@@ -561,7 +561,7 @@ static image_point_cloud projectDepthIntoColorFrame(const ref<composite_mesh>& m
 	uint32 destPitch = sizeof(vec4) * output.width;
 
 	uint8* result = (uint8*)mapBuffer(readbackBuffer, true);
-	uint32 resultPitch = sizeof(vec4) * alignTo(colorBuffer->width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+	uint32 resultPitch = (uint32)alignTo(sizeof(vec4) * colorBuffer->width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
 	for (uint32 h = 0; h < colorBuffer->height; ++h)
 	{
@@ -957,9 +957,15 @@ bool projector_system_calibration::calibrate()
 			perSequence.positionPC = projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, camDistortion, depthToColorTexture, depthBuffer,
 				readbackBuffer, colorCameraUnprojectTable);
 			perSequence.validPointMask = perSequence.positionPC.createValidMask();
+
+			//perSequence.positionPC.writeToFile(calibrationBaseDirectory / "test.ply");
 		
 			submitPointCloudForVisualization(perSequence.positionPC, vec4(1.f, 0.f, 1.f, 0.f));
 		}
+
+
+		quat globalRotation = tracker->globalCameraRotation * tracker->camera.colorSensor.rotation;
+		vec3 globalTranslation = tracker->globalCameraRotation * tracker->camera.colorSensor.position + tracker->globalCameraPosition;
 
 
 		for (uint32 projID = 0; projID < (uint32)calibInput.projectors.size(); ++projID)
@@ -1000,6 +1006,14 @@ bool projector_system_calibration::calibrate()
 			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, projIntrinsics);
 
 			submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
+
+			// Express in global space.
+			projRotation = globalRotation * projRotation;
+			projPosition = globalRotation * projPosition + globalTranslation;
+
+
+			submitFinalCalibration(calibInput.projectors[projID].uniqueID, projPosition, projRotation, width, height, projIntrinsics);
+			//manager->reportLocalCalibration(calibInput.projectors[projID].uniqueID, projIntrinsics, width, height, projPosition, projRotation);
 		}
 
 		cancel = false;
@@ -1035,16 +1049,23 @@ void projector_system_calibration::submitPointCloudForVisualization(const image_
 
 	ref<dx_vertex_buffer> vb = createVertexBuffer(sizeof(position_normal), pc.numEntries, vertices.data());
 
-	visualizationMutex.lock();
+	mutex.lock();
 	pointCloudsToVisualize.push_back({ vb, color });
-	visualizationMutex.unlock();
+	mutex.unlock();
 }
 
 void projector_system_calibration::submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, vec4 color)
 {
-	visualizationMutex.lock();
+	mutex.lock();
 	frustaToVisualize.push_back({ rotation, position, width, height, intrinsics, color });
-	visualizationMutex.unlock();
+	mutex.unlock();
+}
+
+void projector_system_calibration::submitFinalCalibration(const std::string& uniqueID, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics)
+{
+	mutex.lock();
+	finalCalibrations.push_back({ uniqueID, rotation, position, width, height, intrinsics });
+	mutex.unlock();
 }
 
 projector_system_calibration::projector_system_calibration(depth_tracker* tracker, projector_manager* manager)
@@ -1153,12 +1174,11 @@ bool projector_system_calibration::edit()
 
 	if (ImGui::DisableableButton("Clear visualizations", uiActive))
 	{
-		visualizationMutex.lock();
+		mutex.lock();
 		pointCloudsToVisualize.clear();
 		frustaToVisualize.clear();
-		visualizationMutex.unlock();
+		mutex.unlock();
 	}
-
 
 	if (ImGui::BeginProperties())
 	{
@@ -1210,6 +1230,17 @@ bool projector_system_calibration::edit()
 	return true;
 }
 
+void projector_system_calibration::update()
+{
+	mutex.lock();
+	for (const auto& fc : finalCalibrations)
+	{
+		manager->reportLocalCalibration(fc.uniqueID, fc.intrinsics, fc.width, fc.height, fc.position, fc.rotation);
+	}
+	finalCalibrations.clear();
+	mutex.unlock();
+}
+
 
 struct visualize_point_cloud_material
 {
@@ -1253,9 +1284,12 @@ void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass*
 		return;
 	}
 
-	mat4 colorM = createModelMatrix(tracker->globalCameraPosition, tracker->globalCameraRotation) * createModelMatrix(tracker->camera.colorSensor.position, tracker->camera.colorSensor.rotation);
+	quat globalRotation = tracker->globalCameraRotation * tracker->camera.colorSensor.rotation;
+	vec3 globalTranslation = tracker->globalCameraRotation * tracker->camera.colorSensor.position + tracker->globalCameraPosition;
 
-	visualizationMutex.lock();
+	mat4 colorM = createModelMatrix(globalTranslation, globalRotation);
+
+	mutex.lock();
 	for (auto& v : pointCloudsToVisualize)
 	{
 		renderPass->renderObject<visualize_point_cloud_pipeline>(colorM, { v.vertexBuffer }, {}, submesh_info{ 0, 0, 0, v.vertexBuffer->elementCount },
@@ -1265,11 +1299,11 @@ void projector_system_calibration::visualizeIntermediateResults(ldr_render_pass*
 	for (auto& v : frustaToVisualize)
 	{
 		render_camera camera;
-		camera.initializeCalibrated(tracker->globalCameraRotation * v.position + tracker->globalCameraPosition, tracker->globalCameraRotation * v.rotation, v.width, v.height, v.intrinsics, 0.1f, 4.f);
+		camera.initializeCalibrated(globalRotation * v.position + globalTranslation, globalRotation * v.rotation, v.width, v.height, v.intrinsics, 0.1f, 4.f);
 		camera.updateMatrices();
 		renderCameraFrustum(camera, v.color, renderPass);
 	}
 
 
-	visualizationMutex.unlock();
+	mutex.unlock();
 }
