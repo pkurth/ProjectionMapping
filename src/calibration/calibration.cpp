@@ -247,35 +247,30 @@ bool projector_system_calibration::projectCalibrationPatterns()
 struct calibration_sequence
 {
 	mat4 trackingMat;
-	int globalSequenceID;
+};
+
+struct calibration_proj_sequence
+{
+	uint32 sequenceID;
 
 	image<vec2> perPixelCorrespondences;
 	std::vector<pixel_correspondence> allPixelCorrespondences;
-
-	calibration_sequence() {}
-
-	calibration_sequence(calibration_sequence&& c)
-	{
-		trackingMat = c.trackingMat;
-		allPixelCorrespondences = std::move(c.allPixelCorrespondences);
-		perPixelCorrespondences = std::move(c.perPixelCorrespondences);
-		globalSequenceID = c.globalSequenceID;
-	}
 };
 
-struct proj_calibration_sequence
+struct calibration_projector
 {
-	int screenID;
 	std::string uniqueID;
 	int width, height;
-	std::vector<calibration_sequence> sequences;
+
+	std::vector<calibration_proj_sequence> sequences;
 };
 
 struct calibration_input
 {
-	std::vector<proj_calibration_sequence> projectors;
 	int32 camWidth, camHeight;
-	int32 numGlobalSequences;
+
+	std::vector<calibration_sequence> sequences;
+	std::vector<calibration_projector> projectors;
 };
 
 static bool readMatrixFromFile(const fs::path& filename, mat4& out)
@@ -312,7 +307,7 @@ static std::vector<fs::path> findAllSubDirectories(const fs::path& path)
 	return result;
 }
 
-static std::vector<fs::path> findAllFileNames(const fs::path& path, const std::vector<fs::path>& validExtensions)
+static std::vector<fs::path> findAllImagesInDirectory(const fs::path& path)
 {
 	std::vector<fs::path> result;
 	for (auto it : fs::directory_iterator(path))
@@ -321,7 +316,7 @@ static std::vector<fs::path> findAllFileNames(const fs::path& path, const std::v
 		{
 			fs::path ext = it.path().extension();
 
-			if (std::find(validExtensions.begin(), validExtensions.end(), ext) != validExtensions.end())
+			if (isImageExtension(ext))
 			{
 				result.push_back(it.path());
 			}
@@ -337,20 +332,14 @@ static bool loadAndDecodeImageSequences(const fs::path& workingDir, const std::v
 	scratchImages.reserve(100);
 	imageSequence.reserve(100);
 
-	calibInput.camWidth = calibInput.camHeight = 0;
 	calibInput.projectors.clear();
+	calibInput.sequences.clear();
+
+	calibInput.camWidth = 0;
+	calibInput.camHeight = 0;
 
 	std::vector<fs::path> subDirs = findAllSubDirectories(workingDir);
 
-	const std::vector<fs::path> imageExtensions = { ".jpg", ".png" };
-
-	int screenIDToProjID[16];
-	for (int i = 0; i < arraysize(screenIDToProjID); ++i)
-	{
-		screenIDToProjID[i] = -1;
-	}
-
-	int globalSequenceID = 0;
 	for (const fs::path& sequenceName : subDirs)
 	{
 		std::vector<fs::path> projDirs = findAllSubDirectories(sequenceName);
@@ -375,133 +364,118 @@ static bool loadAndDecodeImageSequences(const fs::path& workingDir, const std::v
 		}
 
 		int numProjectorsInThisSequence = 0;
-		for (fs::path& proj : projDirs)
+		for (const fs::path& proj : projDirs)
 		{
-			fs::path folderName = proj.stem();
+			fs::path uniqueID = proj.stem();
 
+			int wantedProjector = -1;
+			for (int w = 0; w < projectors.size(); ++w)
 			{
-				fs::path& uniqueID = folderName;
-
-				int wantedProjector = -1;
-				for (int w = 0; w < projectors.size(); ++w)
+				if (uniqueID == projectors[w].uniqueID)
 				{
-					if (uniqueID == projectors[w].uniqueID)
-					{
-						wantedProjector = w;
-						break;
-					}
+					wantedProjector = w;
+					break;
 				}
-
-				if (wantedProjector == -1)
-				{
-					continue;
-				}
-
-				const monitor_info& projector = projectors[wantedProjector];
-				int32 projWidth = projector.width;
-				int32 projHeight = projector.height;
-				int32 screenID = projector.screenID;
-
-				uint32 expectedNumImages = getNumberOfGraycodePatternsRequired(projWidth, projHeight);
-
-				std::vector<fs::path> sequenceFilenames = findAllFileNames(proj, imageExtensions);
-				if (sequenceFilenames.size() != expectedNumImages)
-				{
-					LOG_ERROR("Directory '%ws' does not contain the expected number of image files. Expected %u, got %u", proj.c_str(), expectedNumImages, (uint32)sequenceFilenames.size());
-					continue;
-				}
-
-				// This is a valid directory.
-
-				scratchImages.resize(0);
-				imageSequence.resize(0);
-				for (const fs::path& imageFilename : sequenceFilenames)
-				{
-					DirectX::ScratchImage scratchImage;
-					D3D12_RESOURCE_DESC textureDesc;
-					if (!loadImageFromFile(imageFilename, image_load_flags_always_load_from_source, scratchImage, textureDesc))
-					{
-						LOG_ERROR("Could not load file '%ws'", imageFilename.c_str());
-						break;
-					}
-
-					if (textureDesc.Format != DXGI_FORMAT_R8_UNORM)
-					{
-						LOG_ERROR("Image format for file '%ws' does not match expected format DXGI_FORMAT_R8_UNORM", imageFilename.c_str());
-						break;
-					}
-
-					DirectX::Image dximg = scratchImage.GetImages()[0];
-
-					image<uint8> img = { (uint32)dximg.width, (uint32)dximg.height, dximg.pixels };
-
-					scratchImages.emplace_back(std::move(scratchImage));
-					imageSequence.push_back(img);
-				}
-
-				if (scratchImages.size() != sequenceFilenames.size())
-				{
-					continue;
-				}
-
-				int camWidth = imageSequence[0].width;
-				int camHeight = imageSequence[0].height;
-
-				if (calibInput.camWidth != 0 && calibInput.camHeight != 0)
-				{
-					if (camWidth != calibInput.camWidth || camHeight != calibInput.camHeight)
-					{
-						LOG_ERROR("In sequence '%ws' the image dimensions don't match", proj.c_str());
-						continue;
-					}
-				}
-				else
-				{
-					calibInput.camWidth = camWidth;
-					calibInput.camHeight = camHeight;
-				}
-
-				if (!decodeGraycodeCaptures(imageSequence, projWidth, projHeight, calibSequence.perPixelCorrespondences, calibSequence.allPixelCorrespondences))
-				{
-					LOG_ERROR("Could not decode gray code sequence '%ws'", proj.c_str());
-					continue;
-				}
-
-				int& projID = screenIDToProjID[screenID];
-				if (projID == -1)
-				{
-					projID = (int)calibInput.projectors.size();
-				}
-
-				if (projID >= calibInput.projectors.size())
-				{
-					calibInput.projectors.resize(projID + 1);
-				}
-
-				calibSequence.globalSequenceID = globalSequenceID;
-				calibInput.projectors[projID].sequences.emplace_back(std::move(calibSequence));
-				calibInput.projectors[projID].uniqueID = uniqueID.string();
-				calibInput.projectors[projID].screenID = screenID;
-				calibInput.projectors[projID].width = projector.width;
-				calibInput.projectors[projID].height = projector.height;
-
-				++numProjectorsInThisSequence;
 			}
+
+			if (wantedProjector == -1)
+			{
+				continue;
+			}
+
+			const monitor_info& projector = projectors[wantedProjector];
+			int32 projWidth = projector.width;
+			int32 projHeight = projector.height;
+
+			uint32 expectedNumImages = getNumberOfGraycodePatternsRequired(projWidth, projHeight);
+
+			std::vector<fs::path> sequenceFilenames = findAllImagesInDirectory(proj);
+			if (sequenceFilenames.size() != expectedNumImages)
+			{
+				LOG_ERROR("Directory '%ws' does not contain the expected number of image files. Expected %u, got %u", proj.c_str(), expectedNumImages, (uint32)sequenceFilenames.size());
+				continue;
+			}
+
+			// This is a valid directory.
+
+			scratchImages.resize(0);
+			imageSequence.resize(0);
+			for (const fs::path& imageFilename : sequenceFilenames)
+			{
+				DirectX::ScratchImage scratchImage;
+				D3D12_RESOURCE_DESC textureDesc;
+				if (!loadImageFromFile(imageFilename, image_load_flags_always_load_from_source, scratchImage, textureDesc))
+				{
+					LOG_ERROR("Could not load file '%ws'", imageFilename.c_str());
+					break;
+				}
+
+				if (textureDesc.Format != DXGI_FORMAT_R8_UNORM)
+				{
+					LOG_ERROR("Image format for file '%ws' does not match expected format DXGI_FORMAT_R8_UNORM", imageFilename.c_str());
+					break;
+				}
+
+				DirectX::Image dximg = scratchImage.GetImages()[0];
+
+				image<uint8> img = { (uint32)dximg.width, (uint32)dximg.height, dximg.pixels };
+
+				scratchImages.emplace_back(std::move(scratchImage));
+				imageSequence.push_back(img);
+			}
+
+			if (scratchImages.size() != sequenceFilenames.size())
+			{
+				continue;
+			}
+
+			int camWidth = imageSequence[0].width;
+			int camHeight = imageSequence[0].height;
+
+			if (calibInput.camWidth != 0 && calibInput.camHeight != 0)
+			{
+				if (camWidth != calibInput.camWidth || camHeight != calibInput.camHeight)
+				{
+					LOG_ERROR("In sequence '%ws' the image dimensions don't match", proj.c_str());
+					continue;
+				}
+			}
+			else
+			{
+				calibInput.camWidth = camWidth;
+				calibInput.camHeight = camHeight;
+			}
+
+
+			calibration_proj_sequence projSequence;
+			projSequence.sequenceID = (uint32)calibInput.sequences.size();
+
+			if (!decodeGraycodeCaptures(imageSequence, projWidth, projHeight, projSequence.perPixelCorrespondences, projSequence.allPixelCorrespondences))
+			{
+				LOG_ERROR("Could not decode gray code sequence '%ws'", proj.c_str());
+				continue;
+			}
+
+
+			auto projIt = std::find_if(calibInput.projectors.begin(), calibInput.projectors.end(), [&uniqueID](const calibration_projector& p) { return p.uniqueID == uniqueID; });
+			if (projIt == calibInput.projectors.end())
+			{
+				projIt = calibInput.projectors.insert(calibInput.projectors.end(), { uniqueID.string(), projWidth, projHeight });
+			}
+
+			projIt->sequences.emplace_back(std::move(projSequence));
+			++numProjectorsInThisSequence;
 		}
 
-		if (numProjectorsInThisSequence == 0)
+		if (numProjectorsInThisSequence != 0)
 		{
-			continue;
+			calibInput.sequences.emplace_back(std::move(calibSequence));
 		}
-
-		++globalSequenceID;
 	}
 
-	calibInput.numGlobalSequences = globalSequenceID;
+	LOG_MESSAGE("Found %u global input sequences", (uint32)calibInput.sequences.size());
 
-	LOG_MESSAGE("Found %d global input sequences", calibInput.numGlobalSequences);
-
-	return calibInput.projectors.size() > 0;
+	return calibInput.sequences.size() > 0;
 }
 
 static image_point_cloud projectDepthIntoColorFrame(const ref<composite_mesh>& mesh,
@@ -577,87 +551,6 @@ static image_point_cloud projectDepthIntoColorFrame(const ref<composite_mesh>& m
 	return pc;
 }
 
-
-struct per_sequence_data
-{
-	mat4						trackingMat;
-	mat4						invTrackingMat;
-
-	image_point_cloud			positionPC;
-	image<uint8>				validPointMask;
-	int							numValidPositions;
-};
-
-struct calibration_data
-{
-	std::vector<per_sequence_data> perSequence;
-};
-
-static calibration_data initializeCalibrationData(const calibration_input& calibInput)
-{
-	calibration_data result;
-
-	result.perSequence.resize(calibInput.numGlobalSequences);
-
-
-	for (int projID = 0; projID < calibInput.projectors.size(); ++projID)
-	{
-		int screenID = calibInput.projectors[projID].screenID;
-		const std::string& uniqueID = calibInput.projectors[projID].uniqueID;
-		int projWidth = calibInput.projectors[projID].width;
-		int projHeight = calibInput.projectors[projID].height;
-
-		//outArrays.allColorToProjCalibs[projID] = initializeRGBCamToProjectorData(colorIntrinsics, projWidth, projHeight); // set to default
-
-		const std::vector<calibration_sequence>& calibSequences = calibInput.projectors[projID].sequences;
-		//std::vector<calibration_temp>& tempData = outArrays.allTempData[projID];
-		//tempData.resize(calibSequences.size());
-
-		for (int cs = 0; cs < calibSequences.size(); ++cs)
-		{
-			//tempData[cs].perTracking = nullptr;
-			//tempData[cs].sequence = &calibSequences[cs];
-
-			auto& perSequence = result.perSequence[calibSequences[cs].globalSequenceID];
-			perSequence.trackingMat = calibSequences[cs].trackingMat;
-			perSequence.invTrackingMat = invertAffine(calibSequences[cs].trackingMat);
-
-			//for (int ptd = 0; ptd < result.perSequence.size(); ++ptd)
-			//{
-			//	if (ptd == calibSequences[cs].globalSequenceID)
-			//	{
-			//		result.perSequence[ptd].trackingMat = calibSequences[cs].trackingMat;
-			//		result.perSequence[ptd].invTrackingMat = invertAffine(calibSequences[cs].trackingMat);
-			//		//tempData[cs].perTracking = &outArrays.allPerTrackingData[ptd];
-			//		break;
-			//	}
-			//}
-
-			//if (!tempData[cs].perTracking)
-			//{
-			//	LOG_ERROR("No per-sequence data available");
-			//	return;
-			//}
-		}
-
-
-		//std::string& projDir = outArrays.allProjDirs[projID];
-		//projDir = wd + "projector" + std::to_string(screenID) + "/";
-		//createDirectory(projDir);
-		//
-		//std::vector<std::string>& outputDirs = outArrays.allOutputDirs[projID];
-		//outputDirs.resize(calibSequences.size());
-		//for (int i = 0; i < calibSequences.size(); ++i)
-		//{
-		//	outputDirs[i] = projDir + "results_of_sequence_" + std::to_string(i) + "/";
-		//	createDirectory(outputDirs[i]);
-		//}
-
-		//outputPatternImage(calibSequences[calibSequences.size() - 1].patternImage, projWidth, projHeight, projDir);
-	}
-
-	return result;
-}
 
 static mat3d cameraMatrix(const camera_intrinsics& intrinsics)
 {
@@ -925,8 +818,6 @@ bool projector_system_calibration::calibrate()
 			return;
 		}
 
-		calibration_data calibData = initializeCalibrationData(calibInput);
-
 		auto& camera = tracker->camera.colorSensor;
 
 		uint32 camWidth = (uint32)calibInput.camWidth;
@@ -950,17 +841,26 @@ bool projector_system_calibration::calibrate()
 		ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
 
 
-		for (auto& perSequence : calibData.perSequence)
+		struct per_sequence
 		{
-			const mat4& trackingMat = perSequence.trackingMat;
+			image_point_cloud renderedPointCloud;
+			image<uint8> validPixelMask;
+		};
 
-			perSequence.positionPC = projectDepthIntoColorFrame(mesh, trackingMat, colorCameraViewMat, colorCameraProjMat, camDistortion, depthToColorTexture, depthBuffer,
+		std::vector<per_sequence> perSequence(calibInput.sequences.size());
+
+
+		for (uint32 i = 0; i < (uint32)calibInput.sequences.size(); ++i)
+		{
+			per_sequence& ps = perSequence[i];
+			calibration_sequence& s = calibInput.sequences[i];
+
+			ps.renderedPointCloud = projectDepthIntoColorFrame(mesh, s.trackingMat, colorCameraViewMat, colorCameraProjMat, camDistortion, depthToColorTexture, depthBuffer,
 				readbackBuffer, colorCameraUnprojectTable);
-			perSequence.validPointMask = perSequence.positionPC.createValidMask();
+			ps.validPixelMask = ps.renderedPointCloud.createValidMask();
 
-			//perSequence.positionPC.writeToFile(calibrationBaseDirectory / "test.ply");
-		
-			submitPointCloudForVisualization(perSequence.positionPC, vec4(1.f, 0.f, 1.f, 0.f));
+			//ps.renderedPointCloud.writeToFile(calibrationBaseDirectory / "test.ply");
+			//submitPointCloudForVisualization(ps.renderedPointCloud, vec4(1.f, 0.f, 1.f, 0.f));
 		}
 
 
@@ -970,40 +870,66 @@ bool projector_system_calibration::calibrate()
 
 		for (uint32 projID = 0; projID < (uint32)calibInput.projectors.size(); ++projID)
 		{
-			auto& seq0 = calibInput.projectors[projID].sequences[0];
+			calibration_projector& proj = calibInput.projectors[projID];
 
-			std::vector<pixel_correspondence> validPixelCorrespondences;
-			validPixelCorrespondences.reserve(seq0.allPixelCorrespondences.size());
-
-			auto& vpm = calibData.perSequence[seq0.globalSequenceID].validPointMask;
-			auto& positionPC = calibData.perSequence[seq0.globalSequenceID].positionPC;
-			for (auto& pc : seq0.allPixelCorrespondences)
-			{
-				if (vpm((int)pc.camera.y, (int)pc.camera.x) != 0)
-				{
-					validPixelCorrespondences.push_back(pc);
-				}
-			}
-
-			std::vector<pixel_correspondence> pixelCorrespondencesSample;
-			pixelCorrespondencesSample.reserve(128);
-			std::sample(validPixelCorrespondences.begin(), validPixelCorrespondences.end(), std::back_inserter(pixelCorrespondencesSample),
-				128, std::mt19937{ std::random_device{}() });
-
-			uint32 width = calibInput.projectors[projID].width;
-			uint32 height = calibInput.projectors[projID].height;
+			uint32 width = proj.width;
+			uint32 height = proj.height;
 
 			camera_intrinsics projIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
 
 			vec3 projPosition;
 			quat projRotation;
 
-			if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, positionPC, camIntrinsics, camWidth, camHeight, projIntrinsics, width, height, projPosition, projRotation))
+			
+			// Compute initial extrinsics using first sequence.
 			{
-				continue;
+				calibration_proj_sequence& sequence = proj.sequences[0];
+				uint32 globalSequenceID = sequence.sequenceID;
+
+				assert(globalSequenceID < (uint32)perSequence.size());
+
+				per_sequence& ps = perSequence[globalSequenceID];
+				auto& vpm = ps.validPixelMask;
+				auto& renderedPointCloud = ps.renderedPointCloud;
+
+				std::vector<pixel_correspondence> validPixelCorrespondences;
+				validPixelCorrespondences.reserve(sequence.allPixelCorrespondences.size());
+
+				for (auto& pc : sequence.allPixelCorrespondences)
+				{
+					if (vpm((int)pc.camera.y, (int)pc.camera.x) != 0)
+					{
+						validPixelCorrespondences.push_back(pc);
+					}
+				}
+
+				std::vector<pixel_correspondence> pixelCorrespondencesSample;
+				pixelCorrespondencesSample.reserve(128);
+				std::sample(validPixelCorrespondences.begin(), validPixelCorrespondences.end(), std::back_inserter(pixelCorrespondencesSample),
+					128, std::mt19937{ std::random_device{}() });
+
+				if (!computeInitialExtrinsicProjectorCalibrationEstimate(pixelCorrespondencesSample, renderedPointCloud, camIntrinsics, camWidth, camHeight, projIntrinsics, width, height, projPosition, projRotation))
+				{
+					continue;
+				}
 			}
 
-			solveForCameraToProjectorParameters(positionPC, seq0.perPixelCorrespondences, projPosition, projRotation, projIntrinsics, solverSettings);
+			std::vector<calibration_solver_input> solverInput;
+
+			for (uint32 seqID = 0; seqID < (uint32)proj.sequences.size(); ++seqID)
+			{
+				calibration_proj_sequence& sequence = proj.sequences[seqID];
+				uint32 globalSequenceID = sequence.sequenceID;
+
+				assert(globalSequenceID < (uint32)perSequence.size());
+
+				per_sequence& ps = perSequence[globalSequenceID];
+				auto& renderedPointCloud = ps.renderedPointCloud;
+
+				solverInput.emplace_back(renderedPointCloud, sequence.perPixelCorrespondences);
+			}
+
+			solveForCameraToProjectorParameters(solverInput, projPosition, projRotation, projIntrinsics, solverSettings);
 
 			submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
 
@@ -1011,9 +937,7 @@ bool projector_system_calibration::calibrate()
 			projRotation = globalRotation * projRotation;
 			projPosition = globalRotation * projPosition + globalTranslation;
 
-
-			submitFinalCalibration(calibInput.projectors[projID].uniqueID, projPosition, projRotation, width, height, projIntrinsics);
-			//manager->reportLocalCalibration(calibInput.projectors[projID].uniqueID, projIntrinsics, width, height, projPosition, projRotation);
+			submitFinalCalibration(proj.uniqueID, projPosition, projRotation, width, height, projIntrinsics);
 		}
 
 		cancel = false;
@@ -1070,11 +994,11 @@ void projector_system_calibration::submitFinalCalibration(const std::string& uni
 
 projector_system_calibration::projector_system_calibration(depth_tracker* tracker, projector_manager* manager)
 {
-	if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
-	{
-		LOG_ERROR("Tracker/camera is not initialized");
-		return;
-	}
+	//if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
+	//{
+	//	LOG_ERROR("Tracker/camera is not initialized");
+	//	return;
+	//}
 
 	uint32 width = tracker->camera.colorSensor.width;
 	uint32 height = tracker->camera.colorSensor.height;

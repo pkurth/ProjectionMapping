@@ -185,7 +185,7 @@ struct backprojection_residual : least_squares_residual<param_set, 2, precompute
 	}
 };
 
-void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, const image<vec2>& pixelCorrespondences, 
+void solveForCameraToProjectorParameters(const std::vector<calibration_solver_input>& input,
 	vec3& projPosition, quat& projRotation, camera_intrinsics& projIntrinsics,
 	calibration_solver_settings settings)
 {
@@ -205,28 +205,45 @@ void solveForCameraToProjectorParameters(const image_point_cloud& renderedPC, co
 	params.rotation = { alpha, beta, gamma };
 	params.translation = { t.x, t.y, t.z };
 
-	backprojection_residual* residuals = new backprojection_residual[renderedPC.numEntries];
+	uint32 maxNumResiduals = 0;
+	for (const calibration_solver_input& in : input)
+	{
+		maxNumResiduals += in.renderedPC.numEntries;
+	}
+
+	maxNumResiduals = (uint32)(maxNumResiduals * settings.percentageOfCorrespondencesToUse * 3); // Times 3 just to be safe.
+
+	backprojection_residual* residuals = new backprojection_residual[maxNumResiduals];
 
 	random_number_generator rng = { 61923 };
 
 	uint32 numResiduals = 0;
-	for (uint32 y = 0, i = 0; y < renderedPC.entries.height; ++y)
-	{
-		for (uint32 x = 0; x < renderedPC.entries.width; ++x, ++i)
-		{
-			const auto& e = renderedPC.entries.data[i];
-			vec2 proj = pixelCorrespondences(y, x);
 
-			if (rng.randomFloat01() < settings.percentageOfCorrespondencesToUse)
+	for (const calibration_solver_input& in : input)
+	{
+		for (uint32 y = 0, i = 0; y < in.renderedPC.entries.height; ++y)
+		{
+			for (uint32 x = 0; x < in.renderedPC.entries.width; ++x, ++i)
 			{
-				if (e.position.z != 0.f && validPixel(proj))
+				const auto& e = in.renderedPC.entries.data[i];
+				vec2 proj = in.pixelCorrespondences(y, x);
+
+				if (numResiduals < maxNumResiduals && rng.randomFloat01() < settings.percentageOfCorrespondencesToUse)
 				{
-					residuals[numResiduals].camPos = { e.position.x, e.position.y, e.position.z };
-					residuals[numResiduals].observedProjPixel = { proj.x, proj.y };
-					++numResiduals;
+					if (e.position.z != 0.f && validPixel(proj))
+					{
+						residuals[numResiduals].camPos = { e.position.x, e.position.y, e.position.z };
+						residuals[numResiduals].observedProjPixel = { proj.x, proj.y };
+						++numResiduals;
+					}
 				}
 			}
 		}
+	}
+
+	if (numResiduals == maxNumResiduals)
+	{
+		LOG_WARNING("Number of residuals reached maximum allowed number (%u). Some residuals might be unused", maxNumResiduals);
 	}
 
 	levenberg_marquardt_settings lmSettings;
