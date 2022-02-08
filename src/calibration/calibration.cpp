@@ -90,7 +90,7 @@ bool projector_system_calibration::projectCalibrationPatterns()
 	software_window* blackWindows = windows;
 	software_window* patternWindow = windows + (totalNumProjectors - 1);
 
-	uint8 black = 0;
+	static uint8 black = 0; // Static, because the pointer needs to remain valid.
 
 	for (uint32 i = 0; i < numBlackWindows; ++i)
 	{
@@ -885,7 +885,7 @@ bool projector_system_calibration::calibrate()
 				readbackBuffer, colorCameraUnprojectTable);
 			ps.validPixelMask = ps.renderedPointCloud.createValidMask();
 
-			//ps.renderedPointCloud.writeToFile(calibrationBaseDirectory / "test.ply");
+			//ps.renderedPointCloud.writeToFile(calibrationBaseDirectory / ("test" + std::to_string(i) + ".ply"));
 			//submitPointCloudForVisualization(ps.renderedPointCloud, vec4(1.f, 0.f, 1.f, 0.f));
 		}
 
@@ -908,7 +908,7 @@ bool projector_system_calibration::calibrate()
 			uint32 width = proj.width;
 			uint32 height = proj.height;
 
-			camera_intrinsics projIntrinsics = { 2000.f, 2000.f, width * 0.5f, height * 0.8f };
+			camera_intrinsics projIntrinsics = startIntrinsics[projID];
 
 			vec3 projPosition;
 			quat projRotation;
@@ -1051,6 +1051,12 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 	uint32 width = tracker->camera.colorSensor.width;
 	uint32 height = tracker->camera.colorSensor.height;
 
+	for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
+	{
+		auto& monitor = win32_window::allConnectedMonitors[i];
+		startIntrinsics[i] = { 3000.f, 3000.f, monitor.width * 0.5f, monitor.height * 0.75f };
+	}
+
 	this->tracker = tracker;
 	this->manager = manager;
 	this->state = calibration_state_none;
@@ -1100,6 +1106,8 @@ bool projector_system_calibration::edit()
 		cancel = false;
 	}
 
+	auto& monitors = win32_window::allConnectedMonitors;
+
 	if (ImGui::BeginTable("##ProjTable", 3, ImGuiTableFlags_Resizable))
 	{
 		ImGui::TableSetupColumn("Monitor");
@@ -1108,7 +1116,6 @@ bool projector_system_calibration::edit()
 
 		ImGui::TableHeadersRow();
 
-		auto& monitors = win32_window::allConnectedMonitors;
 		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 		{
 			ImGui::PushID(i);
@@ -1129,27 +1136,38 @@ bool projector_system_calibration::edit()
 			ImGui::TableNextColumn();
 			ImGui::DisableableCheckbox("##calib", calibrateIndex[i], uiActive && isProjectorIndex[i]);
 
+
+			if (calibrateIndex[i])
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+
+				if (ImGui::BeginProperties())
+				{
+					if (!uiActive)
+					{
+						ImGui::BeginDisabled();
+					}
+
+					ImGui::PropertyInput("Start fx", startIntrinsics[i].fx);
+					ImGui::PropertyInput("Start fy", startIntrinsics[i].fy);
+					ImGui::PropertyInput("Start cx", startIntrinsics[i].cx);
+					ImGui::PropertyInput("Start cy", startIntrinsics[i].cy);
+
+					if (!uiActive)
+					{
+						ImGui::EndDisabled();
+					}
+
+					ImGui::EndProperties();
+				}
+			}
+
+
 			ImGui::PopID();
 		}
 
 		ImGui::EndTable();
-	}
-
-	ImGui::Separator();
-
-	if (ImGui::DisableableButton("Clear disk cache", uiActive))
-	{
-		fs::remove_all(calibrationBaseDirectory);
-	}
-
-	ImGui::SameLine();
-
-	if (ImGui::DisableableButton("Clear visualizations", uiActive))
-	{
-		mutex.lock();
-		pointCloudsToVisualize.clear();
-		frustaToVisualize.clear();
-		mutex.unlock();
 	}
 
 	if (ImGui::BeginProperties())
@@ -1161,11 +1179,11 @@ bool projector_system_calibration::edit()
 		ImGui::PropertySlider("White value", whiteValue);
 		ImGui::PropertySlider("Rel. solver correspondence count", solverSettings.percentageOfCorrespondencesToUse);
 		ImGui::PropertyDrag("Max num solver iterations", solverSettings.maxNumIterations);
+
 		if (!uiActive)
 		{
 			ImGui::EndDisabled();
 		}
-
 
 
 		auto cancelableButton = [](const char* label, calibration_state state, calibration_state runningState, volatile bool& cancel)
@@ -1200,6 +1218,25 @@ bool projector_system_calibration::edit()
 
 		ImGui::EndProperties();
 	}
+
+
+	ImGui::Separator();
+
+	if (ImGui::DisableableButton("Clear disk cache", uiActive))
+	{
+		fs::remove_all(calibrationBaseDirectory);
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::DisableableButton("Clear visualizations", uiActive))
+	{
+		mutex.lock();
+		pointCloudsToVisualize.clear();
+		frustaToVisualize.clear();
+		mutex.unlock();
+	}
+
 
 	return true;
 }
