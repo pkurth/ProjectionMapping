@@ -207,27 +207,8 @@ struct image
 	}
 };
 
-template <typename simd_t>
-struct camera_intrinsicswN
-{
-	simd_t fx;
-	simd_t fy;
-	simd_t cx;
-	simd_t cy;
-};
-
-template <typename simd_t>
-struct camera_distortionwN
-{
-	simd_t k1;
-	simd_t k2;
-	simd_t k3;
-	simd_t k4;
-	simd_t k5;
-	simd_t k6;
-	simd_t p1;
-	simd_t p2;
-};
+void dilate(image<uint8>& img, int numIterations, bool allowDiagonal);
+void erode(image<uint8>& img, int numIterations, bool allowDiagonal);
 
 constexpr uint32 BIT_UNCERTAIN = -1;
 constexpr float PIXEL_UNCERTAIN = -1.f;

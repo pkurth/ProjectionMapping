@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "calibration.h"
 #include "graycode.h"
-#include "calibration_internal.h"
+#include "calibration_image.h"
 #include "point_cloud.h"
 #include "fundamental.h"
 #include "svd.h"
@@ -86,25 +86,37 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		return true;
 	}
 
-	state = calibration_state_projecting_patterns;
+	uint32 numBlackWindows = totalNumProjectors - 1;
+	software_window* windows = new software_window[totalNumProjectors];
+	software_window* blackWindows = windows;
+	software_window* patternWindow = windows + (totalNumProjectors - 1);
 
+	uint8 black = 0;
+
+	for (uint32 i = 0; i < numBlackWindows; ++i)
+	{
+		if (!blackWindows[i].initialize(L"Black", 1, 1, &black, 1, 1, 1))
+		{
+			LOG_ERROR("Failed to open black window");
+			delete[] windows;
+			return false;
+		}
+	}
+
+	uint8 dummyPattern = 0;
+
+	if (!patternWindow->initialize(L"Pattern", 1, 1, &dummyPattern, 1, 1, 1))
+	{
+		LOG_ERROR("Failed to open pattern window");
+		delete[] windows;
+		return false;
+	}
+
+
+	state = calibration_state_projecting_patterns;
 
 	std::thread thread([=]()
 	{
-		software_window blackWindows[MAX_NUM_PROJECTORS];
-		uint32 numBlackWindows = totalNumProjectors - 1;
-		uint8 black = 0;
-
-		for (uint32 i = 0; i < numBlackWindows; ++i)
-		{
-			if (!blackWindows[i].initialize(L"Black", 1, 1, &black, 1, 1, 1))
-			{
-				LOG_ERROR("Failed to open black window");
-				state = calibration_state_none;
-				return;
-			}
-		}
-
 		tracker->storeColorFrameCopy = true;
 
 		uint32 colorCameraWidth = tracker->camera.colorSensor.width;
@@ -156,10 +168,13 @@ bool projector_system_calibration::projectCalibrationPatterns()
 				fs::path currentOutputDir = baseDir / monitors[proj].uniqueID;
 				fs::create_directories(currentOutputDir);
 
-				software_window patternWindow;
-				patternWindow.initialize(L"Pattern", width, height, pattern, 1, width, height);
-				patternWindow.moveToMonitor(monitors[proj]);
-				patternWindow.toggleFullscreen();
+				patternWindow->setNewBuffer(pattern, 1, width, height);
+				if (patternWindow->fullscreen)
+				{
+					patternWindow->toggleFullscreen();
+				}
+				patternWindow->moveToMonitor(monitors[proj]);
+				patternWindow->toggleFullscreen();
 
 				Sleep(1000);
 
@@ -170,7 +185,7 @@ bool projector_system_calibration::projectCalibrationPatterns()
 					color_bgra* colorFrame = captures + captureStride * g;
 
 					generateGraycodePattern(pattern, width, height, g, (uint8)(whiteValue * 255));
-					patternWindow.swapBuffers();
+					patternWindow->swapBuffers();
 					Sleep(500);
 
 					memcpy(colorFrame, tracker->colorFrameCopy, colorCameraWidth * colorCameraHeight * sizeof(color_bgra));
@@ -192,6 +207,8 @@ bool projector_system_calibration::projectCalibrationPatterns()
 
 					grayCaptures[i] = (uint8)(gray * 255.f);
 				}
+
+				LOG_MESSAGE("Saving %u calibration images to directory '%ws'", numGrayCodes, currentOutputDir.c_str());
 
 				DirectX::Image image;
 				image.width = colorCameraWidth;
@@ -221,7 +238,7 @@ bool projector_system_calibration::projectCalibrationPatterns()
 					}
 				}
 
-				Sleep(1000);
+				LOG_MESSAGE("Saved %u calibration images to directory '%ws'", numGrayCodes, currentOutputDir.c_str());
 			}
 		}
 
@@ -233,6 +250,10 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		delete[] grayCaptures;
 		delete[] captures;
 		delete[] pattern;
+
+		mutex.lock();
+		windowsToClose.push_back(windows);
+		mutex.unlock();
 
 		cancel = false;
 		state = calibration_state_none;
@@ -1192,6 +1213,12 @@ void projector_system_calibration::update()
 		manager->reportLocalCalibration(fc.uniqueID, fc.intrinsics, fc.width, fc.height, fc.position, fc.rotation);
 	}
 	finalCalibrations.clear();
+
+	for (software_window* w : windowsToClose)
+	{
+		delete[] w;
+	}
+	windowsToClose.clear();
 	mutex.unlock();
 }
 

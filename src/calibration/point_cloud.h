@@ -2,7 +2,7 @@
 
 #include "core/math.h"
 #include "core/camera.h"
-#include "calibration_internal.h"
+#include "calibration_image.h"
 #include "tracking/rgbd_camera.h"
 
 struct point_cloud_entry

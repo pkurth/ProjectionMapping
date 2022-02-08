@@ -88,5 +88,6 @@ private:
 	std::vector<point_cloud_visualization> pointCloudsToVisualize;
 	std::vector<frustum_visualization> frustaToVisualize;
 	std::vector<final_calibration> finalCalibrations;
+	std::vector<struct software_window*> windowsToClose;
 };
 
