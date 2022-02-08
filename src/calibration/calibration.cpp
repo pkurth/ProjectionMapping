@@ -731,10 +731,10 @@ bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEs
 	}
 
 
-	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation1), conjugate(ourRotation1), projWidth, projHeight, projIntrinsics, combinationIndex & 1 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
-	submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation2), conjugate(ourRotation1), projWidth, projHeight, projIntrinsics, combinationIndex & 2 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
-	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation1), conjugate(ourRotation2), projWidth, projHeight, projIntrinsics, combinationIndex & 4 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
-	submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation2), conjugate(ourRotation2), projWidth, projHeight, projIntrinsics, combinationIndex & 8 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	//submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation1), conjugate(ourRotation1), projWidth, projHeight, projIntrinsics, combinationIndex & 1 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	//submitFrustumForVisualization(-(conjugate(ourRotation1) * ourTranslation2), conjugate(ourRotation1), projWidth, projHeight, projIntrinsics, combinationIndex & 2 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	//submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation1), conjugate(ourRotation2), projWidth, projHeight, projIntrinsics, combinationIndex & 4 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
+	//submitFrustumForVisualization(-(conjugate(ourRotation2) * ourTranslation2), conjugate(ourRotation2), projWidth, projHeight, projIntrinsics, combinationIndex & 8 ? vec4(0.f, 1.f, 0.f, 1.f) : vec4(1.f, 0.f, 0.f, 1.f));
 
 
 	quat rotation = conjugate(estimatedRot);
@@ -779,7 +779,7 @@ bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEs
 
 	LOG_MESSAGE("Scaling origin by %.3f. Scaled origin: [%.3f, %.3f, %.3f]", scale, origin.x, origin.y, origin.z);
 
-	submitFrustumForVisualization(origin, rotation, projWidth, projHeight, projIntrinsics, vec4(0.f, 0.f, 1.f, 1.f));
+	//submitFrustumForVisualization(origin, rotation, projWidth, projHeight, projIntrinsics, vec4(0.f, 0.f, 1.f, 1.f));
 
 	outRotation = rotation;
 	outPosition = origin;
@@ -953,7 +953,7 @@ bool projector_system_calibration::calibrate()
 
 			solveForCameraToProjectorParameters(solverInput, projPosition, projRotation, projIntrinsics, solverSettings);
 
-			submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
+			//submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
 
 			// Express in global space.
 			projRotation = globalRotation * projRotation;
@@ -1022,11 +1022,11 @@ void projector_system_calibration::submitFinalCalibration(const std::string& uni
 
 projector_system_calibration::projector_system_calibration(depth_tracker* tracker, projector_manager* manager)
 {
-	//if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
-	//{
-	//	LOG_ERROR("Tracker/camera is not initialized");
-	//	return;
-	//}
+	if (!tracker || !tracker->camera.isInitialized() || !tracker->camera.depthSensor.active || !tracker->camera.colorSensor.active)
+	{
+		LOG_ERROR("Tracker/camera is not initialized");
+		return;
+	}
 
 	uint32 width = tracker->camera.colorSensor.width;
 	uint32 height = tracker->camera.colorSensor.height;
