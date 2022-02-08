@@ -250,7 +250,7 @@ void projector_manager::notifyClients(const std::vector<std::string>& myProjecto
 	notifyProjectorNetworkOnSceneLoad(context, allProjectors);
 }
 
-void projector_manager::onMessageFromClient(const std::vector<std::string>& remoteMonitors)
+void projector_manager::onHelloMessageFromClient(const std::vector<std::string>& remoteMonitors)
 {
 	this->remoteMonitors.insert(remoteMonitors.begin(), remoteMonitors.end());
 
@@ -262,7 +262,18 @@ void projector_manager::onMessageFromClient(const std::vector<std::string>& remo
 	notifyClients(myProjectors, remoteProjectors);
 }
 
-void projector_manager::onMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
+void projector_manager::onLocalCalibrationMessageFromClient(std::unordered_map<std::string, projector_calibration>&& calibrations)
+{
+	this->context.knownProjectorCalibrations.merge(calibrations);
+
+	std::vector<std::string> myProjectors = getLocalProjectors();
+	std::vector<std::string> remoteProjectors = getRemoteProjectors();
+
+	createProjectors(myProjectors, remoteProjectors);
+	notifyClients(myProjectors, remoteProjectors);
+}
+
+void projector_manager::onSetupMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
 {
 	this->context.knownProjectorCalibrations = std::move(calibrations);
 
@@ -277,7 +288,9 @@ void projector_manager::reportLocalCalibration(const std::string& monitor, camer
 	std::vector<std::string> remoteProjectors = getRemoteProjectors();
 
 	createProjectors(myProjectors, remoteProjectors);
-	notifyClients(myProjectors, remoteProjectors);
+	notifyClients(myProjectors, remoteProjectors); // If server.
+
+	notifyProjectorNetworkOnSceneLoad(context, myProjectors); // If client.
 }
 
 void projector_manager::createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)

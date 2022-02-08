@@ -32,6 +32,7 @@ enum message_type : uint16
 	message_projector_info,
 	message_tracking,
 	message_solver_settings,
+	message_report_local_calibration,
 };
 
 struct message_header
@@ -85,6 +86,12 @@ struct projector_calibration_message
 struct projector_instantiation_message
 {
 	uint8 calibrationIndex;
+};
+
+struct local_calibration_message
+{
+	float trackedObjectRotation[4];
+	float trackedObjectPosition[3];
 };
 
 #define NETWORK_BUFFER_SIZE 4096
@@ -351,16 +358,7 @@ namespace server
 			{
 				case message_hello_from_client:
 				{
-					bool addressKnown = false;
-					for (const client_connection& c : clientConnections)
-					{
-						if (c.address == clientAddress)
-						{
-							addressKnown = true;
-							break;
-						}
-					}
-
+					bool addressKnown = std::find_if(clientConnections.begin(), clientConnections.end(), [&](const client_connection& c) { return c.address == clientAddress; }) != clientConnections.end();
 					if (addressKnown)
 					{
 						LOG_MESSAGE("Received duplicate 'hello' from client. Ignoring message");
@@ -400,7 +398,94 @@ namespace server
 					client_connection connection = { hostname->hostname, clientID, clientAddress };
 					clientConnections.push_back(connection);
 
-					manager->onMessageFromClient(clientMonitors);
+					manager->onHelloMessageFromClient(clientMonitors);
+				} break;
+
+				case message_report_local_calibration:
+				{
+					const local_calibration_message* trackingMessage = messageBuffer.get<local_calibration_message>(1);
+					if (!trackingMessage)
+					{
+						LOG_ERROR("Message is smaller than sizeof(trackingMessage). Expected at least %u bytes after header, got %u", (uint32)sizeof(trackingMessage), messageBuffer.sizeRemaining);
+						continue;
+					}
+
+					if (messageBuffer.sizeRemaining % sizeof(projector_calibration_message) != 0)
+					{
+						LOG_ERROR("Message size is not evenly divisible by sizeof(projector_calibration_message). Expected multiple of %u, got %u", (uint32)sizeof(projector_calibration_message), messageBuffer.sizeRemaining);
+						continue;
+					}
+
+					auto objectGroup = getObjectGroup();
+					if (objectGroup.size() == 0)
+					{
+						LOG_ERROR("Received local calibration, but cannot register tracking, because no objects are being tracked");
+						continue;
+					}
+
+
+					quat remoteTrackingRotation; vec3 remoteTrackingPosition;
+					memcpy(remoteTrackingRotation.v4.data, trackingMessage->trackedObjectRotation, sizeof(quat));
+					memcpy(remoteTrackingPosition.data, trackingMessage->trackedObjectPosition, sizeof(vec3));
+
+
+					quat invRemoteTrackingRotation = conjugate(remoteTrackingRotation);
+					vec3 invRemoteTrackingPosition = -(invRemoteTrackingRotation * remoteTrackingPosition);
+
+
+
+					scene_entity firstObject = { *objectGroup.begin(), *scene };
+					const transform_component& transform = firstObject.getComponent<transform_component>();
+
+
+
+
+
+
+
+
+
+
+					uint32 numProjectorCalibrations = messageBuffer.sizeRemaining / (uint32)sizeof(projector_calibration_message);
+
+					projector_calibration_message* calibrationMessages = messageBuffer.get<projector_calibration_message>(numProjectorCalibrations);
+
+					assert(messageBuffer.sizeRemaining == 0);
+
+
+
+
+					std::unordered_map<std::string, projector_calibration> calibrations;
+
+					for (uint32 i = 0; i < numProjectorCalibrations; ++i)
+					{
+						projector_calibration_message& msg = calibrationMessages[i];
+
+						std::string monitor = msg.uniqueID;
+
+						projector_calibration calib;
+						memcpy(calib.rotation.v4.data, msg.rotation, sizeof(quat));
+						memcpy(calib.position.data, msg.position, sizeof(vec3));
+
+
+						// Transform into space of tracked object.
+						calib.rotation = invRemoteTrackingRotation * calib.rotation;
+						calib.position = invRemoteTrackingRotation * calib.position + invRemoteTrackingPosition;
+
+						// Transform into world space.
+						calib.rotation = transform.rotation * calib.rotation;
+						calib.position = transform.rotation * calib.position + transform.position;
+
+
+						calib.width = msg.width;
+						calib.height = msg.height;
+						calib.intrinsics = msg.intrinsics;
+
+						calibrations.insert({ monitor, calib });
+					}
+
+					manager->onLocalCalibrationMessageFromClient(std::move(calibrations));
+
 				} break;
 
 				default:
@@ -468,6 +553,51 @@ namespace client
 			monitor_info& mon = monitors[i];
 
 			strncpy_s(msg.uniqueID, mon.uniqueID.c_str(), sizeof(msg.uniqueID));
+		}
+
+		clientSocket.send(serverAddress, messageBuffer.buffer, messageBuffer.size);
+	}
+
+	static void reportLocalCalibration(const projector_context& context, const std::vector<std::string>& myProjectors)
+	{
+		if (trackedObjects.size() == 0)
+		{
+			return;
+		}
+
+		const transform_component& transform = trackedObjects[0].getComponent<transform_component>();
+
+		send_buffer messageBuffer;
+		messageBuffer.header.type = message_report_local_calibration;
+		messageBuffer.header.clientID = clientID;
+		messageBuffer.header.messageID = 0;
+
+		local_calibration_message* trackingMessage = messageBuffer.push<local_calibration_message>(1);
+		memcpy(trackingMessage->trackedObjectRotation, transform.rotation.v4.data, sizeof(quat));
+		memcpy(trackingMessage->trackedObjectPosition, transform.position.data, sizeof(vec3));
+
+
+		uint32 numProjectorCalibrations = (uint32)myProjectors.size();
+		projector_calibration_message* calibrationMessages = messageBuffer.push<projector_calibration_message>(numProjectorCalibrations);
+
+		uint32 i = 0;
+		for (const std::string& uniqueID : myProjectors)
+		{
+			auto it = context.knownProjectorCalibrations.find(uniqueID);
+			auto& c = *it;
+
+			projector_calibration_message& msg = calibrationMessages[i];
+
+			const projector_calibration& calib = c.second;
+
+			strncpy_s(msg.uniqueID, c.first.c_str(), sizeof(msg.uniqueID));
+			memcpy(msg.rotation, calib.rotation.v4.data, sizeof(quat));
+			memcpy(msg.position, calib.position.data, sizeof(vec3));
+			msg.intrinsics = calib.intrinsics;
+			msg.width = (uint16)calib.width;
+			msg.height = (uint16)calib.height;
+
+			++i;
 		}
 
 		clientSocket.send(serverAddress, messageBuffer.buffer, messageBuffer.size);
@@ -683,7 +813,7 @@ namespace client
 						}
 					}
 
-					manager->onMessageFromServer(std::move(calibrations), myProjectors, remoteProjectors);
+					manager->onSetupMessageFromServer(std::move(calibrations), myProjectors, remoteProjectors);
 
 				} break;
 
@@ -808,6 +938,21 @@ bool notifyProjectorNetworkOnSceneLoad(const projector_context& context, const s
 	{
 		server::sendObjectInformation();
 		server::sendProjectorInformation(context, projectors);
+	}
+
+	return true;
+}
+
+bool reportLocalCalibrationsToProjectorNetwork(const projector_context& context, const std::vector<std::string>& myProjectors)
+{
+	if (!projectorNetworkInitialized)
+	{
+		return false;
+	}
+
+	if (!isServer)
+	{
+		client::reportLocalCalibration(context, myProjectors);
 	}
 
 	return true;

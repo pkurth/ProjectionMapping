@@ -258,6 +258,9 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		state = calibration_state_none;
 	});
 
+	HANDLE handle = (HANDLE)thread.native_handle();
+	SetThreadDescription(handle, L"Calibration pattern thread");
+
 	thread.detach();
 
 	return true;
@@ -1001,6 +1004,9 @@ bool projector_system_calibration::calibrate()
 		cancel = false;
 		state = calibration_state_none;
 	});
+
+	HANDLE handle = (HANDLE)thread.native_handle();
+	SetThreadDescription(handle, L"Calibration thread");
 
 	thread.detach();
 

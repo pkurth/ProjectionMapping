@@ -15,8 +15,13 @@ struct projector_manager
 
 	void onSceneLoad();
 
-	void onMessageFromClient(const std::vector<std::string>& remoteMonitors);
-	void onMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
+	// Received by server.
+	void onHelloMessageFromClient(const std::vector<std::string>& remoteMonitors);
+	void onLocalCalibrationMessageFromClient(std::unordered_map<std::string, projector_calibration>&& calibrations);
+
+	// Received by client.
+	void onSetupMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
+
 
 	void reportLocalCalibration(const std::string& monitor, camera_intrinsics intrinsics, uint32 width, uint32 height, vec3 position, quat rotation);
 

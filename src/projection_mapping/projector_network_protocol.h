@@ -12,3 +12,4 @@ bool startProjectorNetworkProtocol(game_scene& scene, projector_manager* manager
 bool updateProjectorNetworkProtocol(float dt);
 
 bool notifyProjectorNetworkOnSceneLoad(const projector_context& context, const std::vector<std::string>& projectors);
+bool reportLocalCalibrationsToProjectorNetwork(const projector_context& context, const std::vector<std::string>& myProjectors);
