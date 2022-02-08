@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "calibration.h"
 #include "graycode.h"
-#include "calibration_image.h"
 #include "point_cloud.h"
 #include "fundamental.h"
 #include "svd.h"

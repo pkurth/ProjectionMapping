@@ -4,6 +4,7 @@
 #include "point_cloud.h"
 #include "reconstruction.h"
 #include "math_double.h"
+#include "graycode.h"
 
 #include "core/random.h"
 #include "core/log.h"

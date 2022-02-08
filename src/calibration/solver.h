@@ -1,6 +1,6 @@
 #pragma once
 
-#include "calibration_image.h"
+#include "core/image.h"
 #include "core/camera.h"
 
 struct calibration_solver_settings
