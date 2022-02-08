@@ -316,11 +316,15 @@ static bool readMatrixFromFile(const fs::path& filename, mat4& out)
 static std::vector<fs::path> findAllSubDirectories(const fs::path& path)
 {
 	std::vector<fs::path> result;
-	for (auto it : fs::directory_iterator(path))
+
+	if (fs::exists(path))
 	{
-		if (it.is_directory())
+		for (auto it : fs::directory_iterator(path))
 		{
-			result.push_back(it.path());
+			if (it.is_directory())
+			{
+				result.push_back(it.path());
+			}
 		}
 	}
 	return result;
@@ -329,15 +333,19 @@ static std::vector<fs::path> findAllSubDirectories(const fs::path& path)
 static std::vector<fs::path> findAllImagesInDirectory(const fs::path& path)
 {
 	std::vector<fs::path> result;
-	for (auto it : fs::directory_iterator(path))
-	{
-		if (it.is_regular_file())
-		{
-			fs::path ext = it.path().extension();
 
-			if (isImageExtension(ext))
+	if (fs::exists(path))
+	{
+		for (auto it : fs::directory_iterator(path))
+		{
+			if (it.is_regular_file())
 			{
-				result.push_back(it.path());
+				fs::path ext = it.path().extension();
+
+				if (isImageExtension(ext))
+				{
+					result.push_back(it.path());
+				}
 			}
 		}
 	}
@@ -905,6 +913,8 @@ bool projector_system_calibration::calibrate()
 		{
 			calibration_projector& proj = calibInput.projectors[projID];
 
+			LOG_MESSAGE("---- Calibrating projector '%ws' ----", proj.uniqueID.c_str());
+
 			uint32 width = proj.width;
 			uint32 height = proj.height;
 
@@ -1149,10 +1159,10 @@ bool projector_system_calibration::edit()
 						ImGui::BeginDisabled();
 					}
 
-					ImGui::PropertyInput("Start fx", startIntrinsics[i].fx);
-					ImGui::PropertyInput("Start fy", startIntrinsics[i].fy);
-					ImGui::PropertyInput("Start cx", startIntrinsics[i].cx);
-					ImGui::PropertyInput("Start cy", startIntrinsics[i].cy);
+					ImGui::PropertyInput("    Start fx", startIntrinsics[i].fx);
+					ImGui::PropertyInput("    Start fy", startIntrinsics[i].fy);
+					ImGui::PropertyInput("    Start cx", startIntrinsics[i].cx);
+					ImGui::PropertyInput("    Start cy", startIntrinsics[i].cy);
 
 					if (!uiActive)
 					{
