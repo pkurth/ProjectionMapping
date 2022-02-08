@@ -27,8 +27,11 @@ static const ImVec4 colorPerType[] =
 static memory_arena arena;
 static std::vector<log_message> messages;
 
+static std::mutex mutex;
+
 void logMessageInternal(log_message_type type, const char* file, const char* function, uint32 line, const char* format, ...)
 {
+	mutex.lock();
 	arena.ensureFreeSize(1024);
 
 	char* buffer = (char*)arena.getCurrent();
@@ -41,6 +44,7 @@ void logMessageInternal(log_message_type type, const char* file, const char* fun
 	messages.push_back({ buffer, type, 5.f, file, function, line });
 
 	arena.setCurrentTo(buffer + countWritten + 1);
+	mutex.unlock();
 }
 
 void initializeMessageLog()
@@ -57,6 +61,8 @@ void updateMessageLog(float dt)
 	ImGui::SetNextWindowSize(ImVec2(0.f, 0.f)); // Auto-resize to content.
 	bool windowOpen = ImGui::Begin("##MessageLog", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs);
 	ImGui::PopStyleVar(2);
+
+	mutex.lock();
 
 	uint32 count = (uint32)messages.size();
 	uint32 startIndex = 0;
@@ -95,11 +101,19 @@ void updateMessageLog(float dt)
 			for (uint32 i = 0; i < count; ++i)
 			{
 				auto& msg = messages[i];
-				ImGui::TextColored(colorPerType[msg.type], "%s (%s [%u])", msg.text, msg.function, msg.line);
+				ImGui::TextColored(colorPerType[msg.type], msg.text);
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::BeginTooltip();
+					ImGui::Text("Function %s, line %u", msg.function, msg.line);
+					ImGui::EndTooltip();
+				}
 			}
 		}
 		ImGui::End();
 	}
+
+	mutex.unlock();
 }
 
 #endif
