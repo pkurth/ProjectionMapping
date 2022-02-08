@@ -18,6 +18,24 @@ enum tracking_rotation_representation
 	tracking_rotation_representation_lie,
 };
 
+enum tracker_ui_interaction_type
+{
+	tracker_ui_interaction_none,
+	tracker_ui_interaction_entity_selected,
+	tracker_ui_interaction_global_orientation,
+};
+
+struct tracker_ui_interaction
+{
+	tracker_ui_interaction_type type;
+
+	union
+	{
+		scene_entity entity;
+		quat globalOrientationDelta;
+	};
+};
+
 struct depth_tracker
 {
 	depth_tracker();
@@ -25,7 +43,7 @@ struct depth_tracker
 	depth_tracker& operator=(const depth_tracker&) = delete;
 	depth_tracker& operator=(depth_tracker&&) = default;
 
-	scene_entity drawSettings();
+	tracker_ui_interaction drawSettings();
 	void update();
 	void visualizeDepth(ldr_render_pass* renderPass);
 

@@ -963,9 +963,9 @@ mat4 depth_tracker::getTrackingMatrix(uint32 index)
 	return m;
 }
 
-scene_entity depth_tracker::drawSettings()
+tracker_ui_interaction depth_tracker::drawSettings()
 {
-	scene_entity result = {};
+	tracker_ui_interaction result = {};
 
 	if (ImGui::BeginTree("Cameras"))
 	{
@@ -1029,7 +1029,8 @@ scene_entity depth_tracker::drawSettings()
 						snprintf(label, sizeof(label), "    Entity %u", index);
 						if (ImGui::PropertyButton(label, entity.getComponent<tag_component>().name))
 						{
-							result = entity;
+							result.type = tracker_ui_interaction_entity_selected;
+							result.entity = entity;
 						}
 
 						snprintf(label, sizeof(label), "    Export entity %u", index);
@@ -1054,6 +1055,13 @@ scene_entity depth_tracker::drawSettings()
 								m.m[12], m.m[13], m.m[14], m.m[15]);
 
 							ImGui::SetClipboardText(buffer);
+						}
+
+						if (ImGui::PropertyButton("    Global orientation", "Rotate world to match",
+							"Rotates the world such that this object stands upright"))
+						{
+							result.type = tracker_ui_interaction_global_orientation;
+							result.globalOrientationDelta = rotateFromTo(entity.getComponent<transform_component>().rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
 						}
 
 						ImGui::PropertyValue("    Number of correspondences", job.numCorrespondences);

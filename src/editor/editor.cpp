@@ -1251,10 +1251,34 @@ void scene_editor::drawSettings(float dt)
 
 		if (ImGui::BeginTree("Tracker"))
 		{
-			scene_entity e = tracker->drawSettings();
-			if (e)
+			tracker_ui_interaction e = tracker->drawSettings();
+			if (e.type == tracker_ui_interaction_entity_selected)
 			{
-				setSelectedEntity(e);
+				setSelectedEntity(e.entity);
+			}
+			else if (e.type == tracker_ui_interaction_global_orientation)
+			{
+				tracker->globalCameraRotation = e.globalOrientationDelta * tracker->globalCameraRotation;
+
+				for (auto [entityHandle, transform] : scene->view<transform_component>().each())
+				{
+					transform.position = e.globalOrientationDelta * transform.position;
+					transform.rotation = e.globalOrientationDelta * transform.rotation;
+				}
+
+				for (auto [entityHandle, transform] : scene->view<position_rotation_component>().each())
+				{
+					transform.position = e.globalOrientationDelta * transform.position;
+					transform.rotation = e.globalOrientationDelta * transform.rotation;
+				}
+
+				for (auto& calib : projectorManager->context.knownProjectorCalibrations)
+				{
+					calib.second.position = e.globalOrientationDelta * calib.second.position;
+					calib.second.rotation = e.globalOrientationDelta * calib.second.rotation;
+				}
+
+				projectorManager->onSceneLoad();
 			}
 			ImGui::EndTree();
 		}

@@ -328,7 +328,7 @@ bool rgbd_camera::initializeAzure(uint32 deviceIndex, bool alignDepthToColor)
     config.camera_fps = K4A_FRAMES_PER_SECOND_30;
     config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
     config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
-    config.color_resolution = K4A_COLOR_RESOLUTION_720P;
+    config.color_resolution = K4A_COLOR_RESOLUTION_1080P;
     config.synchronized_images_only = config.color_resolution != K4A_COLOR_RESOLUTION_OFF;
 
     this->alignDepthToColor = alignDepthToColor;

@@ -66,18 +66,10 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	editor.initialize(&scene, renderer, tracker, projectorManager, projectorCalibration);
 
+
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/augustus.obj"))
 	{
-#if 1
-		mat4 tracking(0.055836f, -0.997742f, -0.053892f, 0.000000f, 0.962090f, 0.068226f, -0.266327f, 0.000000f, 0.269092f, -0.036935f, 0.962616f, 0.000000f, -0.218112f, -0.047165f, -0.532164f, 1.000000f);
-		tracking = transpose(tracking);
-		trs transform = mat4ToTRS(tracking);
-#else
 		trs transform = trs::identity;
-#endif
-
-		tracker->globalCameraRotation = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
-		
 		
 		transform.rotation = tracker->globalCameraRotation * transform.rotation;
 		transform.position = tracker->globalCameraRotation * transform.position;
