@@ -11,15 +11,20 @@ struct projector_network_server
 	bool initialize(game_scene& scene, projector_manager* manager, uint32 port, char* outIP);
 	bool update(float dt);
 
+	bool broadcastObjectInfo();
+
 private:
-
-	bool sendToAllClients(struct send_buffer& buffer);
-
+	
 	struct client_connection
 	{
 		uint16 clientID;
 		network_address address;
 	};
+
+	bool createObjectMessage(struct send_buffer& buffer);
+
+	bool sendToAllClients(struct send_buffer& buffer);
+	bool sendToClient(struct send_buffer& buffer, const client_connection& connection);
 
 	std::vector<client_connection> clientConnections;
 	network_socket serverSocket;
@@ -56,8 +61,12 @@ private:
 
 
 	uint32 latestSettingsMessageID = 0;
+	uint32 latestObjectMessageID = 0;
 
 	projector_solver_settings oldSolverSettings;
+
+
+	std::unordered_map<uint32, scene_entity> objectIDToEntity;
 };
 
 
@@ -65,6 +74,11 @@ struct projector_network_protocol
 {
 	bool start(game_scene& scene, projector_manager* manager, bool isServer);
 	bool update(float dt);
+
+
+	bool ifServer_broadcastObjectInfo();
+
+
 
 	bool initialized = false;
 

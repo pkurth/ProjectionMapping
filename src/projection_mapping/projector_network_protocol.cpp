@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "projector_network_protocol.h"
 #include "projector_manager.h"
+#include "tracking/tracking.h"
 
 #include "network/socket.h"
 
@@ -14,7 +15,9 @@ enum message_type : uint16
 	message_client_hello,
 	message_client_request_calibration_mode,
 
-	message_server_solver_settings
+	message_server_solver_settings,
+	message_server_object_info,
+	message_server_object_update,
 };
 
 struct message_header
@@ -84,7 +87,7 @@ struct receive_buffer
 };
 
 
-struct hello_from_client_message
+struct client_hello_message
 {
 	char hostname[32];
 };
@@ -94,6 +97,17 @@ struct client_monitor_info
 	char description[64];
 	char uniqueID[128];
 };
+
+struct server_object_message
+{
+	char filename[32];
+	float rotation[4];
+	float position[3];
+	float scale[3];
+	uint32 id;
+	bool tracked;
+};
+
 
 
 
@@ -137,6 +151,21 @@ bool projector_network_protocol::update(float dt)
 	{
 		return client.update();
 	}
+}
+
+bool projector_network_protocol::ifServer_broadcastObjectInfo()
+{
+	if (!initialized)
+	{
+		return false;
+	}
+
+	if (isServer)
+	{
+		return server.broadcastObjectInfo();
+	}
+
+	return false;
 }
 
 bool projector_network_server::initialize(game_scene& scene, projector_manager* manager, uint32 port, char* outIP)
@@ -243,10 +272,10 @@ bool projector_network_server::update(float dt)
 					break;
 				}
 
-				hello_from_client_message* msg = messageBuffer.get<hello_from_client_message>();
+				client_hello_message* msg = messageBuffer.get<client_hello_message>();
 				if (!msg)
 				{
-					LOG_ERROR("Message is smaller than sizeof(hello_from_client_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(hello_from_client_message), messageBuffer.sizeRemaining);
+					LOG_ERROR("Message is smaller than sizeof(hello_from_client_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(client_hello_message), messageBuffer.sizeRemaining);
 					break;
 				}
 				LOG_MESSAGE("Received message identifies client as '%s'", msg->hostname);
@@ -277,7 +306,15 @@ bool projector_network_server::update(float dt)
 					uniqueIDs.push_back(monitors[i].uniqueID);
 				}
 
+
+				send_buffer response;
+				createObjectMessage(response);
+				sendToClient(response, connection);
+
+
 				manager->network_newClient(msg->hostname, clientID, descriptions, uniqueIDs);
+
+
 			} break;
 
 			case message_client_request_calibration_mode:
@@ -302,9 +339,50 @@ bool projector_network_server::update(float dt)
 		}
 	}
 
+	return true;
+}
+
+bool projector_network_server::broadcastObjectInfo()
+{
+	send_buffer messageBuffer;
+	createObjectMessage(messageBuffer);
+	return sendToAllClients(messageBuffer);
+}
+
+static auto getObjectGroup(game_scene* scene)
+{
+	auto objectGroup = scene->group(entt::get<raster_component, transform_component>);
+	return objectGroup;
+}
 
 
+bool projector_network_server::createObjectMessage(send_buffer& buffer)
+{
+	auto objectGroup = getObjectGroup(scene);
+	uint32 numObjectsInScene = (uint32)objectGroup.size();
 
+	buffer.header.type = message_server_object_info;
+
+	server_object_message* messages = buffer.push<server_object_message>(numObjectsInScene);
+
+	uint32 id = 0;
+	for (auto [entityHandle, raster, transform] : objectGroup.each())
+	{
+		scene_entity entity = { entityHandle, *scene };
+
+		server_object_message& msg = messages[id];
+
+		std::string path = getPathFromAssetHandle(raster.mesh->handle).string();
+
+		strncpy_s(msg.filename, path.c_str(), sizeof(msg.filename));
+		memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
+		memcpy(msg.position, transform.position.data, sizeof(vec3));
+		memcpy(msg.scale, transform.scale.data, sizeof(vec3));
+		msg.id = (uint32)entityHandle;
+		msg.tracked = entity.hasComponent<tracking_component>();
+
+		++id;
+	}
 
 	return true;
 }
@@ -322,6 +400,14 @@ bool projector_network_server::sendToAllClients(send_buffer& buffer)
 	}
 
 	return result;
+}
+
+bool projector_network_server::sendToClient(send_buffer& buffer, const client_connection& connection)
+{
+	buffer.header.messageID = runningMessageID++;
+	buffer.header.clientID = connection.clientID;
+
+	return serverSocket.send(connection.address, buffer.buffer, buffer.size);
 }
 
 bool projector_network_client::update()
@@ -418,7 +504,56 @@ bool projector_network_client::update()
 				oldSolverSettings = manager->solver.settings;
 			} break;
 
+			case message_server_object_info:
+			{
+				if (messageBuffer.sizeRemaining % sizeof(server_object_message) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(server_object_message). Expected multiple of %u, got %u", (uint32)sizeof(server_object_message), messageBuffer.sizeRemaining);
+					break;
+				}
 
+				if (header->messageID < latestObjectMessageID)
+				{
+					break;
+				}
+
+				latestObjectMessageID = header->messageID;
+
+				// Delete objects in scene.
+				auto objectGroup = getObjectGroup(scene);
+				scene->registry.destroy(objectGroup.begin(), objectGroup.end());
+				objectIDToEntity.clear();
+
+				// Populate with received objects.
+				uint32 numObjects = messageBuffer.sizeRemaining / (uint32)sizeof(server_object_message);
+				const server_object_message* objects = messageBuffer.get<server_object_message>(numObjects);
+
+				LOG_MESSAGE("Received message containing %u objects", numObjects);
+				for (uint32 i = 0; i < numObjects; ++i)
+				{
+					LOG_MESSAGE("Object %u: %s", objects[i].id, objects[i].filename);
+
+					if (auto targetObjectMesh = loadMeshFromFile(objects[i].filename))
+					{
+						trs transform;
+						memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
+						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
+						memcpy(transform.scale.data, objects[i].scale, sizeof(vec3));
+
+						auto targetObject = scene->createEntity("Target object")
+							.addComponent<transform_component>(transform)
+							.addComponent<raster_component>(targetObjectMesh);
+
+						if (objects[i].tracked)
+						{
+							targetObject.addComponent<tracking_component>();
+						}
+
+						objectIDToEntity[objects[i].id] = targetObject;
+					}
+				}
+
+			} break;
 
 		};
 	}
@@ -435,7 +570,7 @@ void projector_network_client::sendHello()
 
 	std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
 
-	hello_from_client_message hello;
+	client_hello_message hello;
 	gethostname(hello.hostname, sizeof(hello.hostname));
 
 	uint32 numMonitors = (uint32)monitors.size();

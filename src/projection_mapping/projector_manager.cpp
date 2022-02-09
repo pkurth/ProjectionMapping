@@ -332,6 +332,8 @@ void projector_manager::onSceneLoad()
 	std::vector<std::string> remoteProjectors = getRemoteProjectors();
 
 	createProjectors(myProjectors, remoteProjectors);
+
+	protocol.ifServer_broadcastObjectInfo();
 }
 
 void projector_manager::reportLocalCalibration(const std::string& uniqueID, const projector_calibration& calib)
