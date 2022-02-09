@@ -108,6 +108,12 @@ struct server_object_message
 	bool tracked;
 };
 
+struct server_object_update_message
+{
+	float rotation[4];
+	float position[3];
+	uint32 id;
+};
 
 
 
@@ -238,6 +244,12 @@ bool projector_network_server::update(float dt)
 
 			messageBuffer.pushValue(manager->solver.settings);
 
+			sendToAllClients(messageBuffer);
+		}
+
+		{
+			send_buffer messageBuffer;
+			createObjectUpdateMessage(messageBuffer);
 			sendToAllClients(messageBuffer);
 		}
 
@@ -380,6 +392,31 @@ bool projector_network_server::createObjectMessage(send_buffer& buffer)
 		memcpy(msg.scale, transform.scale.data, sizeof(vec3));
 		msg.id = (uint32)entityHandle;
 		msg.tracked = entity.hasComponent<tracking_component>();
+
+		++id;
+	}
+
+	return true;
+}
+
+bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
+{
+	auto objectGroup = getObjectGroup(scene);
+	uint32 numObjectsInScene = (uint32)objectGroup.size();
+
+	buffer.header.type = message_server_object_update;
+	buffer.header.messageID = runningMessageID++;
+
+	server_object_update_message* messages = buffer.push<server_object_update_message>(numObjectsInScene);
+
+	uint32 id = 0;
+	for (auto [entityHandle, raster, transform] : objectGroup.each())
+	{
+		server_object_update_message& msg = messages[id];
+
+		memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
+		memcpy(msg.position, transform.position.data, sizeof(vec3));
+		msg.id = (uint32)entityHandle;
 
 		++id;
 	}
@@ -550,6 +587,41 @@ bool projector_network_client::update()
 						}
 
 						objectIDToEntity[objects[i].id] = targetObject;
+					}
+				}
+
+			} break;
+
+			case message_server_object_update:
+			{
+				if (messageBuffer.sizeRemaining % sizeof(server_object_update_message) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(server_object_update_message). Expected multiple of %u, got %u", (uint32)sizeof(server_object_update_message), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				if (header->messageID < latestObjectUpdateMessageID)
+				{
+					break;
+				}
+
+				latestObjectUpdateMessageID = header->messageID;
+
+				uint32 numObjects = messageBuffer.sizeRemaining / (uint32)sizeof(server_object_update_message);
+				const server_object_update_message* objects = messageBuffer.get<server_object_update_message>(numObjects);
+
+				//LOG_MESSAGE("Received message containing %u objects", numObjects);
+
+				for (uint32 i = 0; i < numObjects; ++i)
+				{
+					auto it = objectIDToEntity.find(objects[i].id);
+					if (it != objectIDToEntity.end())
+					{
+						scene_entity e = it->second;
+
+						transform_component& transform = e.getComponent<transform_component>();
+						memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
+						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
 					}
 				}
 

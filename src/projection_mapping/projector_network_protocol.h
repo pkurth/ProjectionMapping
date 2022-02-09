@@ -22,6 +22,7 @@ private:
 	};
 
 	bool createObjectMessage(struct send_buffer& buffer);
+	bool createObjectUpdateMessage(struct send_buffer& buffer);
 
 	bool sendToAllClients(struct send_buffer& buffer);
 	bool sendToClient(struct send_buffer& buffer, const client_connection& connection);
@@ -62,6 +63,7 @@ private:
 
 	uint32 latestSettingsMessageID = 0;
 	uint32 latestObjectMessageID = 0;
+	uint32 latestObjectUpdateMessageID = 0;
 
 	projector_solver_settings oldSolverSettings;
 
