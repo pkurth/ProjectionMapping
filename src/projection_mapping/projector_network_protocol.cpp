@@ -11,6 +11,7 @@
 
 enum message_type : uint16
 {
+	message_hello_from_client,
 	message_solver_settings
 };
 
@@ -201,6 +202,40 @@ bool projector_network_server::update(float dt)
 		timeSinceLastUpdate -= updateTime;
 	}
 
+
+
+
+	receive_buffer messageBuffer;
+	network_address clientAddress;
+
+	while (serverSocket.receive(clientAddress, messageBuffer.buffer, sizeof(messageBuffer.buffer), messageBuffer.actualSize) == receive_result_success)
+	{
+		messageBuffer.reset();
+
+		const message_header* header = messageBuffer.get<message_header>(1);
+		if (!header)
+		{
+			LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), messageBuffer.sizeRemaining);
+			continue;
+		}
+
+		switch (header->type)
+		{
+			case message_hello_from_client:
+			{
+				uint16 clientID = runningClientID++;
+				LOG_MESSAGE("Assigning new client ID %u", clientID);
+
+				client_connection connection = { clientID, clientAddress };
+				clientConnections.push_back(connection);
+			}
+		}
+	}
+
+
+
+
+
 	return true;
 }
 
@@ -299,10 +334,22 @@ bool projector_network_client::update()
 
 
 		};
-
-
 	}
 
-
 	return true;
+}
+
+void projector_network_client::sendHello()
+{
+	send_buffer messageBuffer;
+	messageBuffer.header.type = message_hello_from_client;
+	messageBuffer.header.clientID = -1;
+	messageBuffer.header.messageID = 0;
+
+	sendToServer(messageBuffer);
+}
+
+bool projector_network_client::sendToServer(send_buffer& buffer)
+{
+	return clientSocket.send(serverAddress, buffer.buffer, buffer.size);
 }

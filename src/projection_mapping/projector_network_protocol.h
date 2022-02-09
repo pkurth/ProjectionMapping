@@ -17,7 +17,6 @@ private:
 
 	struct client_connection
 	{
-		std::string name;
 		uint16 clientID;
 		network_address address;
 	};
@@ -41,7 +40,11 @@ struct projector_network_client
 	bool initialize(game_scene& scene, projector_manager* manager, const char* serverIP, uint32 serverPort);
 	bool update();
 
+	void sendHello();
+
 private:
+	bool sendToServer(struct send_buffer& buffer);
+
 	game_scene* scene;
 	projector_manager* manager;
 
