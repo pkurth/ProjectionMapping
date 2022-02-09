@@ -68,7 +68,6 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 	auto& monitors = win32_window::allConnectedMonitors;
 
 	uint32 totalNumProjectors = 0;
-	uint32 numProjectorsToCalibrate = 0;
 
 	int32 maxNumPixels = 0;
 	uint32 maxNumCalibrationPatterns = 0;
@@ -76,9 +75,8 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 	for (uint32 i = 0; i < MAX_NUM_PROJECTORS; ++i)
 	{
 		totalNumProjectors += manager->isProjectorIndex[i];
-		numProjectorsToCalibrate += calibrateIndex[i];
 
-		if (calibrateIndex[i])
+		if (manager->isProjectorIndex[i])
 		{
 			maxNumPixels = max(maxNumPixels, monitors[i].width * monitors[i].height);
 			maxNumCalibrationPatterns = max(maxNumCalibrationPatterns, getNumberOfGraycodePatternsRequired(monitors[i].width, monitors[i].height));
@@ -96,7 +94,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 
 	mat4 trackingMat = tracker->getTrackingMatrix(transform);
 
-	if (numProjectorsToCalibrate == 0)
+	if (totalNumProjectors == 0)
 	{
 		return true;
 	}
@@ -147,7 +145,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 
 		for (uint32 proj = 0; proj < MAX_NUM_PROJECTORS; ++proj)
 		{
-			if (calibrateIndex[proj])
+			if (manager->isProjectorIndex[proj])
 			{
 				uint32 width = (uint32)monitors[proj].width;
 				uint32 height = (uint32)monitors[proj].height;
@@ -814,7 +812,7 @@ bool projector_system_calibration::calibrate(game_scene& scene)
 	std::vector<monitor_info> projectors;
 	for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 	{
-		if (calibrateIndex[i])
+		if (manager->isProjectorIndex[i])
 		{
 			projectors.push_back(monitors[i]);
 		}
@@ -1121,35 +1119,6 @@ bool projector_system_calibration::edit(game_scene& scene)
 
 	if (ImGui::BeginProperties())
 	{
-		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
-		{
-			if (manager->isProjectorIndex[i])
-			{
-				ImGui::PushID(i);
-
-				ImGui::PropertyDisableableCheckbox(monitors[i].description.c_str(), calibrateIndex[i], uiActive, monitors[i].uniqueID.c_str());
-				
-				if (calibrateIndex[i])
-				{
-					if (!uiActive)
-					{
-						ImGui::BeginDisabled();
-					}
-
-					ImGui::PropertyInput("  Start fx", startIntrinsics[i].fx);
-					ImGui::PropertyInput("  Start fy", startIntrinsics[i].fy);
-					ImGui::PropertyInput("  Start cx", startIntrinsics[i].cx);
-					ImGui::PropertyInput("  Start cy", startIntrinsics[i].cy);
-
-					if (!uiActive)
-					{
-						ImGui::EndDisabled();
-					}
-				}
-				ImGui::PopID();
-			}
-		}
-
 		if (!uiActive)
 		{
 			ImGui::BeginDisabled();

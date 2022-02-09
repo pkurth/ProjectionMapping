@@ -3,6 +3,7 @@
 #include "window/dx_window.h"
 #include "core/imgui.h"
 #include "rendering/debug_visualization.h"
+#include "core/yaml.h"
 
 #include "post_processing_rs.hlsli"
 
@@ -12,6 +13,7 @@ projector_manager::projector_manager(game_scene& scene)
 	this->scene = &scene;
 	solver.initialize();
 
+	loadSetup();
 
 	static uint8 black = 0;
 
@@ -37,32 +39,10 @@ void projector_manager::beginFrame()
 
 void projector_manager::updateAndRender(float dt)
 {
+	bool setupDirty = false;
+
 	if (ImGui::Begin("Projection Mapping"))
 	{
-		if (ImGui::BeginProperties())
-		{
-			ImGui::PropertyDisableableCheckbox("Server", isServer, !protocol.initialized);
-			if (!isServer)
-			{
-				ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP));
-				ImGui::PropertyInput("Server port", protocol.serverPort);
-			}
-
-			if (ImGui::PropertyDisableableButton("Network", isServer ? "Start" : "Connect", !protocol.initialized))
-			{
-				protocol.start(*scene, this, isServer);
-			}
-
-			if (protocol.initialized && isServer)
-			{
-				ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP), true);
-				ImGui::PropertyValue("Server port", protocol.serverPort);
-			}
-
-			ImGui::EndProperties();
-		}
-
-
 		auto& monitors = win32_window::allConnectedMonitors;
 
 		if (ImGui::BeginTable("##ProjTable", 2, ImGuiTableFlags_Resizable))
@@ -89,7 +69,7 @@ void projector_manager::updateAndRender(float dt)
 				}
 
 				ImGui::TableNextColumn();
-				ImGui::Checkbox("##isProj", &isProjectorIndex[i]);
+				setupDirty |= ImGui::Checkbox("##isProj", &isProjectorIndex[i]);
 
 				ImGui::PopID();
 			}
@@ -97,10 +77,29 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::EndTable();
 		}
 
-
-
 		if (ImGui::BeginProperties())
 		{
+			ImGui::PropertySeparator();
+			ImGui::PropertySeparator();
+
+			setupDirty |= ImGui::PropertyDisableableCheckbox("Server", isServer, !protocol.initialized);
+			if (!isServer)
+			{
+				setupDirty |= ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP));
+				setupDirty |= ImGui::PropertyInput("Server port", protocol.serverPort);
+			}
+
+			if (ImGui::PropertyDisableableButton("Network", isServer ? "Start" : "Connect", !protocol.initialized))
+			{
+				protocol.start(*scene, this, isServer);
+			}
+
+			if (protocol.initialized && isServer)
+			{
+				ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP), true);
+				ImGui::PropertyValue("Server port", protocol.serverPort);
+			}
+
 			ImGui::PropertySeparator();
 
 			//ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
@@ -128,6 +127,11 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySlider("Reference white", solver.settings.referenceWhite);
 
 			ImGui::EndProperties();
+		}
+
+		if (setupDirty)
+		{
+			saveSetup();
 		}
 
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
@@ -324,6 +328,48 @@ void projector_manager::notifyClients(const std::vector<std::string>& myProjecto
 	allProjectors.insert(allProjectors.end(), remoteProjectors.begin(), remoteProjectors.end());
 
 	//notifyProjectorNetworkOnSceneLoad(context, allProjectors);
+}
+
+void projector_manager::loadSetup()
+{
+	std::ifstream stream("setup");
+	YAML::Node n = YAML::Load(stream);
+
+	for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
+	{
+		if (auto monitorNode = n[win32_window::allConnectedMonitors[i].uniqueID]) {	isProjectorIndex[i] = monitorNode.as<bool>(); }
+	}
+
+	if (auto serverNode = n["Server"]) { isServer = serverNode.as<bool>(); }
+
+	if (!isServer)
+	{
+		if (auto sNode = n["Server IP"]) { strncpy(protocol.serverIP, sNode.as<std::string>().c_str(), sizeof(protocol.serverIP)); }
+		if (auto sNode = n["Server Port"]) { protocol.serverPort = sNode.as<uint32>(); }
+	}
+}
+
+void projector_manager::saveSetup()
+{
+	YAML::Emitter out;
+
+	out << YAML::BeginMap;
+	for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
+	{
+		out << YAML::Key << win32_window::allConnectedMonitors[i].uniqueID << YAML::Value << isProjectorIndex[i];
+	}
+
+	out << YAML::Key << "Server" << YAML::Value << isServer;
+	if (!isServer)
+	{
+		out << YAML::Key << "Server IP" << YAML::Value << protocol.serverIP;
+		out << YAML::Key << "Server Port" << YAML::Value << protocol.serverPort;
+	}
+
+	out << YAML::EndMap;
+
+	std::ofstream fout("setup");
+	fout << out.c_str();
 }
 
 void projector_manager::createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)

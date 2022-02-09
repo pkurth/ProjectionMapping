@@ -170,7 +170,7 @@ bool projector_network_client::initialize(game_scene& scene, projector_manager* 
 	getLocalIPAddress(clientAddress);
 	LOG_MESSAGE("Client created, IP: %s", clientAddress);
 
-	//sendHello();
+	sendHello();
 
 	return true;
 }
@@ -224,7 +224,7 @@ bool projector_network_server::update(float dt)
 			case message_hello_from_client:
 			{
 				uint16 clientID = runningClientID++;
-				LOG_MESSAGE("Assigning new client ID %u", clientID);
+				LOG_MESSAGE("New client connected. Assigning new client ID %u", clientID);
 
 				client_connection connection = { clientID, clientAddress };
 				clientConnections.push_back(connection);

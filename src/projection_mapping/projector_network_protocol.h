@@ -52,7 +52,7 @@ private:
 	network_socket clientSocket;
 
 	bool connected = false;
-	uint16 clientID = -1;
+	uint32 clientID = -1;
 
 
 	uint32 latestSettingsMessageID = 0;

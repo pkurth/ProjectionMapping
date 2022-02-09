@@ -25,6 +25,9 @@ struct projector_manager
 
 private:
 
+	void loadSetup();
+	void saveSetup();
+
 	software_window blackWindows[MAX_NUM_PROJECTORS];
 
 	std::unordered_set<std::string> remoteMonitors;

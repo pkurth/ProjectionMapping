@@ -49,8 +49,6 @@ private:
 	float whiteValue = 0.5f;
 	calibration_solver_settings solverSettings;
 
-
-	bool calibrateIndex[projector_manager::MAX_NUM_PROJECTORS] = {};
 	camera_intrinsics startIntrinsics[projector_manager::MAX_NUM_PROJECTORS] = {};
 
 
