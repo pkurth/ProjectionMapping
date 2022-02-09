@@ -7,6 +7,19 @@
 #include "rendering/material.h"
 #include "projector.h"
 
+
+enum projector_mode
+{
+	projector_mode_calibration,
+	projector_mode_projection_mapping,
+};
+
+static const char* projectorModeNames[] =
+{
+	"Calibration",
+	"Projection mapping",
+};
+
 struct projector_solver_settings
 {
 	bool applySolverIntensity = false;
@@ -23,6 +36,8 @@ struct projector_solver_settings
 	uint32 colorDiscontinuitySmoothRadius = 8;
 
 	float colorMaskStrength = 0.7f;
+
+	projector_mode mode = projector_mode_projection_mapping;
 };
 
 struct projector_solver

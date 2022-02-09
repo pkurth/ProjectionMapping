@@ -303,20 +303,35 @@ void projector_renderer::present(dx_command_list* cl,
 
 void projector_renderer::finalizeImage(dx_command_list* cl)
 {
-	barrier_batcher(cl)
-		.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-	if (applySolverIntensity)
+	if (renderBlack)
 	{
-		present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
+		barrier_batcher(cl)
+			.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+		cl->clearRTV(frameResult, 0.f, 0.f, 0.f, 0.f);
+
+		barrier_batcher(cl)
+			.transition(frameResult, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON);
 	}
 	else
 	{
-		::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
+		barrier_batcher(cl)
+			.transition(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+		if (applySolverIntensity)
+		{
+			present(cl, ldrPostProcessingTexture, solverIntensityTexture, frameResult, sharpen_settings{ 0.f });
+		}
+		else
+		{
+			::present(cl, ldrPostProcessingTexture, frameResult, sharpen_settings{ 0.f });
+		}
+
+		barrier_batcher(cl)
+			.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
 	}
 
 	barrier_batcher(cl)
-		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
+		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 

@@ -40,6 +40,7 @@ struct projector_renderer
 
 
 	static inline bool applySolverIntensity = false;
+	static inline bool renderBlack = false;
 
 private:
 

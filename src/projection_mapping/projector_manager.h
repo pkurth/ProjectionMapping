@@ -3,8 +3,10 @@
 #include "projector.h"
 #include "projector_solver.h"
 #include "scene/scene.h"
+#include "projector_network_protocol.h"
 
 #include <unordered_set>
+
 
 struct projector_manager
 {
@@ -14,16 +16,6 @@ struct projector_manager
 	void updateAndRender(float dt);
 
 	void onSceneLoad();
-
-	// Received by server.
-	void onHelloMessageFromClient(const std::vector<std::string>& remoteMonitors);
-	void onLocalCalibrationMessageFromClient(std::unordered_map<std::string, projector_calibration>&& calibrations);
-
-	// Received by client.
-	void onSetupMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
-
-
-	void reportLocalCalibration(const std::string& monitor, camera_intrinsics intrinsics, uint32 width, uint32 height, vec3 position, quat rotation);
 
 	projector_solver solver;
 	projector_context context;
@@ -45,4 +37,9 @@ private:
 	bool detailWindowOpen = false;
 
 	bool isServer = true;
+
+	projector_network_protocol protocol;
+
+	friend struct projector_network_server;
+	friend struct projector_network_client;
 };

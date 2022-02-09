@@ -6,7 +6,6 @@
 
 #include "post_processing_rs.hlsli"
 
-#include "projector_network_protocol.h"
 
 projector_manager::projector_manager(game_scene& scene)
 {
@@ -28,26 +27,27 @@ void projector_manager::updateAndRender(float dt)
 	{
 		if (ImGui::BeginProperties())
 		{
-			ImGui::PropertyDisableableCheckbox("Server", isServer, !projectorNetworkInitialized);
+			ImGui::PropertyDisableableCheckbox("Server", isServer, !protocol.initialized);
 			if (!isServer)
 			{
-				ImGui::PropertyInputText("Server IP", SERVER_IP, sizeof(SERVER_IP));
-				ImGui::PropertyInput("Server port", SERVER_PORT);
+				ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP));
+				ImGui::PropertyInput("Server port", protocol.serverPort);
 			}
 
-			if (ImGui::PropertyDisableableButton("Network", isServer ? "Start" : "Connect", !projectorNetworkInitialized))
+			if (ImGui::PropertyDisableableButton("Network", isServer ? "Start" : "Connect", !protocol.initialized))
 			{
-				startProjectorNetworkProtocol(*scene, this, isServer);
+				protocol.start(*scene, this, isServer);
 			}
 
-			if (projectorNetworkInitialized && isServer)
+			if (protocol.initialized && isServer)
 			{
-				ImGui::PropertyInputText("Server IP", SERVER_IP, sizeof(SERVER_IP), true);
-				ImGui::PropertyValue("Server port", SERVER_PORT);
+				ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP), true);
+				ImGui::PropertyValue("Server port", protocol.serverPort);
 			}
 
 			ImGui::PropertySeparator();
 
+			ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
 			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
 
 			ImGui::PropertySeparator();
@@ -75,6 +75,7 @@ void projector_manager::updateAndRender(float dt)
 		}
 
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
+		projector_renderer::renderBlack = solver.settings.mode == projector_mode_calibration;
 
 		if (ImGui::Button("Detailed view"))
 		{
@@ -109,7 +110,7 @@ void projector_manager::updateAndRender(float dt)
 	}
 	ImGui::End();
 
-	updateProjectorNetworkProtocol(dt);
+	protocol.update(dt);
 
 
 	if (detailWindowOpen)
@@ -247,50 +248,7 @@ void projector_manager::notifyClients(const std::vector<std::string>& myProjecto
 	allProjectors.insert(allProjectors.end(), myProjectors.begin(), myProjectors.end());
 	allProjectors.insert(allProjectors.end(), remoteProjectors.begin(), remoteProjectors.end());
 
-	notifyProjectorNetworkOnSceneLoad(context, allProjectors);
-}
-
-void projector_manager::onHelloMessageFromClient(const std::vector<std::string>& remoteMonitors)
-{
-	this->remoteMonitors.insert(remoteMonitors.begin(), remoteMonitors.end());
-
-
-	std::vector<std::string> myProjectors = getLocalProjectors();
-	std::vector<std::string> remoteProjectors = getRemoteProjectors();
-
-	createProjectors(myProjectors, remoteProjectors);
-	notifyClients(myProjectors, remoteProjectors);
-}
-
-void projector_manager::onLocalCalibrationMessageFromClient(std::unordered_map<std::string, projector_calibration>&& calibrations)
-{
-	this->context.knownProjectorCalibrations.merge(calibrations);
-
-	std::vector<std::string> myProjectors = getLocalProjectors();
-	std::vector<std::string> remoteProjectors = getRemoteProjectors();
-
-	createProjectors(myProjectors, remoteProjectors);
-	notifyClients(myProjectors, remoteProjectors);
-}
-
-void projector_manager::onSetupMessageFromServer(std::unordered_map<std::string, projector_calibration>&& calibrations, const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
-{
-	this->context.knownProjectorCalibrations = std::move(calibrations);
-
-	createProjectors(myProjectors, remoteProjectors);
-}
-
-void projector_manager::reportLocalCalibration(const std::string& monitor, camera_intrinsics intrinsics, uint32 width, uint32 height, vec3 position, quat rotation)
-{
-	context.knownProjectorCalibrations[monitor] = { rotation, position, width, height, intrinsics };
-
-	std::vector<std::string> myProjectors = getLocalProjectors();
-	std::vector<std::string> remoteProjectors = getRemoteProjectors();
-
-	createProjectors(myProjectors, remoteProjectors);
-	notifyClients(myProjectors, remoteProjectors); // If server.
-
-	notifyProjectorNetworkOnSceneLoad(context, myProjectors); // If client.
+	//notifyProjectorNetworkOnSceneLoad(context, allProjectors);
 }
 
 void projector_manager::createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)

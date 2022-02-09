@@ -1301,7 +1301,7 @@ void projector_system_calibration::update()
 	mutex.lock();
 	for (const auto& fc : finalCalibrations)
 	{
-		manager->reportLocalCalibration(fc.uniqueID, fc.intrinsics, fc.width, fc.height, fc.position, fc.rotation);
+		//manager->reportLocalCalibration(fc.uniqueID, fc.intrinsics, fc.width, fc.height, fc.position, fc.rotation);
 	}
 	finalCalibrations.clear();
 
