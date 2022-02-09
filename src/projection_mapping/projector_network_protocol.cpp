@@ -65,7 +65,7 @@ struct receive_buffer
 	}
 
 	template <typename T>
-	T* get(uint32 count)
+	T* get(uint32 count = 1)
 	{
 		uint32 s = (uint32)sizeof(T) * count;
 		if (offset + s > actualSize)
@@ -82,6 +82,16 @@ struct receive_buffer
 };
 
 
+struct hello_from_client_message
+{
+	char hostname[32];
+};
+
+struct client_monitor_info
+{
+	char description[64];
+	char uniqueID[128];
+};
 
 
 
@@ -212,7 +222,7 @@ bool projector_network_server::update(float dt)
 	{
 		messageBuffer.reset();
 
-		const message_header* header = messageBuffer.get<message_header>(1);
+		const message_header* header = messageBuffer.get<message_header>();
 		if (!header)
 		{
 			LOG_ERROR("Message is not even large enough for the header. Expected at least %u, got %u", (uint32)sizeof(message_header), messageBuffer.sizeRemaining);
@@ -223,11 +233,48 @@ bool projector_network_server::update(float dt)
 		{
 			case message_hello_from_client:
 			{
+				bool addressKnown = std::find_if(clientConnections.begin(), clientConnections.end(), [&](const client_connection& c) { return c.address == clientAddress; }) != clientConnections.end();
+				if (addressKnown)
+				{
+					LOG_MESSAGE("Received duplicate 'hello' from client. Ignoring message");
+					continue;
+				}
+
+				hello_from_client_message* msg = messageBuffer.get<hello_from_client_message>();
+				if (!msg)
+				{
+					LOG_ERROR("Message is smaller than sizeof(hello_from_client_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(hello_from_client_message), messageBuffer.sizeRemaining);
+					continue;
+				}
+				LOG_MESSAGE("Received message identifies client as '%s'", msg->hostname);
+
+				if (messageBuffer.sizeRemaining % sizeof(client_monitor_info) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(client_monitor_info). Expected multiple of %u, got %u", (uint32)sizeof(client_monitor_info), messageBuffer.sizeRemaining);
+					continue;
+				}
+
+				uint32 numMonitors = messageBuffer.sizeRemaining / (uint32)sizeof(client_monitor_info);
+				const client_monitor_info* monitors = messageBuffer.get<client_monitor_info>(numMonitors);
+
+				assert(messageBuffer.sizeRemaining == 0);
+
+
 				uint16 clientID = runningClientID++;
-				LOG_MESSAGE("New client connected. Assigning new client ID %u", clientID);
+				LOG_MESSAGE("Assigning new client ID %u", clientID);
 
 				client_connection connection = { clientID, clientAddress };
 				clientConnections.push_back(connection);
+
+				std::vector<std::string> descriptions;
+				std::vector<std::string> uniqueIDs;
+				for (uint32 i = 0; i < numMonitors; ++i)
+				{
+					descriptions.push_back(monitors[i].description);
+					uniqueIDs.push_back(monitors[i].uniqueID);
+				}
+
+				manager->network_newClient(msg->hostname, clientID, descriptions, uniqueIDs);
 			}
 		}
 	}
@@ -345,6 +392,26 @@ void projector_network_client::sendHello()
 	messageBuffer.header.type = message_hello_from_client;
 	messageBuffer.header.clientID = -1;
 	messageBuffer.header.messageID = 0;
+
+	std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
+
+	hello_from_client_message hello;
+	gethostname(hello.hostname, sizeof(hello.hostname));
+
+	uint32 numMonitors = (uint32)monitors.size();
+
+	messageBuffer.pushValue(hello);
+
+	client_monitor_info* messages = messageBuffer.push<client_monitor_info>(numMonitors);
+
+	for (uint32 i = 0; i < numMonitors; ++i)
+	{
+		client_monitor_info& msg = messages[i];
+		monitor_info& mon = monitors[i];
+
+		strncpy_s(msg.description, mon.description.c_str(), sizeof(msg.description));
+		strncpy_s(msg.uniqueID, mon.uniqueID.c_str(), sizeof(msg.uniqueID));
+	}
 
 	sendToServer(messageBuffer);
 }

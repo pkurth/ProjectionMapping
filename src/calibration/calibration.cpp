@@ -110,6 +110,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 		return false;
 	}
 
+	auto oldMode = manager->solver.settings.mode;
 	manager->solver.settings.mode = projector_mode_calibration;
 
 	patternWindow->setAlwaysOnTop();
@@ -242,7 +243,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 
 		cancel = false;
 		state = calibration_state_none;
-		manager->solver.settings.mode = projector_mode_projection_mapping;
+		manager->solver.settings.mode = oldMode;
 	});
 
 	HANDLE handle = (HANDLE)thread.native_handle();

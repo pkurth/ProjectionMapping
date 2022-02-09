@@ -25,6 +25,25 @@ struct projector_manager
 
 private:
 
+	// Network callbacks.
+	void network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs);
+
+
+	struct client_monitor
+	{
+		std::string description;
+		std::string uniqueID;
+	};
+
+	struct client_info
+	{
+		uint32 clientID;
+		std::vector<client_monitor> monitors;
+	};
+
+	std::unordered_map<std::string, client_info> clients;
+
+
 	void loadSetup();
 	void saveSetup();
 

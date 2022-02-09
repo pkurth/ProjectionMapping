@@ -45,37 +45,43 @@ void projector_manager::updateAndRender(float dt)
 	{
 		auto& monitors = win32_window::allConnectedMonitors;
 
-		if (ImGui::BeginTable("##ProjTable", 2, ImGuiTableFlags_Resizable))
+		if (ImGui::BeginTree("Local projectors"))
 		{
-			ImGui::TableSetupColumn("Monitor");
-			ImGui::TableSetupColumn("Is projector");
-
-			ImGui::TableHeadersRow();
-
-			for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+			if (ImGui::BeginTable("##ProjTable", 2, ImGuiTableFlags_Resizable))
 			{
-				ImGui::PushID(i);
+				ImGui::TableSetupColumn("Monitor");
+				ImGui::TableSetupColumn("Is projector");
 
-				ImGui::TableNextRow();
+				ImGui::TableHeadersRow();
 
-				ImGui::TableNextColumn();
-				ImGui::Text(monitors[i].description.c_str());
-
-				if (ImGui::IsItemHovered())
+				for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 				{
-					ImGui::BeginTooltip();
-					ImGui::Text(monitors[i].uniqueID.c_str());
-					ImGui::EndTooltip();
+					ImGui::PushID(i);
+
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+					ImGui::Text(monitors[i].description.c_str());
+
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::BeginTooltip();
+						ImGui::Text(monitors[i].uniqueID.c_str());
+						ImGui::EndTooltip();
+					}
+
+					ImGui::TableNextColumn();
+					setupDirty |= ImGui::Checkbox("##isProj", &isProjectorIndex[i]);
+
+					ImGui::PopID();
 				}
 
-				ImGui::TableNextColumn();
-				setupDirty |= ImGui::Checkbox("##isProj", &isProjectorIndex[i]);
-
-				ImGui::PopID();
+				ImGui::EndTable();
 			}
 
-			ImGui::EndTable();
+			ImGui::EndTree();
 		}
+		
 
 		if (ImGui::BeginProperties())
 		{
@@ -102,7 +108,7 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::PropertySeparator();
 
-			//ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
+			ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
 			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
 
 			ImGui::PropertySeparator();
@@ -318,6 +324,20 @@ void projector_manager::onSceneLoad()
 	std::vector<std::string> remoteProjectors = getRemoteProjectors();
 
 	createProjectors(myProjectors, remoteProjectors);
+}
+
+void projector_manager::network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs)
+{
+	client_info info;
+
+	info.clientID = clientID;
+
+	for (uint32 i = 0; i < (uint32)uniqueIDs.size(); ++i)
+	{
+		info.monitors.push_back({ descriptions[i], uniqueIDs[i] });
+	}
+	
+	clients[hostname] = info;
 }
 
 void projector_manager::loadSetup()
