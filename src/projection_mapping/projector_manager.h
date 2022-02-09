@@ -20,7 +20,12 @@ struct projector_manager
 	projector_solver solver;
 	projector_context context;
 
+	static constexpr uint32 MAX_NUM_PROJECTORS = 4;
+	bool isProjectorIndex[MAX_NUM_PROJECTORS] = {};
+
 private:
+
+	software_window blackWindows[MAX_NUM_PROJECTORS];
 
 	std::unordered_set<std::string> remoteMonitors;
 

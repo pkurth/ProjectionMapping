@@ -498,8 +498,11 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, bool alignDepthToColor
 
             if (isDepthSensor)
             {
-                depthScale = rs2_get_depth_scale(sensor, &e);
-                assertRealsenseSuccess(e);
+                float ds = rs2_get_depth_scale(sensor, &e);
+                if (checkRealsenseSuccess(e))
+                {
+                    depthScale = ds;
+                }
                 //depthScale = rs2_get_option((const rs2_options*)sensor, RS2_OPTION_DEPTH_UNITS, &e);
             }
             else

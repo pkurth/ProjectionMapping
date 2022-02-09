@@ -50,6 +50,8 @@ struct win32_window
 	void moveToScreenID(int screenID);
 	void moveToMonitor(const struct monitor_info& monitor);
 
+	void setAlwaysOnTop();
+
 	void makeActive();
 
 	void setCustomWindowStyle(custom_window_style style = {});

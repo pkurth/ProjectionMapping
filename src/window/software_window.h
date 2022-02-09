@@ -8,6 +8,9 @@ struct software_window : win32_window
 	software_window(software_window&) = delete;
 	software_window(software_window&& o) noexcept;
 
+	software_window& operator=(const software_window&) = delete;
+	software_window& operator=(software_window&&) = default;
+
 	bool initialize(const TCHAR* name, uint32 requestedClientWidth, uint32 requestedClientHeight, 
 		uint8* buffer, uint32 numChannels, uint32 bufferWidth = 0, uint32 bufferHeight = 0);
 

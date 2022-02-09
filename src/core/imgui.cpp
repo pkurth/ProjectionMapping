@@ -528,9 +528,15 @@ namespace ImGui
 		return result;
 	}
 
-	bool PropertyDisableableCheckbox(const char* label, bool& v, bool enabled)
+	bool PropertyDisableableCheckbox(const char* label, bool& v, bool enabled, const char* tooltip)
 	{
 		pre(label);
+		if (tooltip && ImGui::IsItemHovered())
+		{
+			ImGui::BeginTooltip();
+			ImGui::Text(tooltip);
+			ImGui::EndTooltip();
+		}
 		bool result = ImGui::DisableableCheckbox("", v, enabled);
 		post();
 		return result;

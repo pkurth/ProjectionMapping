@@ -3,6 +3,7 @@
 #include "core/camera.h"
 #include "core/log.h"
 #include "window/dx_window.h"
+#include "window/software_window.h"
 #include "projector_renderer.h"
 
 
@@ -108,8 +109,9 @@ struct projector_component
 	uint32 width, height;
 	projector_renderer renderer;
 	camera_intrinsics intrinsics;
-	dx_window window;
 	vec4 frustumColor;
+
+	dx_window window;
 
 	static inline vec4 frustumColors[] =
 	{

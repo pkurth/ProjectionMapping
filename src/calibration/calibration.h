@@ -49,12 +49,9 @@ private:
 	float whiteValue = 0.5f;
 	calibration_solver_settings solverSettings;
 
-	static constexpr uint32 MAX_NUM_PROJECTORS = 16;
 
-	bool isProjectorIndex[MAX_NUM_PROJECTORS] = {};
-	bool calibrateIndex[MAX_NUM_PROJECTORS] = {};
-
-	camera_intrinsics startIntrinsics[MAX_NUM_PROJECTORS] = {};
+	bool calibrateIndex[projector_manager::MAX_NUM_PROJECTORS] = {};
+	camera_intrinsics startIntrinsics[projector_manager::MAX_NUM_PROJECTORS] = {};
 
 
 	ref<dx_texture> depthToColorTexture;

@@ -98,7 +98,7 @@ namespace ImGui
 	inline void PropertyValue(const char* label, quat v, const char* format = "%.3f, %.3f, %.3f, %.3f") { ImGui::PropertyValue(label, format, v.x, v.y, v.z, v.w); }
 
 	bool PropertyCheckbox(const char* label, bool& v);
-	bool PropertyDisableableCheckbox(const char* label, bool& v, bool enabled);
+	bool PropertyDisableableCheckbox(const char* label, bool& v, bool enabled, const char* tooltip = 0);
 
 	bool PropertySlider(const char* label, float& f, float minValue = 0.f, float maxValue = 1.f, const char* format = "%.3f");
 	bool PropertySlider(const char* label, vec2& f, float minValue = 0.f, float maxValue = 1.f, const char* format = "%.3f");

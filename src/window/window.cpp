@@ -581,6 +581,11 @@ void win32_window::moveToMonitor(const monitor_info& monitor)
 	moveTo(monitor.x, monitor.y);
 }
 
+void win32_window::setAlwaysOnTop()
+{
+	SetWindowPos(windowHandle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+}
+
 static std::string convertUniqueIDToFolderFriendlyName(const std::string& uniqueID)
 {
 	std::string result = uniqueID;

@@ -11,6 +11,20 @@ projector_manager::projector_manager(game_scene& scene)
 {
 	this->scene = &scene;
 	solver.initialize();
+
+
+	static uint8 black = 0;
+
+	for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
+	{
+		auto& monitor = win32_window::allConnectedMonitors[i];
+
+		blackWindows[i].initialize(L"Black", 1, 1, &black, 1, 1, 1);
+		blackWindows[i].moveToMonitor(monitor);
+		blackWindows[i].toggleFullscreen();
+		blackWindows[i].setAlwaysOnTop();
+		blackWindows[i].toggleVisibility(); // Make invisible.
+	}
 }
 
 void projector_manager::beginFrame()
@@ -45,9 +59,51 @@ void projector_manager::updateAndRender(float dt)
 				ImGui::PropertyValue("Server port", protocol.serverPort);
 			}
 
+			ImGui::EndProperties();
+		}
+
+
+		auto& monitors = win32_window::allConnectedMonitors;
+
+		if (ImGui::BeginTable("##ProjTable", 2, ImGuiTableFlags_Resizable))
+		{
+			ImGui::TableSetupColumn("Monitor");
+			ImGui::TableSetupColumn("Is projector");
+
+			ImGui::TableHeadersRow();
+
+			for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+			{
+				ImGui::PushID(i);
+
+				ImGui::TableNextRow();
+
+				ImGui::TableNextColumn();
+				ImGui::Text(monitors[i].description.c_str());
+
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::BeginTooltip();
+					ImGui::Text(monitors[i].uniqueID.c_str());
+					ImGui::EndTooltip();
+				}
+
+				ImGui::TableNextColumn();
+				ImGui::Checkbox("##isProj", &isProjectorIndex[i]);
+
+				ImGui::PopID();
+			}
+
+			ImGui::EndTable();
+		}
+
+
+
+		if (ImGui::BeginProperties())
+		{
 			ImGui::PropertySeparator();
 
-			ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
+			//ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
 			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
 
 			ImGui::PropertySeparator();
@@ -75,7 +131,26 @@ void projector_manager::updateAndRender(float dt)
 		}
 
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
-		projector_renderer::renderBlack = solver.settings.mode == projector_mode_calibration;
+		
+		for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
+		{
+			if (isProjectorIndex[i])
+			{
+				bool black = (solver.settings.mode == projector_mode_calibration);
+
+				if (black != blackWindows[i].visible)
+				{
+					blackWindows[i].toggleVisibility();
+				}
+			}
+			else
+			{
+				if (blackWindows[i].visible)
+				{
+					blackWindows[i].toggleVisibility();
+				}
+			}
+		}
 
 		if (ImGui::Button("Detailed view"))
 		{

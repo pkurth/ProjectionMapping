@@ -54,6 +54,8 @@ static inline std::string getTime()
 	return time;
 }
 
+static constexpr uint32 MAX_NUM_PROJECTORS = projector_manager::MAX_NUM_PROJECTORS;
+
 bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 {
 	auto group = scene.group(entt::get<tracking_component, raster_component, transform_component>);
@@ -73,7 +75,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 
 	for (uint32 i = 0; i < MAX_NUM_PROJECTORS; ++i)
 	{
-		totalNumProjectors += isProjectorIndex[i];
+		totalNumProjectors += manager->isProjectorIndex[i];
 		numProjectorsToCalibrate += calibrateIndex[i];
 
 		if (calibrateIndex[i])
@@ -99,31 +101,20 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 		return true;
 	}
 
-	uint32 numBlackWindows = totalNumProjectors - 1;
-	software_window* windows = new software_window[totalNumProjectors];
-	software_window* blackWindows = windows;
-	software_window* patternWindow = windows + (totalNumProjectors - 1);
-
-	static uint8 black = 0; // Static, because the pointer needs to remain valid.
-
-	for (uint32 i = 0; i < numBlackWindows; ++i)
-	{
-		if (!blackWindows[i].initialize(L"Black", 1, 1, &black, 1, 1, 1))
-		{
-			LOG_ERROR("Failed to open black window");
-			delete[] windows;
-			return false;
-		}
-	}
+	software_window* patternWindow = new software_window;
 
 	uint8 dummyPattern = 0;
 
 	if (!patternWindow->initialize(L"Pattern", 1, 1, &dummyPattern, 1, 1, 1))
 	{
 		LOG_ERROR("Failed to open pattern window");
-		delete[] windows;
+		delete[] patternWindow;
 		return false;
 	}
+
+	manager->solver.settings.mode = projector_mode_calibration;
+
+	patternWindow->setAlwaysOnTop();
 
 
 	state = calibration_state_projecting_patterns;
@@ -158,23 +149,6 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 		{
 			if (calibrateIndex[proj])
 			{
-				uint32 windowIndex = 0;
-				for (uint32 i = 0; i < MAX_NUM_PROJECTORS; ++i)
-				{
-					if (isProjectorIndex[i] && i != proj)
-					{
-						software_window& window = blackWindows[windowIndex++];
-
-						if (window.fullscreen)
-						{
-							window.toggleFullscreen();
-						}
-						window.moveToMonitor(monitors[i]);
-						window.toggleFullscreen();
-						window.swapBuffers();
-					}
-				}
-
 				uint32 width = (uint32)monitors[proj].width;
 				uint32 height = (uint32)monitors[proj].height;
 
@@ -189,7 +163,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 				patternWindow->moveToMonitor(monitors[proj]);
 				patternWindow->toggleFullscreen();
 
-				Sleep(1000);
+				Sleep(3000);
 
 				uint32 numGrayCodes = getNumberOfGraycodePatternsRequired(width, height);
 
@@ -265,11 +239,12 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 		delete[] pattern;
 
 		mutex.lock();
-		windowsToClose.push_back(windows);
+		windowsToClose.push_back(patternWindow);
 		mutex.unlock();
 
 		cancel = false;
 		state = calibration_state_none;
+		manager->solver.settings.mode = projector_mode_projection_mapping;
 	});
 
 	HANDLE handle = (HANDLE)thread.native_handle();
@@ -1144,77 +1119,37 @@ bool projector_system_calibration::edit(game_scene& scene)
 
 	auto& monitors = win32_window::allConnectedMonitors;
 
-	if (ImGui::BeginTable("##ProjTable", 3, ImGuiTableFlags_Resizable))
+	if (ImGui::BeginProperties())
 	{
-		ImGui::TableSetupColumn("Monitor");
-		ImGui::TableSetupColumn("Is projector");
-		ImGui::TableSetupColumn("Calibrate");
-
-		ImGui::TableHeadersRow();
-
 		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 		{
-			ImGui::PushID(i);
-
-			ImGui::TableNextRow();
-
-			ImGui::TableNextColumn();
-			ImGui::Text(monitors[i].description.c_str());
-
-			if (ImGui::IsItemHovered())
+			if (manager->isProjectorIndex[i])
 			{
-				ImGui::BeginTooltip();
-				ImGui::Text(monitors[i].uniqueID.c_str());
-				ImGui::EndTooltip();
-			}
+				ImGui::PushID(i);
 
-			ImGui::TableNextColumn();
-			ImGui::DisableableCheckbox("##isProj", isProjectorIndex[i], uiActive);
-
-			if (!isProjectorIndex[i])
-			{
-				calibrateIndex[i] = false;
-			}
-
-			ImGui::TableNextColumn();
-			ImGui::DisableableCheckbox("##calib", calibrateIndex[i], uiActive && isProjectorIndex[i]);
-
-
-			if (calibrateIndex[i])
-			{
-				ImGui::TableNextRow();
-				ImGui::TableNextColumn();
-
-				if (ImGui::BeginProperties())
+				ImGui::PropertyDisableableCheckbox(monitors[i].description.c_str(), calibrateIndex[i], uiActive, monitors[i].uniqueID.c_str());
+				
+				if (calibrateIndex[i])
 				{
 					if (!uiActive)
 					{
 						ImGui::BeginDisabled();
 					}
 
-					ImGui::PropertyInput("    Start fx", startIntrinsics[i].fx);
-					ImGui::PropertyInput("    Start fy", startIntrinsics[i].fy);
-					ImGui::PropertyInput("    Start cx", startIntrinsics[i].cx);
-					ImGui::PropertyInput("    Start cy", startIntrinsics[i].cy);
+					ImGui::PropertyInput("  Start fx", startIntrinsics[i].fx);
+					ImGui::PropertyInput("  Start fy", startIntrinsics[i].fy);
+					ImGui::PropertyInput("  Start cx", startIntrinsics[i].cx);
+					ImGui::PropertyInput("  Start cy", startIntrinsics[i].cy);
 
 					if (!uiActive)
 					{
 						ImGui::EndDisabled();
 					}
-
-					ImGui::EndProperties();
 				}
+				ImGui::PopID();
 			}
-
-
-			ImGui::PopID();
 		}
 
-		ImGui::EndTable();
-	}
-
-	if (ImGui::BeginProperties())
-	{
 		if (!uiActive)
 		{
 			ImGui::BeginDisabled();
