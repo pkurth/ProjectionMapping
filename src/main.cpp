@@ -129,6 +129,7 @@ int main(int argc, char** argv)
 
 	projector_renderer::initializeCommon();
 	projector_manager projectorManager(app.getScene());
+
 	depth_tracker tracker;
 	projector_system_calibration calibration(&tracker, &projectorManager);
 
@@ -264,7 +265,7 @@ int main(int argc, char** argv)
 		renderer.beginFrame(renderWidth, renderHeight);
 		
 		app.update(input, dt);
-		tracker.update();
+		tracker.update(app.getScene());
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();

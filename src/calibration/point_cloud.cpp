@@ -8,6 +8,8 @@
 void image_point_cloud::constructFromRendering(const image<vec4>& rendering, const image<vec2>& unprojectTable)
 {
 	entries.resize(rendering.width, rendering.height);
+	validPixelMask.resize(rendering.width, rendering.height);
+
 	numEntries = 0;
 
 	for (uint32 y = 0; y < rendering.height; ++y)
@@ -29,18 +31,26 @@ void image_point_cloud::constructFromRendering(const image<vec4>& rendering, con
 
 				++numEntries;
 			}
+
+			validPixelMask(y, x) = entry.position.z != 0.f ? 255 : 0;
 		}
 	}
 }
 
-image<uint8> image_point_cloud::createValidMask()
+void image_point_cloud::erode(uint32 numIterations)
 {
-	image<uint8> result;
-	result.convertFrom(entries, [](const point_cloud_entry& entry) -> uint8
+	::erode(validPixelMask, numIterations, false);
+
+	for (uint32 i = 0; i < entries.width * entries.height; ++i)
+	{
+		auto& entry = entries.data[i];
+		bool valid = entry.position.z != 0.f;
+		if (valid && validPixelMask.data[i] == 0)
 		{
-			return entry.position.z != 0.f ? 255 : 0;
-		});
-	return result;
+			entry.position.z = 0.f;
+			--numEntries;
+		}
+	}
 }
 
 static void writeHeaderToFile(std::ofstream& outfile, uint32 numPoints, bool writeNormals, bool writeColors, uint32 numLines = 0)
@@ -138,15 +148,13 @@ static bool outputEntriesArray(const fs::path& path, const point_cloud_entry* en
 
 bool image_point_cloud::writeToImage(const fs::path& path)
 {
-	image<uint8> output = createValidMask();
-
 	DirectX::Image image;
-	image.width = output.width;
-	image.height = output.height;
+	image.width = entries.width;
+	image.height = entries.height;
 	image.format = DXGI_FORMAT_R8_UNORM;
-	image.rowPitch = output.width * getFormatSize(image.format);
+	image.rowPitch = entries.width * getFormatSize(image.format);
 	image.slicePitch = image.rowPitch * image.height;
-	image.pixels = output.data;
+	image.pixels = validPixelMask.data;
 
 	bool result = saveImageToFile(path, image);
 

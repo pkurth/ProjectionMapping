@@ -295,10 +295,14 @@ void projector_manager::reportLocalCalibration(const std::string& monitor, camer
 
 void projector_manager::createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
 {
-	LOG_MESSAGE("Deleting current projectors");
-
 	// Delete all current projectors.
 	auto projectorGroup = scene->view<projector_component>();
+
+	if (projectorGroup.size() != 0)
+	{
+		LOG_MESSAGE("Deleting current projectors");
+	}
+
 	scene->registry.destroy(projectorGroup.begin(), projectorGroup.end());
 
 	for (auto& monitorID : myProjectors)

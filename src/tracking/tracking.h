@@ -6,6 +6,33 @@
 #include "rendering/render_pass.h"
 #include "scene/scene.h"
 
+
+struct tracking_data
+{
+	bool tracking = true;
+
+	ref<dx_buffer> icpDispatchBuffer;
+	ref<dx_buffer> correspondenceBuffer;
+	ref<dx_buffer> icpDispatchReadbackBuffer;
+
+	ref<dx_buffer> ataBuffer0;
+	ref<dx_buffer> ataBuffer1;
+
+	ref<dx_buffer> ataReadbackBuffer;
+
+	uint32 numCorrespondences = 0;
+	struct depth_tracker* tracker;
+};
+
+struct tracking_component
+{
+	ref<tracking_data> trackingData;
+};
+
+
+
+
+
 enum tracking_direction
 {
 	tracking_direction_camera_to_render,
@@ -18,42 +45,17 @@ enum tracking_rotation_representation
 	tracking_rotation_representation_lie,
 };
 
-enum tracker_ui_interaction_type
-{
-	tracker_ui_interaction_none,
-	tracker_ui_interaction_entity_selected,
-	tracker_ui_interaction_global_orientation,
-};
-
-struct tracker_ui_interaction
-{
-	tracker_ui_interaction_type type;
-
-	union
-	{
-		scene_entity entity;
-		quat globalOrientationDelta;
-	};
-};
-
 struct depth_tracker
 {
 	depth_tracker();
-	depth_tracker(depth_tracker&&) = default;
-	depth_tracker& operator=(const depth_tracker&) = delete;
-	depth_tracker& operator=(depth_tracker&&) = default;
 
-	tracker_ui_interaction drawSettings();
-	void update();
+	void drawSettings(game_scene& scene);
+	void update(game_scene& scene);
 	void visualizeDepth(ldr_render_pass* renderPass);
 
-	bool isEntityTracked(scene_entity entity);
-	bool trackEntity(scene_entity entity);
-	void clearTrackedEntities();
 
-	uint32 getNumberOfTrackedEntities() { return numTrackingJobs; }
-	scene_entity getTrackedEntity(uint32 index);
-	mat4 getTrackingMatrix(uint32 index);
+	mat4 getTrackingMatrix(const trs& transform);
+
 
 	vec3 globalCameraPosition = vec3(0.f, 0.f, 0.f);
 	quat globalCameraRotation = quat::identity;
@@ -68,29 +70,13 @@ private:
 
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
 	
-	struct tracking_job
-	{
-		ref<dx_buffer> icpDispatchBuffer;
-		ref<dx_buffer> correspondenceBuffer;
-		ref<dx_buffer> icpDispatchReadbackBuffer;
+	void initializeTrackingData(ref<tracking_data>& data);
 
-		ref<dx_buffer> ataBuffer0;
-		ref<dx_buffer> ataBuffer1;
-
-		ref<dx_buffer> ataReadbackBuffer;
-
-		scene_entity trackedEntity;
-
-		bool buffersAreInitialized = false;
-		bool used = false;
-
-		uint32 numCorrespondences;
-	};
-
-	void initializeTrackingJob(tracking_job& job, scene_entity entity);
-	void processLastTrackingJob(tracking_job& job);
-	void depthPrepass(dx_command_list* cl, tracking_job& job);
-	void createCorrespondences(dx_command_list* cl, tracking_job& job);
+	void processLastTrackingJob(scene_entity entity);
+	
+	void depthPrepass(dx_command_list* cl, const raster_component& rasterComponent, const transform_component& transform);
+	void createCorrespondences(dx_command_list* cl, tracking_component& trackingComponent, const raster_component& rasterComponent, const transform_component& transform);
+	void accumulateCorrespondences(dx_command_list* cl, tracking_component& trackingComponent);
 
 	ref<dx_texture> cameraDepthTexture;
 	ref<dx_texture> cameraUnprojectTableTexture;
@@ -100,9 +86,6 @@ private:
 
 	ref<dx_texture> renderedColorTexture; // For debug window only.
 	ref<dx_texture> renderedDepthTexture;
-
-	tracking_job trackingJobs[16];
-	uint32 numTrackingJobs = 0;
 
 	float positionThreshold = 0.1f;
 	float angleThreshold = deg2rad(45.f);

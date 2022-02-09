@@ -171,44 +171,31 @@ void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)
 	SET_NAME(renderedColorTexture->resource, "Rendered color");
 	SET_NAME(renderedDepthTexture->resource, "Rendered depth");
 	SET_NAME(cameraUnprojectTableTexture->resource, "Unproject table");
-
-	numTrackingJobs = 0;
-	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-	{
-		trackingJobs[i].used = false;
-	}
 }
 
-void depth_tracker::initializeTrackingJob(tracking_job& job, scene_entity entity)
+void depth_tracker::initializeTrackingData(ref<tracking_data>& data)
 {
-	if (!job.buffersAreInitialized)
-	{
-		job.icpDispatchBuffer = createBuffer(sizeof(tracking_indirect), 1, 0, true, true, D3D12_RESOURCE_STATE_GENERIC_READ);
-		job.correspondenceBuffer = createBuffer(sizeof(tracking_correspondence), camera.depthSensor.width * camera.depthSensor.height, 0, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
+	data->icpDispatchBuffer = createBuffer(sizeof(tracking_indirect), 1, 0, true, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	data->correspondenceBuffer = createBuffer(sizeof(tracking_correspondence), camera.depthSensor.width * camera.depthSensor.height, 0, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
 
-		job.icpDispatchReadbackBuffer = createReadbackBuffer(sizeof(tracking_indirect), NUM_BUFFERED_FRAMES);
+	data->icpDispatchReadbackBuffer = createReadbackBuffer(sizeof(tracking_indirect), NUM_BUFFERED_FRAMES);
 
-		uint32 maxNumICPThreadGroups = bucketize(camera.depthSensor.width * camera.depthSensor.height, TRACKING_ICP_BLOCK_SIZE);
-		job.ataBuffer0 = createBuffer(sizeof(tracking_ata_atb), maxNumICPThreadGroups, 0, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
+	uint32 maxNumICPThreadGroups = bucketize(camera.depthSensor.width * camera.depthSensor.height, TRACKING_ICP_BLOCK_SIZE);
+	data->ataBuffer0 = createBuffer(sizeof(tracking_ata_atb), maxNumICPThreadGroups, 0, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
 
-		uint32 maxNumReduceThreadGroups = bucketize(maxNumICPThreadGroups, TRACKING_ICP_BLOCK_SIZE);
-		job.ataBuffer1 = createBuffer(sizeof(tracking_ata_atb), maxNumReduceThreadGroups, 0, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
+	uint32 maxNumReduceThreadGroups = bucketize(maxNumICPThreadGroups, TRACKING_ICP_BLOCK_SIZE);
+	data->ataBuffer1 = createBuffer(sizeof(tracking_ata_atb), maxNumReduceThreadGroups, 0, true, false, D3D12_RESOURCE_STATE_GENERIC_READ);
 
-		job.ataReadbackBuffer = createReadbackBuffer(sizeof(tracking_ata_atb), NUM_BUFFERED_FRAMES * 2);
+	data->ataReadbackBuffer = createReadbackBuffer(sizeof(tracking_ata_atb), NUM_BUFFERED_FRAMES * 2);
 
-		job.buffersAreInitialized = true;
+	SET_NAME(data->icpDispatchBuffer->resource, "ICP dispatch");
+	SET_NAME(data->correspondenceBuffer->resource, "Correspondences");
+	SET_NAME(data->icpDispatchReadbackBuffer->resource, "ICP dispatch readback");
+	SET_NAME(data->ataBuffer0->resource, "ATA 0");
+	SET_NAME(data->ataBuffer1->resource, "ATA 1");
+	SET_NAME(data->ataReadbackBuffer->resource, "ATA readback");
 
-
-		SET_NAME(job.icpDispatchBuffer->resource, "ICP dispatch");
-		SET_NAME(job.correspondenceBuffer->resource, "Correspondences");
-		SET_NAME(job.icpDispatchReadbackBuffer->resource, "ICP dispatch readback");
-		SET_NAME(job.ataBuffer0->resource, "ATA 0");
-		SET_NAME(job.ataBuffer1->resource, "ATA 1");
-		SET_NAME(job.ataReadbackBuffer->resource, "ATA readback");
-	}
-
-	job.used = true;
-	job.trackedEntity = entity;
+	data->tracker = this;
 }
 
 struct vec6
@@ -457,48 +444,39 @@ static rotation_translation lieUpdate(vec6 x, float smoothing)
 
 
 
-void depth_tracker::processLastTrackingJob(tracking_job& job)
+void depth_tracker::processLastTrackingJob(scene_entity entity)
 {
-	if (!job.used)
+	tracking_component& trackingComponent = entity.getComponent<tracking_component>();
+	ref<tracking_data>& trackingData = trackingComponent.trackingData;
+
+	if (!trackingData)
 	{
 		return;
 	}
-
-	scene_entity trackedEntity = job.trackedEntity;
-	assert(trackedEntity);
-
-	// If entity has been deleted, don't track it anymore.
-	if (!trackedEntity.isValid())
-	{
-		job.used = false;
-		--numTrackingJobs;
-		return;
-	}
-
-	assert(job.buffersAreInitialized);
 
 	CPU_PROFILE_BLOCK("Process last tracking result");
 
-	tracking_indirect* mappedIndirect = (tracking_indirect*)mapBuffer(job.icpDispatchReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
+
+	tracking_indirect* mappedIndirect = (tracking_indirect*)mapBuffer(trackingData->icpDispatchReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
 	tracking_indirect indirect = mappedIndirect[dxContext.bufferedFrameID];
-	unmapBuffer(job.icpDispatchReadbackBuffer, false);
+	unmapBuffer(trackingData->icpDispatchReadbackBuffer, false);
 
 	//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
 	bool correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
-	job.numCorrespondences = indirect.counter;
+	trackingData->numCorrespondences = indirect.counter;
 
 
-	if (tracking && correspondencesValid)
+	if (tracking && correspondencesValid && trackingData->tracking)
 	{
 		// Due to the flip-flop reduction (below), we have to figure out in which buffer the final result has been written.
 		uint32 ataBufferIndex = 0;
 		if (indirect.reduce1.ThreadGroupCountX == 0) { ataBufferIndex = 1; }
 		if (indirect.reduce0.ThreadGroupCountX == 0) { ataBufferIndex = 0; }
 
-		tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(job.ataReadbackBuffer, true, map_range{ 2 * dxContext.bufferedFrameID, 2 });
+		tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(trackingData->ataReadbackBuffer, true, map_range{ 2 * dxContext.bufferedFrameID, 2 });
 		tracking_ata ata = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].ata;
 		tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
-		unmapBuffer(job.ataReadbackBuffer, false);
+		unmapBuffer(trackingData->ataReadbackBuffer, false);
 
 		vec6 x = solve(ata, atb);
 
@@ -548,28 +526,15 @@ void depth_tracker::processLastTrackingJob(tracking_job& job)
 		rotation = globalCameraRotation * rotation * conjugate(globalCameraRotation);
 		translation = globalCameraRotation * translation;
 
-		if (trackedEntity)
-		{
-			transform_component& transform = trackedEntity.getComponent<transform_component>();
-			transform.rotation = rotation * transform.rotation;
-			transform.position = rotation * transform.position + translation;
-		}
+		transform_component& transform = entity.getComponent<transform_component>();
+		transform.rotation = rotation * transform.rotation;
+		transform.position = rotation * transform.position + translation;
 	}
 }
 
-void depth_tracker::depthPrepass(dx_command_list* cl, tracking_job& job)
+void depth_tracker::depthPrepass(dx_command_list* cl, const raster_component& rasterComponent, const transform_component& transform)
 {
-	if (!job.used)
-	{
-		return;
-	}
-
-	scene_entity trackedEntity = job.trackedEntity;
-	assert(trackedEntity);
-	assert(job.buffersAreInitialized);
-
-	auto& rasterComponent = trackedEntity.getComponent<raster_component>();
-	auto& transform = trackedEntity.getComponent<transform_component>();
+	PROFILE_ALL(cl, "Depth pre-pass");
 
 	auto& i = camera.depthSensor.intrinsics;
 	create_correspondences_vs_cb vscb;
@@ -580,8 +545,6 @@ void depth_tracker::depthPrepass(dx_command_list* cl, tracking_job& job)
 		* trsToMat4(transform);
 	vscb.p = createPerspectiveProjectionMatrix((float)camera.depthSensor.width, (float)camera.depthSensor.height, i.fx, i.fy, i.cx, i.cy, 0.1f, -1.f);
 
-
-	PROFILE_ALL(cl, "Depth pre-pass");
 
 	cl->setPipelineState(*createCorrespondencesDepthOnlyPipeline.pipeline);
 	cl->setGraphicsRootSignature(*createCorrespondencesDepthOnlyPipeline.rootSignature);
@@ -604,29 +567,18 @@ void depth_tracker::depthPrepass(dx_command_list* cl, tracking_job& job)
 	}
 }
 
-void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job)
+void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_component& trackingComponent, const raster_component& rasterComponent, const transform_component& transform)
 {
-	if (!job.used)
-	{
-		return;
-	}
-
-	scene_entity trackedEntity = job.trackedEntity;
-	assert(trackedEntity);
-	assert(job.buffersAreInitialized);
-
-
 	PROFILE_ALL(cl, "Create correspondences");
 
+	auto& trackingData = trackingComponent.trackingData;
 
 	barrier_batcher(cl)
-		.transition(job.correspondenceBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(job.ataBuffer0, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(job.ataBuffer1, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-		.transition(job.icpDispatchBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		.transition(trackingData->correspondenceBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+		.transition(trackingData->ataBuffer0, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+		.transition(trackingData->ataBuffer1, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+		.transition(trackingData->icpDispatchBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	auto& rasterComponent = trackedEntity.getComponent<raster_component>();
-	auto& transform = trackedEntity.getComponent<transform_component>();
 
 	auto& i = camera.depthSensor.intrinsics;
 	create_correspondences_vs_cb vscb;
@@ -637,47 +589,51 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 		* trsToMat4(transform);
 	vscb.p = createPerspectiveProjectionMatrix((float)camera.depthSensor.width, (float)camera.depthSensor.height, i.fx, i.fy, i.cx, i.cy, 0.1f, -1.f);
 
+
+	cl->clearUAV(trackingData->icpDispatchBuffer);
+
+	cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
+	cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
+
+	auto renderTarget = dx_render_target(renderedDepthTexture->width, renderedDepthTexture->height)
+		.colorAttachment(renderedColorTexture)
+		.depthAttachment(renderedDepthTexture);
+
+	cl->setRenderTarget(renderTarget);
+	cl->setViewport(renderTarget.viewport);
+
+	cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
+	cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
+	cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
+
+	create_correspondences_ps_cb pscb;
+	pscb.depthScale = camera.depthScale;
+	pscb.squaredPositionThreshold = positionThreshold * positionThreshold;
+	pscb.cosAngleThreshold = cos(angleThreshold);
+	pscb.trackingDirection = trackingDirection;
+
+	cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
+	cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_PS_CB, pscb);
+	cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 0, cameraDepthTexture);
+	cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 1, cameraUnprojectTableTexture);
+	cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 2, trackingData->correspondenceBuffer);
+	cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 3, trackingData->icpDispatchBuffer);
+
+	for (auto& submesh : rasterComponent.mesh->submeshes)
 	{
-		PROFILE_ALL(cl, "Collect correspondences");
-
-		cl->clearUAV(job.icpDispatchBuffer);
-
-		cl->setPipelineState(*createCorrespondencesPipeline.pipeline);
-		cl->setGraphicsRootSignature(*createCorrespondencesPipeline.rootSignature);
-
-		auto renderTarget = dx_render_target(renderedDepthTexture->width, renderedDepthTexture->height)
-			.colorAttachment(renderedColorTexture)
-			.depthAttachment(renderedDepthTexture);
-
-		cl->setRenderTarget(renderTarget);
-		cl->setViewport(renderTarget.viewport);
-
-		cl->setVertexBuffer(0, rasterComponent.mesh->mesh.vertexBuffer.positions);
-		cl->setVertexBuffer(1, rasterComponent.mesh->mesh.vertexBuffer.others);
-		cl->setIndexBuffer(rasterComponent.mesh->mesh.indexBuffer);
-
-		create_correspondences_ps_cb pscb;
-		pscb.depthScale = camera.depthScale;
-		pscb.squaredPositionThreshold = positionThreshold * positionThreshold;
-		pscb.cosAngleThreshold = cos(angleThreshold);
-		pscb.trackingDirection = trackingDirection;
-
-		cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
-		cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_PS_CB, pscb);
-		cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 0, cameraDepthTexture);
-		cl->setDescriptorHeapSRV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 1, cameraUnprojectTableTexture);
-		cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 2, job.correspondenceBuffer);
-		cl->setDescriptorHeapUAV(CREATE_CORRESPONDENCES_RS_SRV_UAV, 3, job.icpDispatchBuffer);
-
-		for (auto& submesh : rasterComponent.mesh->submeshes)
-		{
-			cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
-		}
-
-		barrier_batcher(cl)
-			.uav(job.icpDispatchBuffer)
-			.transition(job.correspondenceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+		cl->drawIndexed(submesh.info.numIndices, 1, submesh.info.firstIndex, submesh.info.baseVertex, 0);
 	}
+
+	barrier_batcher(cl)
+		.uav(trackingData->icpDispatchBuffer)
+		.transition(trackingData->correspondenceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+}
+
+void depth_tracker::accumulateCorrespondences(dx_command_list* cl, tracking_component& trackingComponent)
+{
+	PROFILE_ALL(cl, "Accumulate correspondences");
+
+	auto& trackingData = trackingComponent.trackingData;
 
 	{
 		PROFILE_ALL(cl, "Prepare dispatch");
@@ -686,12 +642,12 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 		cl->setComputeRootSignature(*prepareDispatchPipeline.rootSignature);
 
 		cl->setCompute32BitConstants(PREPARE_DISPATCH_RS_CB, minNumCorrespondences);
-		cl->setRootComputeUAV(PREPARE_DISPATCH_RS_BUFFER, job.icpDispatchBuffer);
+		cl->setRootComputeUAV(PREPARE_DISPATCH_RS_BUFFER, trackingData->icpDispatchBuffer);
 		cl->dispatch(1);
 
 		barrier_batcher(cl)
-			.uav(job.icpDispatchBuffer)
-			.transition(job.icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+			.uav(trackingData->icpDispatchBuffer)
+			.transition(trackingData->icpDispatchBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 	}
 
 	{
@@ -703,15 +659,15 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 			cl->setPipelineState(*icpPipeline.pipeline);
 			cl->setComputeRootSignature(*icpPipeline.rootSignature);
 
-			cl->setRootComputeSRV(ICP_RS_COUNTER, job.icpDispatchBuffer);
-			cl->setRootComputeSRV(ICP_RS_CORRESPONDENCES, job.correspondenceBuffer);
-			cl->setRootComputeUAV(ICP_RS_OUTPUT, job.ataBuffer0);
+			cl->setRootComputeSRV(ICP_RS_COUNTER, trackingData->icpDispatchBuffer);
+			cl->setRootComputeSRV(ICP_RS_CORRESPONDENCES, trackingData->correspondenceBuffer);
+			cl->setRootComputeUAV(ICP_RS_OUTPUT, trackingData->ataBuffer0);
 
-			cl->dispatchIndirect(1, job.icpDispatchBuffer, offsetof(tracking_indirect, initialICP));
+			cl->dispatchIndirect(1, trackingData->icpDispatchBuffer, offsetof(tracking_indirect, initialICP));
 
 			barrier_batcher(cl)
-				.uav(job.ataBuffer0)
-				.transition(job.ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+				.uav(trackingData->ataBuffer0)
+				.transition(trackingData->ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 		}
 
 
@@ -721,7 +677,7 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 			cl->setPipelineState(*icpReducePipeline.pipeline);
 			cl->setComputeRootSignature(*icpReducePipeline.rootSignature);
 
-			cl->setRootComputeSRV(ICP_REDUCE_RS_COUNTER, job.icpDispatchBuffer);
+			cl->setRootComputeSRV(ICP_REDUCE_RS_COUNTER, trackingData->icpDispatchBuffer);
 
 			{
 				PROFILE_ALL(cl, "Reduce 0");
@@ -729,15 +685,15 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 				// 0 -> 1.
 
 				cl->setCompute32BitConstants(ICP_REDUCE_RS_CB, tracking_icp_reduce_cb{ 0 });
-				cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, job.ataBuffer0);
-				cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, job.ataBuffer1);
+				cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, trackingData->ataBuffer0);
+				cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, trackingData->ataBuffer1);
 
-				cl->dispatchIndirect(1, job.icpDispatchBuffer, offsetof(tracking_indirect, reduce0));
+				cl->dispatchIndirect(1, trackingData->icpDispatchBuffer, offsetof(tracking_indirect, reduce0));
 
 				barrier_batcher(cl)
-					.uav(job.ataBuffer1)
-					.transition(job.ataBuffer1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
-					.transition(job.ataBuffer0, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+					.uav(trackingData->ataBuffer1)
+					.transition(trackingData->ataBuffer1, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ)
+					.transition(trackingData->ataBuffer0, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
 
 			{
@@ -746,24 +702,24 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_job& job
 				// 1 -> 0.
 
 				cl->setCompute32BitConstants(ICP_REDUCE_RS_CB, tracking_icp_reduce_cb{ 1 });
-				cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, job.ataBuffer1);
-				cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, job.ataBuffer0);
+				cl->setRootComputeSRV(ICP_REDUCE_RS_INPUT, trackingData->ataBuffer1);
+				cl->setRootComputeUAV(ICP_REDUCE_RS_OUTPUT, trackingData->ataBuffer0);
 
-				cl->dispatchIndirect(1, job.icpDispatchBuffer, offsetof(tracking_indirect, reduce1));
+				cl->dispatchIndirect(1, trackingData->icpDispatchBuffer, offsetof(tracking_indirect, reduce1));
 
 				barrier_batcher(cl)
-					.uav(job.ataBuffer0)
-					.transition(job.ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+					.uav(trackingData->ataBuffer0)
+					.transition(trackingData->ataBuffer0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 			}
 		}
 	}
 
-	cl->copyBufferRegionToBuffer(job.ataBuffer0, job.ataReadbackBuffer, 0, 2 * dxContext.bufferedFrameID + 0, 1);
-	cl->copyBufferRegionToBuffer(job.ataBuffer1, job.ataReadbackBuffer, 0, 2 * dxContext.bufferedFrameID + 1, 1);
-	cl->copyBufferRegionToBuffer(job.icpDispatchBuffer, job.icpDispatchReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
+	cl->copyBufferRegionToBuffer(trackingData->ataBuffer0, trackingData->ataReadbackBuffer, 0, 2 * dxContext.bufferedFrameID + 0, 1);
+	cl->copyBufferRegionToBuffer(trackingData->ataBuffer1, trackingData->ataReadbackBuffer, 0, 2 * dxContext.bufferedFrameID + 1, 1);
+	cl->copyBufferRegionToBuffer(trackingData->icpDispatchBuffer, trackingData->icpDispatchReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
 }
 
-void depth_tracker::update()
+void depth_tracker::update(game_scene& scene)
 {
 	if (camera.isInitialized())
 	{
@@ -818,19 +774,19 @@ void depth_tracker::update()
 				camera.releaseFrame(frame);
 			}
 
-			if (numTrackingJobs == 0)
-			{
-				tracking = false;
-			}
 
-			for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-			{
-				processLastTrackingJob(trackingJobs[i]);
-			}
+			auto group = scene.group(entt::get<tracking_component, raster_component, transform_component>);
 
-			if (numTrackingJobs == 0)
+			for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
 			{
-				tracking = false;
+				if (!trackingComponent.trackingData)
+				{
+					trackingComponent.trackingData = make_ref<tracking_data>();
+					initializeTrackingData(trackingComponent.trackingData);
+				}
+
+				scene_entity entity = { entityHandle, scene };
+				processLastTrackingJob(entity);
 			}
 
 
@@ -841,14 +797,19 @@ void depth_tracker::update()
 
 			cl->setPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
+			for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
 			{
-				depthPrepass(cl, trackingJobs[i]);
+				depthPrepass(cl, rasterComponent, transform);
 			}
 
-			for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
+			for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
 			{
-				createCorrespondences(cl, trackingJobs[i]);
+				createCorrespondences(cl, trackingComponent, rasterComponent, transform);
+			}
+
+			for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
+			{
+				accumulateCorrespondences(cl, trackingComponent);
 			}
 
 			cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON);
@@ -874,88 +835,8 @@ void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
 	}
 }
 
-bool depth_tracker::isEntityTracked(scene_entity entity)
+mat4 depth_tracker::getTrackingMatrix(const trs& transform)
 {
-	if (!camera.isInitialized())
-	{
-		return false;
-	}
-
-	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-	{
-		if (trackingJobs[i].used && trackingJobs[i].trackedEntity == entity)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-bool depth_tracker::trackEntity(scene_entity entity)
-{
-	if (!camera.isInitialized())
-	{
-		return false;
-	}
-
-	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-	{
-		if (!trackingJobs[i].used)
-		{
-			initializeTrackingJob(trackingJobs[i], entity);
-			++numTrackingJobs;
-			return true;
-		}
-	}
-	return false;
-}
-
-void depth_tracker::clearTrackedEntities()
-{
-	if (!camera.isInitialized())
-	{
-		return;
-	}
-
-	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-	{
-		trackingJobs[i].used = false;
-	}
-	numTrackingJobs = 0;
-}
-
-scene_entity depth_tracker::getTrackedEntity(uint32 index)
-{
-	if (!camera.isInitialized())
-	{
-		return {};
-	}
-
-	for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-	{
-		if (trackingJobs[i].used)
-		{
-			if (index == 0)
-			{
-				return trackingJobs[i].trackedEntity;
-			}
-			--index;
-		}
-	}
-
-	return {};
-}
-
-mat4 depth_tracker::getTrackingMatrix(uint32 index)
-{
-	scene_entity entity = getTrackedEntity(index);
-	if (!entity)
-	{
-		return mat4::identity;
-	}
-
-	const transform_component& transform = entity.getComponent<transform_component>();
-
 	mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
 		* createViewMatrix(globalCameraPosition, globalCameraRotation)
 		* trsToMat4(transform);
@@ -963,10 +844,9 @@ mat4 depth_tracker::getTrackingMatrix(uint32 index)
 	return m;
 }
 
-tracker_ui_interaction depth_tracker::drawSettings()
+void depth_tracker::drawSettings(game_scene& scene)
 {
-	tracker_ui_interaction result = {};
-
+#if 0
 	if (ImGui::BeginTree("Cameras"))
 	{
 		if (ImGui::BeginProperties())
@@ -999,6 +879,7 @@ tracker_ui_interaction depth_tracker::drawSettings()
 	}
 
 	ImGui::Separator();
+#endif
 
 	if (camera.isInitialized())
 	{
@@ -1011,71 +892,8 @@ tracker_ui_interaction depth_tracker::drawSettings()
 			}
 			ImGui::PropertySeparator();
 
-			ImGui::PropertyValue("Tracked entities", numTrackingJobs);
-			ImGui::PropertySeparator();
-
-			uint32 index = 0;
-			for (uint32 i = 0; i < arraysize(trackingJobs); ++i)
-			{
-				auto& job = trackingJobs[i];
-				if (job.used)
-				{
-					scene_entity entity = job.trackedEntity;
-					if (entity && entity.isValid())
-					{
-						ImGui::PushID(i);
-
-						char label[32];
-						snprintf(label, sizeof(label), "    Entity %u", index);
-						if (ImGui::PropertyButton(label, entity.getComponent<tag_component>().name))
-						{
-							result.type = tracker_ui_interaction_entity_selected;
-							result.entity = entity;
-						}
-
-						snprintf(label, sizeof(label), "    Export entity %u", index);
-						if (ImGui::PropertyButton(label, "Copy relative 4x4 matrix to clipboard",
-							"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
-						{
-							const transform_component& transform = entity.getComponent<transform_component>();
-
-							mat4 m = createViewMatrix(camera.depthSensor.position, camera.depthSensor.rotation)
-								* createViewMatrix(globalCameraPosition, globalCameraRotation)
-								* trsToMat4(transform);
-
-							char buffer[512];
-							snprintf(buffer, sizeof(buffer),
-								"%ff, %ff, %ff, %ff, "
-								"%ff, %ff, %ff, %ff, "
-								"%ff, %ff, %ff, %ff, "
-								"%ff, %ff, %ff, %ff",
-								m.m[0], m.m[1], m.m[2], m.m[3],
-								m.m[4], m.m[5], m.m[6], m.m[7],
-								m.m[8], m.m[9], m.m[10], m.m[11],
-								m.m[12], m.m[13], m.m[14], m.m[15]);
-
-							ImGui::SetClipboardText(buffer);
-						}
-
-						if (ImGui::PropertyButton("    Global orientation", "Rotate world to match",
-							"Rotates the world such that this object stands upright"))
-						{
-							result.type = tracker_ui_interaction_global_orientation;
-							result.globalOrientationDelta = rotateFromTo(entity.getComponent<transform_component>().rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
-						}
-
-						ImGui::PropertyValue("    Number of correspondences", job.numCorrespondences);
-
-						ImGui::PropertySeparator();
-						ImGui::PopID();
-
-						++index;
-					}
-				}
-			}
-			
 			ImGui::PropertyCheckbox("Visualize depth", showDepth);
-			ImGui::PropertyDisableableCheckbox("Tracking", tracking, numTrackingJobs > 0);
+			ImGui::PropertyCheckbox("Tracking", tracking);
 			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
 
@@ -1106,8 +924,4 @@ tracker_ui_interaction depth_tracker::drawSettings()
 			ImGui::EndTree();
 		}
 	}
-
-	return result;
 }
-
-

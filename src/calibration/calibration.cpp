@@ -13,6 +13,8 @@
 #include "core/color.h"
 #include "core/cpu_profiling.h"
 
+#include "editor/file_dialog.h"
+
 #include "window/window.h"
 #include "window/software_window.h"
 
@@ -32,7 +34,7 @@
 
 #include <random>
 
-static const fs::path calibrationBaseDirectory = "calibration_temp";
+static fs::path calibrationBaseDirectory = "calibration_temp";
 
 static dx_pipeline depthToColorPipeline;
 static dx_pipeline visualizePointCloudPipeline;
@@ -51,9 +53,11 @@ static inline std::string getTime()
 	return time;
 }
 
-bool projector_system_calibration::projectCalibrationPatterns()
+bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 {
-	if (tracker->getNumberOfTrackedEntities() == 0)
+	auto group = scene.group(entt::get<tracking_component, raster_component, transform_component>);
+
+	if (group.size() == 0)
 	{
 		return false;
 	}
@@ -78,7 +82,16 @@ bool projector_system_calibration::projectCalibrationPatterns()
 		}
 	}
 
-	mat4 trackingMat = tracker->getTrackingMatrix(0);
+	scene_entity entity = { *group.begin(), scene };
+	const transform_component& transform = entity.getComponent<transform_component>();
+	const tracking_component& tracking = entity.getComponent<tracking_component>();
+	if (!tracking.trackingData || tracking.trackingData->numCorrespondences < 1000)
+	{
+		LOG_ERROR("Object isn't tracked, cancelling calibration");
+		return false;
+	}
+
+	mat4 trackingMat = tracker->getTrackingMatrix(transform);
 
 	if (numProjectorsToCalibrate == 0)
 	{
@@ -818,7 +831,7 @@ bool projector_system_calibration::computeInitialExtrinsicProjectorCalibrationEs
 	return true;
 }
 
-bool projector_system_calibration::calibrate()
+bool projector_system_calibration::calibrate(game_scene& scene)
 {
 	auto& monitors = win32_window::allConnectedMonitors;
 
@@ -836,10 +849,20 @@ bool projector_system_calibration::calibrate()
 		return false;
 	}
 
+	auto group = scene.group(entt::get<tracking_component, raster_component, transform_component>);
+	if (group.size() == 0)
+	{
+		return false;
+	}
+
+	scene_entity entity = { *group.begin(), scene };
+	ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
+
+
 	state = calibration_state_calibrating;
 
 
-	std::thread thread([this, projectors]()
+	std::thread thread([this, projectors, mesh]()
 	{
 		calibration_input calibInput;
 		if (!loadAndDecodeImageSequences(calibrationBaseDirectory, projectors, calibInput))
@@ -872,16 +895,12 @@ bool projector_system_calibration::calibrate()
 		
 		image<vec2> colorCameraUnprojectTable(camWidth, camHeight, camera.unprojectTable);
 		
-		assert(tracker->getNumberOfTrackedEntities() > 0);
 		
-		scene_entity entity = tracker->getTrackedEntity(0);
-		ref<composite_mesh> mesh = entity.getComponent<raster_component>().mesh;
 
 
 		struct per_sequence
 		{
 			image_point_cloud renderedPointCloud;
-			image<uint8> validPixelMask;
 		};
 
 		std::vector<per_sequence> perSequence(calibInput.sequences.size());
@@ -894,9 +913,10 @@ bool projector_system_calibration::calibrate()
 
 			ps.renderedPointCloud = projectDepthIntoColorFrame(mesh, s.trackingMat, colorCameraViewMat, colorCameraProjMat, camDistortion, depthToColorTexture, depthBuffer,
 				readbackBuffer, colorCameraUnprojectTable);
-			ps.validPixelMask = ps.renderedPointCloud.createValidMask();
+			ps.renderedPointCloud.erode(5);
 
 			//ps.renderedPointCloud.writeToFile(calibrationBaseDirectory / ("test" + std::to_string(i) + ".ply"));
+			//ps.renderedPointCloud.writeToImage(calibrationBaseDirectory / ("test" + std::to_string(i) + ".png"));
 			//submitPointCloudForVisualization(ps.renderedPointCloud, vec4(1.f, 0.f, 1.f, 0.f));
 		}
 
@@ -935,7 +955,6 @@ bool projector_system_calibration::calibrate()
 				assert(globalSequenceID < (uint32)perSequence.size());
 
 				per_sequence& ps = perSequence[globalSequenceID];
-				auto& vpm = ps.validPixelMask;
 				auto& renderedPointCloud = ps.renderedPointCloud;
 
 				std::vector<pixel_correspondence> validPixelCorrespondences;
@@ -943,7 +962,7 @@ bool projector_system_calibration::calibrate()
 
 				for (auto& pc : sequence.allPixelCorrespondences)
 				{
-					if (vpm((int)pc.camera.y, (int)pc.camera.x) != 0)
+					if (renderedPointCloud.validPixelMask((int)pc.camera.y, (int)pc.camera.x) != 0)
 					{
 						validPixelCorrespondences.push_back(pc);
 					}
@@ -992,13 +1011,12 @@ bool projector_system_calibration::calibrate()
 			projRotation = globalRotation * projRotation;
 			projPosition = globalRotation * projPosition + globalTranslation;
 
-			submitFinalCalibration(proj.uniqueID, projPosition, projRotation, width, height, projIntrinsics);
-
-
 			if (cancel)
 			{
 				break;
 			}
+
+			submitFinalCalibration(proj.uniqueID, projPosition, projRotation, width, height, projIntrinsics);
 		}
 
 		cancel = false;
@@ -1108,7 +1126,7 @@ projector_system_calibration::projector_system_calibration(depth_tracker* tracke
 	readbackBuffer = createReadbackBuffer(sizeof(vec4), texturePitch * height);
 }
 
-bool projector_system_calibration::edit()
+bool projector_system_calibration::edit(game_scene& scene)
 {
 	if (state == calibration_state_uninitialized)
 	{
@@ -1140,6 +1158,13 @@ bool projector_system_calibration::edit()
 
 			ImGui::TableNextColumn();
 			ImGui::Text(monitors[i].description.c_str());
+
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text(monitors[i].uniqueID.c_str());
+				ImGui::EndTooltip();
+			}
 
 			ImGui::TableNextColumn();
 			ImGui::DisableableCheckbox("##isProj", isProjectorIndex[i], uiActive);
@@ -1224,12 +1249,12 @@ bool projector_system_calibration::edit()
 
 		if (cancelableButton("Project calibration patterns", state, calibration_state_projecting_patterns, cancel))
 		{
-			projectCalibrationPatterns();
+			projectCalibrationPatterns(scene);
 		}
 
 		if (cancelableButton("Calibrate", state, calibration_state_calibrating, cancel))
 		{
-			calibrate();
+			calibrate(scene);
 		}
 
 		ImGui::EndProperties();
@@ -1237,6 +1262,18 @@ bool projector_system_calibration::edit()
 
 
 	ImGui::Separator();
+
+	ImGui::Text("Disk cache: ./%ws", calibrationBaseDirectory.c_str());
+	if (ImGui::Button("Change disk cache directory"))
+	{
+		std::string newBaseDir = directoryDialog();
+		if (!newBaseDir.empty())
+		{
+			calibrationBaseDirectory = newBaseDir;
+		}
+	}
+
+	ImGui::SameLine();
 
 	if (ImGui::DisableableButton("Clear disk cache", uiActive))
 	{

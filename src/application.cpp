@@ -76,9 +76,8 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 		auto targetObject = scene.createEntity("Augustus")
 			.addComponent<transform_component>(transform)
-			.addComponent<raster_component>(targetObjectMesh);
-
-		tracker->trackEntity(targetObject);
+			.addComponent<raster_component>(targetObjectMesh)
+			.addComponent<tracking_component>();
 	}
 
 
@@ -91,9 +90,8 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	
 		auto targetObject = scene.createEntity("Nike")
 			.addComponent<transform_component>(transform)
-			.addComponent<raster_component>(targetObjectMesh);
-	
-		tracker->trackEntity(targetObject);
+			.addComponent<raster_component>(targetObjectMesh)
+			.addComponent<tracking_component>();
 	}
 
 

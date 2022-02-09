@@ -616,11 +616,7 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 				if (auto* c = entity.getComponentIfExists<point_light_component>()) { out << YAML::Key << "Point light" << YAML::Value << *c; }
 				if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
 				if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
-
-				if (tracker->isEntityTracked(entity))
-				{
-					out << YAML::Key << "Tracking" << YAML::Value << true;
-				}
+				if (entity.hasComponent<tracking_component>()) { out << YAML::Key << "Tracking" << YAML::Value << true;	}
 
 				out << YAML::EndMap;
 			}
@@ -657,7 +653,6 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 	scene = game_scene();
 	scene.savePath = std::move(filename);
 	projectorContext->knownProjectorCalibrations.clear();
-	tracker->clearTrackedEntities();
 
 	std::string sceneName = n["Scene"].as<std::string>();
 
@@ -687,11 +682,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 		LOAD_COMPONENT(point_light_component, "Point light");
 		LOAD_COMPONENT(spot_light_component, "Spot light");
 		LOAD_COMPONENT(raster_component, "Raster");
-
-		if (entityNode["Tracking"])
-		{
-			tracker->trackEntity(entity);
-		}
+		if (entityNode["Tracking"]) { entity.addComponent<tracking_component>(); }
 	}
 
 	LOG_MESSAGE("Scene loaded from '%ws'", scene.savePath.c_str());

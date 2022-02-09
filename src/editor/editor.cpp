@@ -533,6 +533,71 @@ bool scene_editor::drawSceneHierarchy()
 						ImGui::Text("Dynamic");
 					});
 
+					drawComponent<tracking_component>(selectedEntity, "TRACKING", [this](tracking_component& tracking)
+					{
+						if (tracking.trackingData && ImGui::BeginProperties())
+						{
+							const transform_component& transform = selectedEntity.getComponent<transform_component>();
+
+							ImGui::PropertyCheckbox("Tracking", tracking.trackingData->tracking);
+
+							if (ImGui::PropertyButton("Export", "Copy relative 4x4 matrix to clipboard",
+								"Copies the transform relative to the tracker. If the tracker is rotated, this is taken into account."))
+							{
+								mat4 m = tracker->getTrackingMatrix(transform);
+
+								char buffer[512];
+								snprintf(buffer, sizeof(buffer),
+									"%ff, %ff, %ff, %ff, "
+									"%ff, %ff, %ff, %ff, "
+									"%ff, %ff, %ff, %ff, "
+									"%ff, %ff, %ff, %ff",
+									m.m[0], m.m[1], m.m[2], m.m[3],
+									m.m[4], m.m[5], m.m[6], m.m[7],
+									m.m[8], m.m[9], m.m[10], m.m[11],
+									m.m[12], m.m[13], m.m[14], m.m[15]);
+
+								ImGui::SetClipboardText(buffer);
+							}
+
+							if (ImGui::PropertyButton("Global orientation", "Rotate world to match",
+								"Rotates the world such that this object stands upright"))
+							{
+								quat delta = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));;
+								tracker->globalCameraRotation = delta * tracker->globalCameraRotation;
+
+								for (auto [entityHandle, transform] : this->scene->view<transform_component>().each())
+								{
+									transform.position = delta * transform.position;
+									transform.rotation = delta * transform.rotation;
+								}
+
+								for (auto [entityHandle, transform] : this->scene->view<position_rotation_component>().each())
+								{
+									transform.position = delta * transform.position;
+									transform.rotation = delta * transform.rotation;
+								}
+
+								for (auto [entityHandle, transform] : this->scene->view<position_component>().each())
+								{
+									transform.position = delta * transform.position;
+								}
+
+								for (auto& calib : projectorManager->context.knownProjectorCalibrations)
+								{
+									calib.second.position = delta * calib.second.position;
+									calib.second.rotation = delta * calib.second.rotation;
+								}
+
+								projectorManager->onSceneLoad();
+							}
+
+							ImGui::PropertyValue("Number of correspondences", tracking.trackingData->numCorrespondences);
+
+							ImGui::EndProperties();
+						}
+					});
+
 					drawComponent<animation_component>(selectedEntity, "ANIMATION", [this](animation_component& anim)
 					{
 						if (raster_component* raster = selectedEntity.getComponentIfExists<raster_component>())
@@ -610,6 +675,8 @@ bool scene_editor::drawSceneHierarchy()
 					{
 						if (ImGui::BeginProperties())
 						{
+							ImGui::PropertyValue("Intrinsics", *(vec4*)&p.intrinsics);
+
 							uint32 monitorIndex = p.window.monitorIndex;
 
 							bool monitorChanged = ImGui::PropertyDropdown("Monitor", [](uint32 index, void* data) -> const char*
@@ -1251,41 +1318,13 @@ void scene_editor::drawSettings(float dt)
 
 		if (ImGui::BeginTree("Tracker"))
 		{
-			tracker_ui_interaction e = tracker->drawSettings();
-			if (e.type == tracker_ui_interaction_entity_selected)
-			{
-				setSelectedEntity(e.entity);
-			}
-			else if (e.type == tracker_ui_interaction_global_orientation)
-			{
-				tracker->globalCameraRotation = e.globalOrientationDelta * tracker->globalCameraRotation;
-
-				for (auto [entityHandle, transform] : scene->view<transform_component>().each())
-				{
-					transform.position = e.globalOrientationDelta * transform.position;
-					transform.rotation = e.globalOrientationDelta * transform.rotation;
-				}
-
-				for (auto [entityHandle, transform] : scene->view<position_rotation_component>().each())
-				{
-					transform.position = e.globalOrientationDelta * transform.position;
-					transform.rotation = e.globalOrientationDelta * transform.rotation;
-				}
-
-				for (auto& calib : projectorManager->context.knownProjectorCalibrations)
-				{
-					calib.second.position = e.globalOrientationDelta * calib.second.position;
-					calib.second.rotation = e.globalOrientationDelta * calib.second.rotation;
-				}
-
-				projectorManager->onSceneLoad();
-			}
+			tracker->drawSettings(*scene);
 			ImGui::EndTree();
 		}
 
 		if (ImGui::BeginTree("Calibration"))
 		{
-			projectorCalibration->edit();
+			projectorCalibration->edit(*scene);
 			ImGui::EndTree();
 		}
 

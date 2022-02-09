@@ -9,7 +9,7 @@
 struct projector_system_calibration
 {
 	projector_system_calibration(depth_tracker* tracker, projector_manager* manager);
-	bool edit();
+	bool edit(game_scene& scene);
 
 	void update();
 
@@ -17,8 +17,8 @@ struct projector_system_calibration
 
 private:
 
-	bool projectCalibrationPatterns();
-	bool calibrate();
+	bool projectCalibrationPatterns(game_scene& scene);
+	bool calibrate(game_scene& scene);
 
 	void submitPointCloudForVisualization(const struct image_point_cloud& pc, vec4 color);
 	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, vec4 color);

@@ -245,6 +245,7 @@ void solveForCameraToProjectorParameters(const std::vector<calibration_solver_in
 
 	levenberg_marquardt_settings lmSettings;
 	lmSettings.maxNumIterations = settings.maxNumIterations;
+	lmSettings.numCGIterations = 100;
 
 	uint32 numResiduals = (uint32)residuals.size();
 
