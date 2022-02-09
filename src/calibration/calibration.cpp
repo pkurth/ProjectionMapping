@@ -1117,6 +1117,46 @@ bool projector_system_calibration::edit(game_scene& scene)
 
 	auto& monitors = win32_window::allConnectedMonitors;
 
+	uint32 numProjectors = 0;
+
+	for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+	{
+		if (manager->isProjectorIndex[i])
+		{
+			++numProjectors;
+
+			if (ImGui::BeginTree(monitors[i].uniqueID.c_str()))
+			{
+				if (ImGui::BeginProperties())
+				{
+					if (!uiActive)
+					{
+						ImGui::BeginDisabled();
+					}
+
+					ImGui::PropertyInput("Start fx", startIntrinsics[i].fx);
+					ImGui::PropertyInput("Start fy", startIntrinsics[i].fy);
+					ImGui::PropertyInput("Start cx", startIntrinsics[i].cx);
+					ImGui::PropertyInput("Start cy", startIntrinsics[i].cy);
+
+					if (!uiActive)
+					{
+						ImGui::EndDisabled();
+					}
+
+					ImGui::EndProperties();
+				}
+				ImGui::EndTree();
+			}
+		}
+	}
+
+	if (numProjectors == 0)
+	{
+		ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.1f, 1.f), "No projectors selected");
+	}
+
+
 	if (ImGui::BeginProperties())
 	{
 		if (!uiActive)
@@ -1133,7 +1173,7 @@ bool projector_system_calibration::edit(game_scene& scene)
 		}
 
 
-		auto cancelableButton = [](const char* label, calibration_state state, calibration_state runningState, volatile bool& cancel)
+		auto cancelableButton = [numProjectors](const char* label, calibration_state state, calibration_state runningState, volatile bool& cancel)
 		{
 			if (state == runningState)
 			{
@@ -1144,7 +1184,7 @@ bool projector_system_calibration::edit(game_scene& scene)
 			}
 			else
 			{
-				if (ImGui::PropertyDisableableButton(label, "Go", state == calibration_state_none))
+				if (ImGui::PropertyDisableableButton(label, "Go", (numProjectors > 0) && (state == calibration_state_none)))
 				{
 					return true;
 				}

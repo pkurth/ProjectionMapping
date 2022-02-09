@@ -38,8 +38,6 @@ private:
 	std::vector<std::string> getLocalProjectors();
 	std::vector<std::string> getRemoteProjectors();
 
-	void notifyClients(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
-
 	game_scene* scene;
 
 	bool detailWindowOpen = false;

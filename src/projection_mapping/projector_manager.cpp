@@ -318,16 +318,6 @@ void projector_manager::onSceneLoad()
 	std::vector<std::string> remoteProjectors = getRemoteProjectors();
 
 	createProjectors(myProjectors, remoteProjectors);
-	notifyClients(myProjectors, remoteProjectors);
-}
-
-void projector_manager::notifyClients(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
-{
-	std::vector<std::string> allProjectors;
-	allProjectors.insert(allProjectors.end(), myProjectors.begin(), myProjectors.end());
-	allProjectors.insert(allProjectors.end(), remoteProjectors.begin(), remoteProjectors.end());
-
-	//notifyProjectorNetworkOnSceneLoad(context, allProjectors);
 }
 
 void projector_manager::loadSetup()
