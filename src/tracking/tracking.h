@@ -66,6 +66,8 @@ struct depth_tracker
 
 	rgbd_camera camera;
 
+	bool disableTracking = false;
+
 private:
 
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);

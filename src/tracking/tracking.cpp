@@ -466,7 +466,7 @@ void depth_tracker::processLastTrackingJob(scene_entity entity)
 	trackingData->numCorrespondences = indirect.counter;
 
 
-	if (tracking && correspondencesValid && trackingData->tracking)
+	if (!disableTracking && tracking && correspondencesValid && trackingData->tracking)
 	{
 		// Due to the flip-flop reduction (below), we have to figure out in which buffer the final result has been written.
 		uint32 ataBufferIndex = 0;
@@ -893,7 +893,13 @@ void depth_tracker::drawSettings(game_scene& scene)
 			ImGui::PropertySeparator();
 
 			ImGui::PropertyCheckbox("Visualize depth", showDepth);
-			ImGui::PropertyCheckbox("Tracking", tracking);
+			ImGui::PropertyDisableableCheckbox("Tracking", tracking, !disableTracking);
+			if (disableTracking && ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("Tracking has been disabled from outside");
+				ImGui::EndTooltip();
+			}
 			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
 

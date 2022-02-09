@@ -143,15 +143,15 @@ void projector_manager::updateAndRender(float dt)
 			saveSetup();
 		}
 
+		bool calibrationMode = (solver.settings.mode == projector_mode_calibration);
+
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
 		
 		for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
 		{
 			if (isProjectorIndex[i])
 			{
-				bool black = (solver.settings.mode == projector_mode_calibration);
-
-				if (black != blackWindows[i].visible)
+				if (calibrationMode != blackWindows[i].visible)
 				{
 					blackWindows[i].toggleVisibility();
 				}
@@ -163,6 +163,11 @@ void projector_manager::updateAndRender(float dt)
 					blackWindows[i].toggleVisibility();
 				}
 			}
+		}
+
+		if (protocol.initialized && !protocol.isServer)
+		{
+			tracker->disableTracking = !calibrationMode;
 		}
 
 		if (ImGui::Button("Detailed view"))
