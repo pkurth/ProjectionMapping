@@ -247,6 +247,22 @@ project "D3D12ProjectionMapping"
 		"realsense2.lib",
 	}
 
+	filter "configurations:Debug"
+		links {
+			"ceres-debug.lib",
+			"gflags_debug.lib",
+			"glogd.lib",
+		}
+
+	filter "configurations:Release"
+		links {
+			"ceres.lib",
+			"gflags.lib",
+			"glog.lib",
+		}
+
+	filter {}
+
 	dependson {
 		"assimp",
 		"yaml-cpp",

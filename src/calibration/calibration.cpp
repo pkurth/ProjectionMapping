@@ -6,6 +6,7 @@
 #include "svd.h"
 #include "reconstruction.h"
 #include "solver.h"
+#include "solver_ceres.h"
 
 #include "core/imgui.h"
 #include "core/log.h"
@@ -1003,7 +1004,8 @@ bool projector_system_calibration::calibrate(game_scene& scene)
 				solverInput.emplace_back(renderedPointCloud, sequence.perPixelCorrespondences);
 			}
 
-			solveForCameraToProjectorParameters(solverInput, projPosition, projRotation, projIntrinsics, solverSettings);
+			//solveForCameraToProjectorParameters(solverInput, projPosition, projRotation, projIntrinsics, solverSettings);
+			solveForCameraToProjectorParametersUsingCeres(solverInput, projPosition, projRotation, projIntrinsics, solverSettings);
 
 			//submitFrustumForVisualization(projPosition, projRotation, width, height, projIntrinsics, vec4(1.f, 0.f, 1.f, 1.f));
 
