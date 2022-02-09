@@ -11,8 +11,10 @@
 
 enum message_type : uint16
 {
-	message_hello_from_client,
-	message_solver_settings
+	message_client_hello,
+	message_client_request_calibration_mode,
+
+	message_server_solver_settings
 };
 
 struct message_header
@@ -174,6 +176,7 @@ bool projector_network_client::initialize(game_scene& scene, projector_manager* 
 	this->clientSocket = socket;
 	this->manager = manager;
 	this->scene = &scene;
+	this->oldSolverSettings = manager->solver.settings;
 	connected = true;
 
 	char clientAddress[128];
@@ -202,7 +205,7 @@ bool projector_network_server::update(float dt)
 			LOG_MESSAGE("Sending solver settings");
 
 			send_buffer messageBuffer;
-			messageBuffer.header.type = message_solver_settings;
+			messageBuffer.header.type = message_server_solver_settings;
 
 			messageBuffer.pushValue(manager->solver.settings);
 
@@ -231,27 +234,27 @@ bool projector_network_server::update(float dt)
 
 		switch (header->type)
 		{
-			case message_hello_from_client:
+			case message_client_hello:
 			{
 				bool addressKnown = std::find_if(clientConnections.begin(), clientConnections.end(), [&](const client_connection& c) { return c.address == clientAddress; }) != clientConnections.end();
 				if (addressKnown)
 				{
 					LOG_MESSAGE("Received duplicate 'hello' from client. Ignoring message");
-					continue;
+					break;
 				}
 
 				hello_from_client_message* msg = messageBuffer.get<hello_from_client_message>();
 				if (!msg)
 				{
 					LOG_ERROR("Message is smaller than sizeof(hello_from_client_message). Expected at least %u bytes after header, got %u", (uint32)sizeof(hello_from_client_message), messageBuffer.sizeRemaining);
-					continue;
+					break;
 				}
 				LOG_MESSAGE("Received message identifies client as '%s'", msg->hostname);
 
 				if (messageBuffer.sizeRemaining % sizeof(client_monitor_info) != 0)
 				{
 					LOG_ERROR("Message size is not evenly divisible by sizeof(client_monitor_info). Expected multiple of %u, got %u", (uint32)sizeof(client_monitor_info), messageBuffer.sizeRemaining);
-					continue;
+					break;
 				}
 
 				uint32 numMonitors = messageBuffer.sizeRemaining / (uint32)sizeof(client_monitor_info);
@@ -275,7 +278,27 @@ bool projector_network_server::update(float dt)
 				}
 
 				manager->network_newClient(msg->hostname, clientID, descriptions, uniqueIDs);
-			}
+			} break;
+
+			case message_client_request_calibration_mode:
+			{
+				if (messageBuffer.sizeRemaining != sizeof(projector_mode))
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(client_monitor_info). Expected multiple of %u, got %u", (uint32)sizeof(client_monitor_info), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				manager->solver.settings.mode = *messageBuffer.get<projector_mode>();
+
+				if (manager->solver.settings.mode == projector_mode_calibration)
+				{
+					LOG_MESSAGE("Client %u requested calibration mode", (uint32)header->clientID);
+				}
+				else
+				{
+					LOG_MESSAGE("Client %u requested projection mapping mode", (uint32)header->clientID);
+				}
+			} break;
 		}
 	}
 
@@ -307,6 +330,22 @@ bool projector_network_client::update()
 	{
 		return false;
 	}
+
+
+	if (memcmp(&manager->solver.settings, &oldSolverSettings, sizeof(oldSolverSettings)) != 0)
+	{
+		oldSolverSettings = manager->solver.settings;
+
+		send_buffer messageBuffer;
+		messageBuffer.header.type = message_client_request_calibration_mode;
+		messageBuffer.pushValue(manager->solver.settings.mode);
+
+		sendToServer(messageBuffer);
+	}
+
+
+
+
 
 	receive_buffer messageBuffer;
 
@@ -357,7 +396,7 @@ bool projector_network_client::update()
 
 		switch (header->type)
 		{
-			case message_solver_settings:
+			case message_server_solver_settings:
 			{
 				if (messageBuffer.sizeRemaining != sizeof(projector_solver_settings))
 				{
@@ -376,6 +415,7 @@ bool projector_network_client::update()
 				LOG_MESSAGE("Updating solver settings");
 
 				manager->solver.settings = *messageBuffer.get<projector_solver_settings>(1);
+				oldSolverSettings = manager->solver.settings;
 			} break;
 
 
@@ -389,7 +429,7 @@ bool projector_network_client::update()
 void projector_network_client::sendHello()
 {
 	send_buffer messageBuffer;
-	messageBuffer.header.type = message_hello_from_client;
+	messageBuffer.header.type = message_client_hello;
 	messageBuffer.header.clientID = -1;
 	messageBuffer.header.messageID = 0;
 

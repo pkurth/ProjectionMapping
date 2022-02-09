@@ -4,11 +4,12 @@
 #include "core/imgui.h"
 #include "rendering/debug_visualization.h"
 #include "core/yaml.h"
+#include "tracking/tracking.h"
 
 #include "post_processing_rs.hlsli"
 
 
-projector_manager::projector_manager(game_scene& scene)
+projector_manager::projector_manager(game_scene& scene, depth_tracker* tracker)
 {
 	this->scene = &scene;
 	solver.initialize();
@@ -27,6 +28,8 @@ projector_manager::projector_manager(game_scene& scene)
 		blackWindows[i].setAlwaysOnTop();
 		blackWindows[i].toggleVisibility(); // Make invisible.
 	}
+
+	this->tracker = tracker;
 }
 
 void projector_manager::beginFrame()
@@ -326,6 +329,17 @@ void projector_manager::onSceneLoad()
 	createProjectors(myProjectors, remoteProjectors);
 }
 
+void projector_manager::reportLocalCalibration(const std::string& uniqueID, const projector_calibration& calib)
+{
+	context.knownProjectorCalibrations[uniqueID] = calib;
+
+	std::vector<std::string> myProjectors = getLocalProjectors();
+	std::vector<std::string> remoteProjectors = getRemoteProjectors();
+
+	createProjectors(myProjectors, remoteProjectors);
+	//protocol.reportCalibration
+}
+
 void projector_manager::network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs)
 {
 	client_info info;
@@ -423,12 +437,16 @@ std::vector<std::string> projector_manager::getLocalProjectors()
 {
 	std::vector<std::string> myProjectors;
 
+	uint32 index = 0;
 	for (const monitor_info& monitor : win32_window::allConnectedMonitors)
 	{
-		auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
-		if (it != context.knownProjectorCalibrations.end())
+		if (isProjectorIndex[index++])
 		{
-			myProjectors.push_back(monitor.uniqueID);
+			auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
+			if (it != context.knownProjectorCalibrations.end())
+			{
+				myProjectors.push_back(monitor.uniqueID);
+			}
 		}
 	}
 
@@ -439,12 +457,15 @@ std::vector<std::string> projector_manager::getRemoteProjectors()
 {
 	std::vector<std::string> remoteProjectors;
 
-	for (const std::string& monitorID : remoteMonitors)
+	for (auto& client : clients)
 	{
-		auto it = context.knownProjectorCalibrations.find(monitorID);
-		if (it != context.knownProjectorCalibrations.end())
+		for (const auto& monitor : client.second.monitors)
 		{
-			remoteProjectors.push_back(monitorID);
+			auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
+			if (it != context.knownProjectorCalibrations.end())
+			{
+				remoteProjectors.push_back(monitor.uniqueID);
+			}
 		}
 	}
 

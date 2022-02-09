@@ -7,10 +7,11 @@
 
 #include <unordered_set>
 
+struct depth_tracker;
 
 struct projector_manager
 {
-	projector_manager(game_scene& scene);
+	projector_manager(game_scene& scene, depth_tracker* tracker);
 
 	void beginFrame();
 	void updateAndRender(float dt);
@@ -20,10 +21,16 @@ struct projector_manager
 	projector_solver solver;
 	projector_context context;
 
+
+	void reportLocalCalibration(const std::string& uniqueID, const projector_calibration& calib);
+
+
 	static constexpr uint32 MAX_NUM_PROJECTORS = 4;
 	bool isProjectorIndex[MAX_NUM_PROJECTORS] = {};
 
 private:
+
+	depth_tracker* tracker;
 
 	// Network callbacks.
 	void network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs);
@@ -48,8 +55,6 @@ private:
 	void saveSetup();
 
 	software_window blackWindows[MAX_NUM_PROJECTORS];
-
-	std::unordered_set<std::string> remoteMonitors;
 
 	void createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
 	void createProjector(const std::string& monitorID, bool local);

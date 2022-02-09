@@ -56,6 +56,8 @@ private:
 
 
 	uint32 latestSettingsMessageID = 0;
+
+	projector_solver_settings oldSolverSettings;
 };
 
 
@@ -67,7 +69,6 @@ struct projector_network_protocol
 	bool initialized = false;
 
 	bool isServer;
-
 
 #if NETWORK_FAMILY == AF_INET
 	char serverIP[128] = "131.188.49.110";

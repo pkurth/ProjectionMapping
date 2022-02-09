@@ -75,10 +75,7 @@ private:
 	struct final_calibration
 	{
 		std::string uniqueID;
-		quat rotation;
-		vec3 position;
-		uint32 width, height;
-		camera_intrinsics intrinsics;
+		projector_calibration calib;
 	};
 
 	std::mutex mutex;

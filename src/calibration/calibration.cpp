@@ -1046,7 +1046,7 @@ void projector_system_calibration::submitFrustumForVisualization(vec3 position, 
 void projector_system_calibration::submitFinalCalibration(const std::string& uniqueID, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics)
 {
 	mutex.lock();
-	finalCalibrations.push_back({ uniqueID, rotation, position, width, height, intrinsics });
+	finalCalibrations.push_back({ uniqueID, projector_calibration{ rotation, position, width, height, intrinsics } });
 	mutex.unlock();
 }
 
@@ -1246,7 +1246,7 @@ void projector_system_calibration::update()
 	mutex.lock();
 	for (const auto& fc : finalCalibrations)
 	{
-		//manager->reportLocalCalibration(fc.uniqueID, fc.intrinsics, fc.width, fc.height, fc.position, fc.rotation);
+		manager->reportLocalCalibration(fc.uniqueID, fc.calib);
 	}
 	finalCalibrations.clear();
 

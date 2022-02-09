@@ -127,10 +127,11 @@ int main(int argc, char** argv)
 
 	window.setFileDropCallback([&app](const fs::path& s) { app.handleFileDrop(s); });
 
-	projector_renderer::initializeCommon();
-	projector_manager projectorManager(app.getScene());
-
 	depth_tracker tracker;
+
+	projector_renderer::initializeCommon();
+	projector_manager projectorManager(app.getScene(), &tracker);
+
 	projector_system_calibration calibration(&tracker, &projectorManager);
 
 	initializeTransformationGizmos();
