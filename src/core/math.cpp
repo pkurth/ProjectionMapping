@@ -628,17 +628,41 @@ quat slerp(quat from, quat to, float t)
 
 quat nlerp(quat* qs, float* weights, uint32 count)
 {
+	if (count == 0)
+	{
+		return quat::identity;
+	}
+
 	vec4 v0 = qs[0].v4;
-	vec4 result = v0 * weights[0];
+	float w = weights ? weights[0] : 1.f;
+	vec4 result = v0 * w;
 
 	for (uint32 i = 1; i < count; ++i)
 	{
 		vec4 v1 = qs[i].v4;
 		if (dot(v0, v1) < 0.f) { v1 = -v1; }
-		result += v1 * weights[i];
+		float w = weights ? weights[i] : 1.f;
+		result += v1 * w;
 	}
 
-	return { result.f4 };
+	return normalize(quat(result));
+}
+
+vec3 nlerp(vec3* vs, float* weights, uint32 count)
+{
+	vec3 result(0.f, 0.f, 0.f);
+
+	float weightSum = 0.f;
+
+	for (uint32 i = 0; i < count; ++i)
+	{
+		float w = weights ? weights[i] : 1.f;
+		result += vs[i] * w;
+		weightSum += w;
+	}
+
+	result /= (weightSum == 0.f) ? 1.f : weightSum;
+	return result;
 }
 
 mat3 quaternionToMat3(quat q)

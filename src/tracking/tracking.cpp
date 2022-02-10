@@ -25,7 +25,7 @@ static dx_pipeline visualizeDepthPipeline;
 
 
 
-static const char* trackingDirectionNames[] =
+static const char* trackingCorrespondenceModeNames[] =
 {
 	"Camera to render",
 	"Render to camera",
@@ -35,6 +35,12 @@ static const char* rotationRepresentationNames[] =
 {
 	"Euler",
 	"Lie",
+};
+
+static const char* trackingModeNames[] =
+{
+	"Track object",
+	"Track camera",
 };
 
 struct visualize_depth_material
@@ -444,91 +450,133 @@ static rotation_translation lieUpdate(vec6 x, float smoothing)
 
 
 
-void depth_tracker::processLastTrackingJob(scene_entity entity)
+void depth_tracker::processLastTrackingJobs(game_scene& scene)
 {
-	tracking_component& trackingComponent = entity.getComponent<tracking_component>();
-	ref<tracking_data>& trackingData = trackingComponent.trackingData;
+	auto group = getTrackedObjectGroup(scene);
 
-	if (!trackingData)
+	// Allocate memory in case we need to track the camera.
+	uint32 numObjects = (uint32)group.size();
+	void* mem = alloca(sizeof(quat) * numObjects + sizeof(vec3) * numObjects);
+	quat* rotations = (quat*)mem;
+	vec3* positions = (vec3*)(rotations + numObjects);
+
+	uint32 pushIndex = 0;
+
+
+
+	for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
 	{
-		return;
+		scene_entity entity = { entityHandle, scene };
+
+		tracking_component& trackingComponent = entity.getComponent<tracking_component>();
+		ref<tracking_data>& trackingData = trackingComponent.trackingData;
+
+		if (!trackingData)
+		{
+			return;
+		}
+
+		CPU_PROFILE_BLOCK("Process last tracking result");
+
+
+		tracking_indirect* mappedIndirect = (tracking_indirect*)mapBuffer(trackingData->icpDispatchReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
+		tracking_indirect indirect = mappedIndirect[dxContext.bufferedFrameID];
+		unmapBuffer(trackingData->icpDispatchReadbackBuffer, false);
+
+		//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
+		bool correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
+		trackingData->numCorrespondences = indirect.counter;
+
+
+		if (!disableTracking && tracking && correspondencesValid && trackingData->tracking)
+		{
+			// Due to the flip-flop reduction (below), we have to figure out in which buffer the final result has been written.
+			uint32 ataBufferIndex = 0;
+			if (indirect.reduce1.ThreadGroupCountX == 0) { ataBufferIndex = 1; }
+			if (indirect.reduce0.ThreadGroupCountX == 0) { ataBufferIndex = 0; }
+
+			tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(trackingData->ataReadbackBuffer, true, map_range{ 2 * dxContext.bufferedFrameID, 2 });
+			tracking_ata ata = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].ata;
+			tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
+			unmapBuffer(trackingData->ataReadbackBuffer, false);
+
+			vec6 x = solve(ata, atb);
+
+			float s = smoothing;
+
+			if (oldSmoothingMode)
+			{
+				s = 0.f;
+			}
+
+			rotation_translation delta;
+			if (rotationRepresentation == tracking_rotation_representation_euler)
+			{
+				delta = eulerUpdate(x, s);
+			}
+			else
+			{
+				assert(rotationRepresentation == tracking_rotation_representation_lie);
+				delta = lieUpdate(x, s);
+			}
+
+
+			quat rotation = mat3ToQuaternion(delta.rotation);
+			vec3 translation = delta.translation;
+
+			if (oldSmoothingMode)
+			{
+				float weightRotation = 1.f - exp(-hRotation * length(quat::identity.v4 - rotation.v4));
+				float weightTranslation = 1.f - exp(-hTranslation * length(translation));
+				float weight = max(weightRotation, weightTranslation);
+
+				translation *= weight;
+				rotation = slerp(quat::identity, rotation, weight);
+			}
+
+
+
+			if (correspondenceMode == tracking_correspondence_mode_camera_to_render)
+			{
+				rotation = conjugate(rotation);
+				translation = -(rotation * translation);
+			}
+
+			transform_component& transform = entity.getComponent<transform_component>();
+
+			mat4 m = getWorldMatrix() * createModelMatrix(translation, rotation) * getTrackingMatrix(transform);
+
+			if (mode == tracking_mode_track_object)
+			{
+				trs t = mat4ToTRS(m);
+
+				transform.position = t.position;
+				transform.rotation = t.rotation;
+			}
+			else
+			{
+				mat4 objectInCameraSpace = createViewMatrix(globalCameraPosition, globalCameraRotation) * m; // Transforms object space point to camera space.
+				mat4 f = trsToMat4(transform) * invert(objectInCameraSpace); // Transforms camera space point to world space.
+				trs t = mat4ToTRS(f);
+				
+				rotations[pushIndex] = t.rotation;
+				positions[pushIndex] = t.position;
+				++pushIndex;
+			}
+		}
 	}
 
-	CPU_PROFILE_BLOCK("Process last tracking result");
-
-
-	tracking_indirect* mappedIndirect = (tracking_indirect*)mapBuffer(trackingData->icpDispatchReadbackBuffer, true, map_range{ dxContext.bufferedFrameID, 1 });
-	tracking_indirect indirect = mappedIndirect[dxContext.bufferedFrameID];
-	unmapBuffer(trackingData->icpDispatchReadbackBuffer, false);
-
-	//std::cout << indirect.counter << " " << indirect.initialICP.ThreadGroupCountX << " " << indirect.reduce0.ThreadGroupCountX << " " << indirect.reduce1.ThreadGroupCountX << '\n';
-	bool correspondencesValid = indirect.initialICP.ThreadGroupCountX > 0;
-	trackingData->numCorrespondences = indirect.counter;
-
-
-	if (!disableTracking && tracking && correspondencesValid && trackingData->tracking)
+	if (mode == tracking_mode_track_camera)
 	{
-		// Due to the flip-flop reduction (below), we have to figure out in which buffer the final result has been written.
-		uint32 ataBufferIndex = 0;
-		if (indirect.reduce1.ThreadGroupCountX == 0) { ataBufferIndex = 1; }
-		if (indirect.reduce0.ThreadGroupCountX == 0) { ataBufferIndex = 0; }
-
-		tracking_ata_atb* mapped = (tracking_ata_atb*)mapBuffer(trackingData->ataReadbackBuffer, true, map_range{ 2 * dxContext.bufferedFrameID, 2 });
-		tracking_ata ata = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].ata;
-		tracking_atb atb = mapped[2 * dxContext.bufferedFrameID + ataBufferIndex].atb;
-		unmapBuffer(trackingData->ataReadbackBuffer, false);
-
-		vec6 x = solve(ata, atb);
-
-		float s = smoothing;
-
-		if (oldSmoothingMode)
+		uint32 numTrackedObjects = pushIndex;
+		if (numTrackedObjects != 0)
 		{
-			s = 0.f;
+			quat rotation = nlerp(rotations, 0, numTrackedObjects);
+			vec3 position = nlerp(positions, 0, numTrackedObjects);
+
+			globalCameraRotation = rotation;
+			globalCameraPosition = position;
 		}
-
-		rotation_translation delta;
-		if (rotationRepresentation == tracking_rotation_representation_euler)
-		{
-			delta = eulerUpdate(x, s);
-		}
-		else
-		{
-			assert(rotationRepresentation == tracking_rotation_representation_lie);
-			delta = lieUpdate(x, s);
-		}
-
-
-		quat rotation = mat3ToQuaternion(delta.rotation);
-		vec3 translation = delta.translation;
-
-		if (oldSmoothingMode)
-		{
-			float weightRotation = 1.f - exp(-hRotation * length(quat::identity.v4 - rotation.v4));
-			float weightTranslation = 1.f - exp(-hTranslation * length(translation));
-			float weight = max(weightRotation, weightTranslation);
-
-			translation *= weight;
-			rotation = slerp(quat::identity, rotation, weight);
-		}
-
-
-
-		if (trackingDirection == tracking_direction_camera_to_render)
-		{
-			rotation = conjugate(rotation);
-			translation = -(rotation * translation);
-		}
-
-		rotation = camera.depthSensor.rotation * rotation * conjugate(camera.depthSensor.rotation);
-		translation = camera.depthSensor.rotation * translation;
-
-		rotation = globalCameraRotation * rotation * conjugate(globalCameraRotation);
-		translation = globalCameraRotation * translation;
-
-		transform_component& transform = entity.getComponent<transform_component>();
-		transform.rotation = rotation * transform.rotation;
-		transform.position = rotation * transform.position + translation;
 	}
 }
 
@@ -610,7 +658,7 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_componen
 	pscb.depthScale = camera.depthScale;
 	pscb.squaredPositionThreshold = positionThreshold * positionThreshold;
 	pscb.cosAngleThreshold = cos(angleThreshold);
-	pscb.trackingDirection = trackingDirection;
+	pscb.correspondenceMode = correspondenceMode;
 
 	cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_VS_CB, vscb);
 	cl->setGraphics32BitConstants(CREATE_CORRESPONDENCES_RS_PS_CB, pscb);
@@ -775,7 +823,7 @@ void depth_tracker::update(game_scene& scene)
 			}
 
 
-			auto group = scene.group(entt::get<tracking_component, raster_component, transform_component>);
+			auto group = getTrackedObjectGroup(scene);
 
 			for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
 			{
@@ -784,10 +832,9 @@ void depth_tracker::update(game_scene& scene)
 					trackingComponent.trackingData = make_ref<tracking_data>();
 					initializeTrackingData(trackingComponent.trackingData);
 				}
-
-				scene_entity entity = { entityHandle, scene };
-				processLastTrackingJob(entity);
 			}
+
+			processLastTrackingJobs(scene);
 
 
 			cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -844,6 +891,11 @@ mat4 depth_tracker::getTrackingMatrix(const trs& transform)
 	return m;
 }
 
+mat4 depth_tracker::getWorldMatrix()
+{
+	return createModelMatrix(globalCameraPosition, globalCameraRotation) * createModelMatrix(camera.depthSensor.position, camera.depthSensor.rotation);
+}
+
 void depth_tracker::drawSettings(game_scene& scene)
 {
 #if 0
@@ -893,13 +945,11 @@ void depth_tracker::drawSettings(game_scene& scene)
 			ImGui::PropertySeparator();
 
 			ImGui::PropertyCheckbox("Visualize depth", showDepth);
-			ImGui::PropertyDisableableCheckbox("Tracking", tracking, !disableTracking);
-			if (disableTracking && ImGui::IsItemHovered())
-			{
-				ImGui::BeginTooltip();
-				ImGui::Text("Tracking has been disabled from outside");
-				ImGui::EndTooltip();
-			}
+			ImGui::PropertyDisableableCheckbox("Tracking", tracking, !disableTracking, disableTracking ? "Tracking has been disabled from outside" : 0);
+
+			ImGui::PropertyDropdown("Mode", trackingModeNames, 2, (uint32&)mode);
+
+
 			ImGui::PropertySlider("Position threshold", positionThreshold, 0.f, 0.5f);
 			ImGui::PropertySliderAngle("Normal angle threshold", angleThreshold, 0.f, 90.f);
 
@@ -916,7 +966,7 @@ void depth_tracker::drawSettings(game_scene& scene)
 			ImGui::PropertyInput("Min number of correspondences", minNumCorrespondences);
 
 
-			ImGui::PropertyDropdown("Direction", trackingDirectionNames, 2, (uint32&)trackingDirection);
+			ImGui::PropertyDropdown("Correspondence mode", trackingCorrespondenceModeNames, 2, (uint32&)correspondenceMode);
 			ImGui::PropertyDropdown("Rotation representation", rotationRepresentationNames, 2, (uint32&)rotationRepresentation);
 
 			ImGui::EndProperties();

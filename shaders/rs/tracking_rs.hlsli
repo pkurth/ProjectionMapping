@@ -26,8 +26,8 @@ struct create_correspondences_vs_cb
 };
 
 #ifdef HLSL
-#define tracking_direction_camera_to_render 0
-#define tracking_direction_render_to_camera 1
+#define tracking_correspondence_mode_camera_to_render 0
+#define tracking_correspondence_mode_render_to_camera 1
 #endif
 
 struct create_correspondences_ps_cb
@@ -35,7 +35,7 @@ struct create_correspondences_ps_cb
 	float depthScale;
 	float squaredPositionThreshold;
 	float cosAngleThreshold;
-	uint32 trackingDirection;
+	uint32 correspondenceMode;
 };
 
 struct tracking_correspondence

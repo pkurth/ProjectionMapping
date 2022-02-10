@@ -83,7 +83,7 @@ float4 main(ps_input IN) : SV_TARGET0
 
 	tracking_correspondence result;
 
-	if (cb.trackingDirection == tracking_direction_camera_to_render)
+	if (cb.correspondenceMode == tracking_correspondence_mode_camera_to_render)
 	{
 		result.grad0 = float4(
 			cross(cameraPosition, normal),
@@ -91,7 +91,7 @@ float4 main(ps_input IN) : SV_TARGET0
 		);
 		result.grad1 = float4(normal, 1.f);
 	}
-	else // if (cb.trackingDirection == tracking_direction_render_to_camera)
+	else // if (cb.correspondenceMode == tracking_correspondence_mode_render_to_camera)
 	{
 		result.grad0 = float4(
 			cross(IN.position, cameraNormal),

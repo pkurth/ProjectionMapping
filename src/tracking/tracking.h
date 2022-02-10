@@ -33,16 +33,22 @@ struct tracking_component
 
 
 
-enum tracking_direction
+enum tracking_correspondence_mode
 {
-	tracking_direction_camera_to_render,
-	tracking_direction_render_to_camera
+	tracking_correspondence_mode_camera_to_render,
+	tracking_correspondence_mode_render_to_camera
 };
 
 enum tracking_rotation_representation
 {
 	tracking_rotation_representation_euler,
 	tracking_rotation_representation_lie,
+};
+
+enum tracking_mode
+{
+	tracking_mode_track_object,
+	tracking_mode_track_camera,
 };
 
 struct depth_tracker
@@ -54,8 +60,8 @@ struct depth_tracker
 	void visualizeDepth(ldr_render_pass* renderPass);
 
 
-	mat4 getTrackingMatrix(const trs& transform);
-
+	mat4 getTrackingMatrix(const trs& transform); // Transform relative to depth camera.
+	mat4 getWorldMatrix();
 
 	vec3 globalCameraPosition = vec3(0.f, 0.f, 0.f);
 	quat globalCameraRotation = quat::identity;
@@ -74,7 +80,9 @@ private:
 	
 	void initializeTrackingData(ref<tracking_data>& data);
 
-	void processLastTrackingJob(scene_entity entity);
+	void processLastTrackingJobs(game_scene& scene);
+
+	auto getTrackedObjectGroup(game_scene& scene) { return scene.group(entt::get<tracking_component, raster_component, transform_component>); }
 	
 	void depthPrepass(dx_command_list* cl, const raster_component& rasterComponent, const transform_component& transform);
 	void createCorrespondences(dx_command_list* cl, tracking_component& trackingComponent, const raster_component& rasterComponent, const transform_component& transform);
@@ -104,8 +112,9 @@ private:
 
 	uint32 minNumCorrespondences = 5000;
 
-	tracking_direction trackingDirection = tracking_direction_camera_to_render;
+	tracking_correspondence_mode correspondenceMode = tracking_correspondence_mode_camera_to_render;
 	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
+	tracking_mode mode = tracking_mode_track_object;
 
 	bool tracking = false;
 };
