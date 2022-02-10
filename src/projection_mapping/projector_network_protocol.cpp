@@ -781,8 +781,6 @@ bool projector_network_client::sendHello()
 {
 	send_buffer messageBuffer;
 	messageBuffer.header.type = message_client_hello;
-	messageBuffer.header.clientID = -1;
-	messageBuffer.header.messageID = 0;
 
 	std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
 
@@ -816,8 +814,6 @@ bool projector_network_client::reportLocalCalibration(const std::unordered_map<s
 {
 	send_buffer messageBuffer;
 	messageBuffer.header.type = message_client_local_calibration;
-	messageBuffer.header.clientID = -1;
-	messageBuffer.header.messageID = 0;
 
 	uint32 count = (uint32)calibs.size();
 	client_calibration_message* messages = messageBuffer.push<client_calibration_message>(count);
@@ -851,5 +847,7 @@ bool projector_network_client::reportLocalCalibration(const std::unordered_map<s
 
 bool projector_network_client::sendToServer(send_buffer& buffer)
 {
+	buffer.header.clientID = clientID;
+	buffer.header.messageID = 0;
 	return clientSocket.send(serverAddress, buffer.buffer, buffer.size);
 }
