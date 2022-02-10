@@ -19,6 +19,7 @@ enum message_type : uint16
 	message_server_solver_settings,
 	message_server_object_info,
 	message_server_object_update,
+	message_server_projector_instantiation,
 };
 
 struct message_header
@@ -44,11 +45,14 @@ struct send_buffer
 	}
 
 	template <typename T>
-	T& pushValue(const T& t)
+	bool pushValue(const T& t)
 	{
 		T* result = push<T>(1);
-		*result = t;
-		return *result;
+		if (result)
+		{
+			*result = t;
+		}
+		return result != 0;
 	}
 
 	union
@@ -160,7 +164,7 @@ bool projector_network_protocol::update(float dt)
 	}
 }
 
-bool projector_network_protocol::ifServer_broadcastObjectInfo()
+bool projector_network_protocol::server_broadcastObjectInfo()
 {
 	if (!initialized)
 	{
@@ -175,7 +179,22 @@ bool projector_network_protocol::ifServer_broadcastObjectInfo()
 	return false;
 }
 
-bool projector_network_protocol::ifClient_reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs)
+bool projector_network_protocol::server_broadcastProjectors(const std::vector<projector_instantiation>& instantiations)
+{
+	if (!initialized)
+	{
+		return false;
+	}
+
+	if (isServer)
+	{
+		return server.broadcastProjectors(instantiations);
+	}
+
+	return false;
+}
+
+bool projector_network_protocol::client_reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs)
 {
 	if (!initialized)
 	{
@@ -188,6 +207,16 @@ bool projector_network_protocol::ifClient_reportLocalCalibration(const std::unor
 	}
 
 	return false;
+}
+
+uint32 projector_network_protocol::client_getID()
+{
+	if (!initialized || isServer)
+	{
+		return -1;
+	}
+
+	return client.clientID;
 }
 
 bool projector_network_server::initialize(game_scene& scene, projector_manager* manager, uint32 port, char* outIP)
@@ -253,14 +282,18 @@ bool projector_network_server::update(float dt)
 			LOG_MESSAGE("Sending solver settings");
 
 			send_buffer messageBuffer;
-			createSettingsMessage(messageBuffer);
-			sendToAllClients(messageBuffer);
+			if (createSettingsMessage(messageBuffer))
+			{
+				sendToAllClients(messageBuffer);
+			}
 		}
 
 		{
 			send_buffer messageBuffer;
-			createObjectUpdateMessage(messageBuffer);
-			sendToAllClients(messageBuffer);
+			if (createObjectUpdateMessage(messageBuffer))
+			{
+				sendToAllClients(messageBuffer);
+			}
 		}
 
 		timeSinceLastUpdate -= updateTime;
@@ -330,14 +363,18 @@ bool projector_network_server::update(float dt)
 
 				{
 					send_buffer response;
-					createObjectMessage(response);
-					sendToClient(response, connection);
+					if (createObjectMessage(response))
+					{
+						sendToClient(response, connection);
+					}
 				}
 
 				{
 					send_buffer response;
-					createSettingsMessage(response);
-					sendToClient(response, connection);
+					if (createSettingsMessage(response))
+					{
+						sendToClient(response, connection);
+					}
 				}
 
 
@@ -374,8 +411,13 @@ bool projector_network_server::update(float dt)
 bool projector_network_server::broadcastObjectInfo()
 {
 	send_buffer messageBuffer;
-	createObjectMessage(messageBuffer);
-	return sendToAllClients(messageBuffer);
+	return createObjectMessage(messageBuffer) && sendToAllClients(messageBuffer);
+}
+
+bool projector_network_server::broadcastProjectors(const std::vector<projector_instantiation>& instantiations)
+{
+	send_buffer messageBuffer;
+	return createProjectorInstantiationMessage(messageBuffer, instantiations) && sendToAllClients(messageBuffer);
 }
 
 static auto getObjectGroup(game_scene* scene)
@@ -393,6 +435,11 @@ bool projector_network_server::createObjectMessage(send_buffer& buffer)
 	buffer.header.type = message_server_object_info;
 
 	server_object_message* messages = buffer.push<server_object_message>(numObjectsInScene);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u object infos", numObjectsInScene);
+		return false;
+	}
 
 	uint32 id = 0;
 	for (auto [entityHandle, raster, transform] : objectGroup.each())
@@ -420,8 +467,7 @@ bool projector_network_server::createSettingsMessage(send_buffer& buffer)
 {
 	buffer.header.type = message_server_solver_settings;
 	buffer.header.messageID = runningMessageID++;
-	buffer.pushValue(manager->solver.settings);
-	return true;
+	return buffer.pushValue(manager->solver.settings);
 }
 
 bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
@@ -433,6 +479,11 @@ bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
 	buffer.header.messageID = runningMessageID++;
 
 	server_object_update_message* messages = buffer.push<server_object_update_message>(numObjectsInScene);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u object updates", numObjectsInScene);
+		return false;
+	}
 
 	uint32 id = 0;
 	for (auto [entityHandle, raster, transform] : objectGroup.each())
@@ -445,6 +496,24 @@ bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
 
 		++id;
 	}
+
+	return true;
+}
+
+bool projector_network_server::createProjectorInstantiationMessage(struct send_buffer& buffer, const std::vector<projector_instantiation>& instantiations)
+{
+	buffer.header.type = message_server_projector_instantiation;
+	buffer.header.messageID = runningMessageID++;
+
+	uint32 count = (uint32)instantiations.size();
+	projector_instantiation* messages = buffer.push<projector_instantiation>(count);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u projector instantiations", count);
+		return false;
+	}
+
+	memcpy(messages, instantiations.data(), count * sizeof(projector_instantiation));
 
 	return true;
 }
@@ -649,6 +718,33 @@ bool projector_network_client::update()
 						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
 					}
 				}
+
+			} break;
+
+			case message_server_projector_instantiation:
+			{
+				if (messageBuffer.sizeRemaining % sizeof(projector_instantiation) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(projector_instantiation). Expected multiple of %u, got %u", (uint32)sizeof(projector_instantiation), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				if (header->messageID < latestProjectorInstantiationMessageID)
+				{
+					break;
+				}
+
+				latestProjectorInstantiationMessageID = header->messageID;
+
+				uint32 numProjectors = messageBuffer.sizeRemaining / (uint32)sizeof(projector_instantiation);
+				const projector_instantiation* projectors = messageBuffer.get<projector_instantiation>(numProjectors);
+
+				assert(messageBuffer.sizeRemaining == 0);
+
+				std::vector<projector_instantiation> instantiations(numProjectors);
+				memcpy(instantiations.data(), projectors, numProjectors * sizeof(projector_instantiation));
+
+				manager->network_projectorInstantiations(instantiations);
 
 			} break;
 

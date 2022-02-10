@@ -34,7 +34,7 @@ private:
 
 	// Network callbacks.
 	void network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs);
-
+	void network_projectorInstantiations(const std::vector<projector_instantiation>& instantiations);
 
 	struct client_monitor
 	{
@@ -56,11 +56,11 @@ private:
 
 	software_window blackWindows[MAX_NUM_PROJECTORS];
 
-	void createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors);
-	void createProjector(const std::string& monitorID, bool local);
+	void createProjectorsAndNotify();
+	std::vector<projector_instantiation> createInstantiations();
 
-	std::vector<std::string> getLocalProjectors();
-	std::vector<std::string> getRemoteProjectors();
+	void createProjectors(const std::vector<projector_instantiation>& instantiations);
+	void createProjector(const std::string& monitorID, bool local);
 
 	game_scene* scene;
 

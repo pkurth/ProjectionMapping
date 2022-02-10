@@ -337,26 +337,81 @@ void projector_manager::updateAndRender(float dt)
 
 void projector_manager::onSceneLoad()
 {
-	std::vector<std::string> myProjectors = getLocalProjectors();
-	std::vector<std::string> remoteProjectors = getRemoteProjectors();
+	protocol.server_broadcastObjectInfo();
 
-	createProjectors(myProjectors, remoteProjectors);
-
-	protocol.ifServer_broadcastObjectInfo();
+	createProjectorsAndNotify();
 }
 
 void projector_manager::reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calib)
 {
-	for (auto& c : calib)
+	for (const auto& c : calib)
 	{
 		context.knownProjectorCalibrations[c.first] = c.second;
 	}
 
-	std::vector<std::string> myProjectors = getLocalProjectors();
-	std::vector<std::string> remoteProjectors = getRemoteProjectors();
+	createProjectorsAndNotify();
+}
 
-	createProjectors(myProjectors, remoteProjectors);
-	//protocol.reportCalibration
+void projector_manager::createProjectorsAndNotify()
+{
+	if (!protocol.initialized)
+	{
+		std::vector<projector_instantiation> instantiations = createInstantiations();
+		createProjectors(instantiations);
+	}
+	else
+	{
+		if (protocol.isServer)
+		{
+			std::vector<projector_instantiation> instantiations = createInstantiations();
+
+			createProjectors(instantiations);
+			protocol.server_broadcastProjectors(instantiations);
+		}
+		else
+		{
+			protocol.client_reportLocalCalibration(context.knownProjectorCalibrations);
+		}
+	}
+}
+
+std::vector<projector_instantiation> projector_manager::createInstantiations()
+{
+	std::vector<projector_instantiation> instantiations;
+
+	{
+		auto& monitors = win32_window::allConnectedMonitors;
+		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+		{
+			if (isProjectorIndex[i])
+			{
+				auto& monitor = monitors[i];
+
+				auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
+				if (it != context.knownProjectorCalibrations.end())
+				{
+					instantiations.push_back(projector_instantiation{ (uint32)-1, i, it->second });
+				}
+			}
+		}
+	}
+
+	for (auto& client : clients)
+	{
+		auto& monitors = client.second.monitors;
+		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+		{
+			auto& monitor = monitors[i];
+
+			auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
+			if (it != context.knownProjectorCalibrations.end())
+			{
+				instantiations.push_back(projector_instantiation{ client.second.clientID, i, it->second });
+			}
+		}
+	}
+
+	return instantiations;
 }
 
 void projector_manager::network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs)
@@ -371,6 +426,13 @@ void projector_manager::network_newClient(const std::string& hostname, uint32 cl
 	}
 	
 	clients[hostname] = info;
+
+	createProjectorsAndNotify();
+}
+
+void projector_manager::network_projectorInstantiations(const std::vector<projector_instantiation>& instantiations)
+{
+	createProjectors(instantiations);
 }
 
 void projector_manager::loadSetup()
@@ -415,7 +477,7 @@ void projector_manager::saveSetup()
 	fout << out.c_str();
 }
 
-void projector_manager::createProjectors(const std::vector<std::string>& myProjectors, const std::vector<std::string>& remoteProjectors)
+void projector_manager::createProjectors(const std::vector<projector_instantiation>& instantiations)
 {
 	// Delete all current projectors.
 	auto projectorGroup = scene->view<projector_component>();
@@ -427,14 +489,18 @@ void projector_manager::createProjectors(const std::vector<std::string>& myProje
 
 	scene->registry.destroy(projectorGroup.begin(), projectorGroup.end());
 
-	for (auto& monitorID : myProjectors)
-	{
-		createProjector(monitorID, true);
-	}
+	uint32 myClientID = protocol.client_getID();
 
-	for (auto& monitorID : remoteProjectors)
+	for (auto& inst : instantiations)
 	{
-		createProjector(monitorID, false);
+		if (inst.clientID == myClientID)
+		{
+			createProjector(win32_window::allConnectedMonitors[inst.monitorIndex].uniqueID, true);
+		}
+		else
+		{
+			createProjector("Remote", false);
+		}
 	}
 }
 
@@ -452,42 +518,4 @@ void projector_manager::createProjector(const std::string& monitorID, bool local
 		.addComponent<projector_component>(p.width, p.height, p.intrinsics, monitorID, local, true);
 }
 
-std::vector<std::string> projector_manager::getLocalProjectors()
-{
-	std::vector<std::string> myProjectors;
-
-	uint32 index = 0;
-	for (const monitor_info& monitor : win32_window::allConnectedMonitors)
-	{
-		if (isProjectorIndex[index++])
-		{
-			auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
-			if (it != context.knownProjectorCalibrations.end())
-			{
-				myProjectors.push_back(monitor.uniqueID);
-			}
-		}
-	}
-
-	return myProjectors;
-}
-
-std::vector<std::string> projector_manager::getRemoteProjectors()
-{
-	std::vector<std::string> remoteProjectors;
-
-	for (auto& client : clients)
-	{
-		for (const auto& monitor : client.second.monitors)
-		{
-			auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
-			if (it != context.knownProjectorCalibrations.end())
-			{
-				remoteProjectors.push_back(monitor.uniqueID);
-			}
-		}
-	}
-
-	return remoteProjectors;
-}
 

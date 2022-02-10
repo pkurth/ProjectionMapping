@@ -6,12 +6,21 @@
 
 struct projector_manager;
 
+
+struct projector_instantiation
+{
+	uint32 clientID;
+	uint32 monitorIndex;
+	projector_calibration calibration;
+};
+
 struct projector_network_server
 {
 	bool initialize(game_scene& scene, projector_manager* manager, uint32 port, char* outIP);
 	bool update(float dt);
 
 	bool broadcastObjectInfo();
+	bool broadcastProjectors(const std::vector<projector_instantiation>& instantiations);
 
 private:
 	
@@ -24,6 +33,7 @@ private:
 	bool createObjectMessage(struct send_buffer& buffer);
 	bool createSettingsMessage(struct send_buffer& buffer);
 	bool createObjectUpdateMessage(struct send_buffer& buffer);
+	bool createProjectorInstantiationMessage(struct send_buffer& buffer, const std::vector<projector_instantiation>& instantiations);
 
 	bool sendToAllClients(struct send_buffer& buffer);
 	bool sendToClient(struct send_buffer& buffer, const client_connection& connection);
@@ -50,6 +60,8 @@ struct projector_network_client
 	bool sendHello();
 	bool reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs);
 
+	uint32 clientID = -1;
+
 private:
 	bool sendToServer(struct send_buffer& buffer);
 
@@ -60,12 +72,12 @@ private:
 	network_socket clientSocket;
 
 	bool connected = false;
-	uint32 clientID = -1;
 
 
 	uint32 latestSettingsMessageID = 0;
 	uint32 latestObjectMessageID = 0;
 	uint32 latestObjectUpdateMessageID = 0;
+	uint32 latestProjectorInstantiationMessageID = 0;
 
 	projector_solver_settings oldSolverSettings;
 
@@ -80,11 +92,11 @@ struct projector_network_protocol
 	bool update(float dt);
 
 
-	bool ifServer_broadcastObjectInfo();
+	bool server_broadcastObjectInfo();
+	bool server_broadcastProjectors(const std::vector<projector_instantiation>& instantiations);
 
-
-	bool ifClient_reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs);
-
+	bool client_reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs);
+	uint32 client_getID();
 
 	bool initialized = false;
 
