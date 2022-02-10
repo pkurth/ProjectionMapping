@@ -664,6 +664,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 
 	YAML_LOAD(n, tracker->globalCameraPosition, "Tracker position");
 	YAML_LOAD(n, tracker->globalCameraRotation, "Tracker rotation");
+	tracker->initializeDummy();
 
 	YAML_LOAD(n, *projectorContext, "Projector context");
 

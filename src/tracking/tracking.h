@@ -53,10 +53,10 @@ enum tracking_mode
 
 struct depth_tracker
 {
-	depth_tracker();
+	depth_tracker(game_scene& scene);
 
-	void drawSettings(game_scene& scene);
-	void update(game_scene& scene);
+	void drawSettings();
+	void update();
 	void visualizeDepth(ldr_render_pass* renderPass);
 
 
@@ -80,13 +80,18 @@ struct depth_tracker
 
 private:
 
+	game_scene& scene;
+
+	scene_entity dummyTrackerEntity;
+
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
+	void initializeDummy();
 	
 	void initializeTrackingData(ref<tracking_data>& data);
 
-	void processLastTrackingJobs(game_scene& scene);
+	void processLastTrackingJobs();
 
-	auto getTrackedObjectGroup(game_scene& scene) { return scene.group(entt::get<tracking_component, raster_component, transform_component>); }
+	auto getTrackedObjectGroup() { return scene.group(entt::get<tracking_component, raster_component, transform_component>); }
 	
 	void depthPrepass(dx_command_list* cl, const raster_component& rasterComponent, const transform_component& transform);
 	void createCorrespondences(dx_command_list* cl, tracking_component& trackingComponent, const raster_component& rasterComponent, const transform_component& transform);
@@ -117,5 +122,8 @@ private:
 	uint32 minNumCorrespondences = 5000;
 
 	bool tracking = false;
+
+	friend struct scene_editor;
+	friend bool deserializeSceneFromDisk(game_scene& scene, struct renderer_settings& rendererSettings, std::string& environmentName, depth_tracker* tracker, struct projector_context* projectorContext);
 };
 

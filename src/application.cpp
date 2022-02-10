@@ -69,13 +69,8 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 
 	if (auto targetObjectMesh = loadMeshFromFile("assets/meshes/augustus.obj"))
 	{
-		trs transform = trs::identity;
-		
-		transform.rotation = tracker->globalCameraRotation * transform.rotation;
-		transform.position = tracker->globalCameraRotation * transform.position;
-
 		auto targetObject = scene.createEntity("Augustus")
-			.addComponent<transform_component>(transform)
+			.addComponent<transform_component>(trs::identity)
 			.addComponent<raster_component>(targetObjectMesh)
 			.addComponent<tracking_component>();
 	}
@@ -85,11 +80,8 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	{
 		trs transform = trs::identity;
 	
-		transform.rotation = tracker->globalCameraRotation * transform.rotation;
-		transform.position = tracker->globalCameraRotation * transform.position;
-	
 		auto targetObject = scene.createEntity("Nike")
-			.addComponent<transform_component>(transform)
+			.addComponent<transform_component>(trs::identity)
 			.addComponent<raster_component>(targetObjectMesh)
 			.addComponent<tracking_component>();
 	}
@@ -209,6 +201,20 @@ void application::update(const user_input& input, float dt)
 
 
 		projector.renderer.submitRenderPass(&projectorOpaqueRenderPass);
+	}
+
+	if (tracker->camera.isInitialized())
+	{
+		auto& ds = tracker->camera.depthSensor;
+
+		quat rot = tracker->globalCameraRotation * ds.rotation;
+		vec3 pos = tracker->globalCameraRotation * ds.position + tracker->globalCameraPosition;
+		
+		render_camera camera;
+		camera.initializeCalibrated(pos, rot, ds.width, ds.height, ds.intrinsics, 0.01f);
+		camera.updateMatrices();
+
+		renderCameraFrustum(camera, vec4(1.f, 1.f, 1.f, 1.f), &ldrRenderPass, 4.f);
 	}
 
 

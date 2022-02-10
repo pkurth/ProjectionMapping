@@ -127,7 +127,7 @@ int main(int argc, char** argv)
 
 	window.setFileDropCallback([&app](const fs::path& s) { app.handleFileDrop(s); });
 
-	depth_tracker tracker;
+	depth_tracker tracker(app.getScene());
 
 	projector_renderer::initializeCommon();
 	projector_manager projectorManager(app.getScene(), &tracker);
@@ -266,7 +266,7 @@ int main(int argc, char** argv)
 		renderer.beginFrame(renderWidth, renderHeight);
 		
 		app.update(input, dt);
-		tracker.update(app.getScene());
+		tracker.update();
 
 		endFrameCommon();
 		shadow_map_renderer::endFrame();

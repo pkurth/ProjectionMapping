@@ -565,6 +565,7 @@ bool scene_editor::drawSceneHierarchy()
 							{
 								quat delta = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));;
 								tracker->globalCameraRotation = delta * tracker->globalCameraRotation;
+								tracker->dummyTrackerEntity.getComponent<position_rotation_component>().rotation = tracker->globalCameraRotation;
 
 								for (auto [entityHandle, transform] : this->scene->view<transform_component>().each())
 								{
@@ -1318,7 +1319,7 @@ void scene_editor::drawSettings(float dt)
 
 		if (ImGui::BeginTree("Tracker"))
 		{
-			tracker->drawSettings(*scene);
+			tracker->drawSettings();
 			ImGui::EndTree();
 		}
 

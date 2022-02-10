@@ -140,11 +140,20 @@ static void initializePipelines()
 	}
 }
 
-depth_tracker::depth_tracker()
+depth_tracker::depth_tracker(game_scene& scene)
+	: scene(scene)
 {
 	initializePipelines();
 
 	initialize(rgbd_camera_type_realsense, 0);
+
+	initializeDummy();
+}
+
+void depth_tracker::initializeDummy()
+{
+	dummyTrackerEntity = scene.createEntity("Tracker")
+		.addComponent<position_rotation_component>(globalCameraPosition, globalCameraRotation);
 }
 
 void depth_tracker::initialize(rgbd_camera_type cameraType, uint32 deviceIndex)
@@ -450,9 +459,9 @@ static rotation_translation lieUpdate(vec6 x, float smoothing)
 
 
 
-void depth_tracker::processLastTrackingJobs(game_scene& scene)
+void depth_tracker::processLastTrackingJobs()
 {
-	auto group = getTrackedObjectGroup(scene);
+	auto group = getTrackedObjectGroup();
 
 	// Allocate memory in case we need to track the camera.
 	uint32 numObjects = (uint32)group.size();
@@ -767,8 +776,12 @@ void depth_tracker::accumulateCorrespondences(dx_command_list* cl, tracking_comp
 	cl->copyBufferRegionToBuffer(trackingData->icpDispatchBuffer, trackingData->icpDispatchReadbackBuffer, 0, dxContext.bufferedFrameID, 1);
 }
 
-void depth_tracker::update(game_scene& scene)
+void depth_tracker::update()
 {
+	position_rotation_component& dummyPosRot = dummyTrackerEntity.getComponent<position_rotation_component>();
+	globalCameraPosition = dummyPosRot.position;
+	globalCameraRotation = dummyPosRot.rotation;
+
 	if (camera.isInitialized())
 	{
 		dx_command_list* cl = dxContext.getFreeRenderCommandList();
@@ -823,7 +836,7 @@ void depth_tracker::update(game_scene& scene)
 			}
 
 
-			auto group = getTrackedObjectGroup(scene);
+			auto group = getTrackedObjectGroup();
 
 			for (auto [entityHandle, trackingComponent, rasterComponent, transform] : group.each())
 			{
@@ -834,7 +847,7 @@ void depth_tracker::update(game_scene& scene)
 				}
 			}
 
-			processLastTrackingJobs(scene);
+			processLastTrackingJobs();
 
 
 			cl->transitionBarrier(renderedColorTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -864,6 +877,9 @@ void depth_tracker::update(game_scene& scene)
 		dxContext.executeCommandList(cl);
 
 	}
+
+	dummyPosRot.position = globalCameraPosition;
+	dummyPosRot.rotation = globalCameraRotation;
 }
 
 void depth_tracker::visualizeDepth(ldr_render_pass* renderPass)
@@ -896,7 +912,7 @@ mat4 depth_tracker::getWorldMatrix()
 	return createModelMatrix(globalCameraPosition, globalCameraRotation) * createModelMatrix(camera.depthSensor.position, camera.depthSensor.rotation);
 }
 
-void depth_tracker::drawSettings(game_scene& scene)
+void depth_tracker::drawSettings()
 {
 #if 0
 	if (ImGui::BeginTree("Cameras"))
