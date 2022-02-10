@@ -123,7 +123,6 @@ private:
 
 	bool tracking = false;
 
-	friend struct scene_editor;
 	friend bool deserializeSceneFromDisk(game_scene& scene, struct renderer_settings& rendererSettings, std::string& environmentName, depth_tracker* tracker, struct projector_context* projectorContext);
 };
 

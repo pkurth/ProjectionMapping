@@ -565,7 +565,8 @@ bool scene_editor::drawSceneHierarchy()
 							{
 								quat delta = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));;
 								tracker->globalCameraRotation = delta * tracker->globalCameraRotation;
-								tracker->dummyTrackerEntity.getComponent<position_rotation_component>().rotation = tracker->globalCameraRotation;
+
+								// No need to set the tracker dummy object, since this is handled by transforming the position_rotation_components below.
 
 								for (auto [entityHandle, transform] : this->scene->view<transform_component>().each())
 								{
