@@ -23,8 +23,6 @@ private:
 	void submitPointCloudForVisualization(const struct image_point_cloud& pc, vec4 color);
 	void submitFrustumForVisualization(vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics, vec4 color);
 
-	void submitFinalCalibration(const std::string& uniqueID, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics);
-
 	bool computeInitialExtrinsicProjectorCalibrationEstimate(
 		std::vector<struct pixel_correspondence> pixelCorrespondences,
 		const struct image_point_cloud& renderedPointCloud,
@@ -81,7 +79,8 @@ private:
 	std::mutex mutex;
 	std::vector<point_cloud_visualization> pointCloudsToVisualize;
 	std::vector<frustum_visualization> frustaToVisualize;
-	std::vector<final_calibration> finalCalibrations;
 	std::vector<struct software_window*> windowsToClose;
+
+	std::unordered_map<std::string, projector_calibration> finalCalibrations;
 };
 

@@ -14,6 +14,7 @@ enum message_type : uint16
 {
 	message_client_hello,
 	message_client_request_calibration_mode,
+	message_client_local_calibration,
 
 	message_server_solver_settings,
 	message_server_object_info,
@@ -174,6 +175,21 @@ bool projector_network_protocol::ifServer_broadcastObjectInfo()
 	return false;
 }
 
+bool projector_network_protocol::ifClient_reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs)
+{
+	if (!initialized)
+	{
+		return false;
+	}
+
+	if (!isServer)
+	{
+		return client.reportLocalCalibration(calibs);
+	}
+
+	return false;
+}
+
 bool projector_network_server::initialize(game_scene& scene, projector_manager* manager, uint32 port, char* outIP)
 {
 	network_socket socket;
@@ -218,9 +234,7 @@ bool projector_network_client::initialize(game_scene& scene, projector_manager* 
 	getLocalIPAddress(clientAddress);
 	LOG_MESSAGE("Client created, IP: %s", clientAddress);
 
-	sendHello();
-
-	return true;
+	return sendHello();
 }
 
 
@@ -236,14 +250,10 @@ bool projector_network_server::update(float dt)
 		{
 			oldSolverSettings = manager->solver.settings;
 			
-			
 			LOG_MESSAGE("Sending solver settings");
 
 			send_buffer messageBuffer;
-			messageBuffer.header.type = message_server_solver_settings;
-
-			messageBuffer.pushValue(manager->solver.settings);
-
+			createSettingsMessage(messageBuffer);
 			sendToAllClients(messageBuffer);
 		}
 
@@ -318,10 +328,17 @@ bool projector_network_server::update(float dt)
 					uniqueIDs.push_back(monitors[i].uniqueID);
 				}
 
+				{
+					send_buffer response;
+					createObjectMessage(response);
+					sendToClient(response, connection);
+				}
 
-				send_buffer response;
-				createObjectMessage(response);
-				sendToClient(response, connection);
+				{
+					send_buffer response;
+					createSettingsMessage(response);
+					sendToClient(response, connection);
+				}
 
 
 				manager->network_newClient(msg->hostname, clientID, descriptions, uniqueIDs);
@@ -396,6 +413,14 @@ bool projector_network_server::createObjectMessage(send_buffer& buffer)
 		++id;
 	}
 
+	return true;
+}
+
+bool projector_network_server::createSettingsMessage(send_buffer& buffer)
+{
+	buffer.header.type = message_server_solver_settings;
+	buffer.header.messageID = runningMessageID++;
+	buffer.pushValue(manager->solver.settings);
 	return true;
 }
 
@@ -633,7 +658,7 @@ bool projector_network_client::update()
 	return true;
 }
 
-void projector_network_client::sendHello()
+bool projector_network_client::sendHello()
 {
 	send_buffer messageBuffer;
 	messageBuffer.header.type = message_client_hello;
@@ -660,7 +685,12 @@ void projector_network_client::sendHello()
 		strncpy_s(msg.uniqueID, mon.uniqueID.c_str(), sizeof(msg.uniqueID));
 	}
 
-	sendToServer(messageBuffer);
+	return sendToServer(messageBuffer);
+}
+
+bool projector_network_client::reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs)
+{
+	return false;
 }
 
 bool projector_network_client::sendToServer(send_buffer& buffer)

@@ -22,6 +22,7 @@ private:
 	};
 
 	bool createObjectMessage(struct send_buffer& buffer);
+	bool createSettingsMessage(struct send_buffer& buffer);
 	bool createObjectUpdateMessage(struct send_buffer& buffer);
 
 	bool sendToAllClients(struct send_buffer& buffer);
@@ -46,7 +47,8 @@ struct projector_network_client
 	bool initialize(game_scene& scene, projector_manager* manager, const char* serverIP, uint32 serverPort);
 	bool update();
 
-	void sendHello();
+	bool sendHello();
+	bool reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs);
 
 private:
 	bool sendToServer(struct send_buffer& buffer);
@@ -80,6 +82,8 @@ struct projector_network_protocol
 
 	bool ifServer_broadcastObjectInfo();
 
+
+	bool ifClient_reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs);
 
 
 	bool initialized = false;

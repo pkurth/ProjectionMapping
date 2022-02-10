@@ -74,6 +74,10 @@ struct depth_tracker
 
 	bool disableTracking = false;
 
+	tracking_correspondence_mode correspondenceMode = tracking_correspondence_mode_camera_to_render;
+	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
+	tracking_mode mode = tracking_mode_track_object;
+
 private:
 
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
@@ -111,10 +115,6 @@ private:
 	bool oldSmoothingMode = true;
 
 	uint32 minNumCorrespondences = 5000;
-
-	tracking_correspondence_mode correspondenceMode = tracking_correspondence_mode_camera_to_render;
-	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
-	tracking_mode mode = tracking_mode_track_object;
 
 	bool tracking = false;
 };

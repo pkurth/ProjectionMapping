@@ -907,6 +907,8 @@ bool projector_system_calibration::calibrate(game_scene& scene)
 		vec3 globalTranslation = tracker->globalCameraRotation * tracker->camera.colorSensor.position + tracker->globalCameraPosition;
 
 
+		std::unordered_map<std::string, projector_calibration> finalCalibs;
+
 		for (uint32 projID = 0; projID < (uint32)calibInput.projectors.size(); ++projID)
 		{
 			calibration_projector& proj = calibInput.projectors[projID];
@@ -992,8 +994,12 @@ bool projector_system_calibration::calibrate(game_scene& scene)
 				break;
 			}
 
-			submitFinalCalibration(proj.uniqueID, projPosition, projRotation, width, height, projIntrinsics);
+			finalCalibs[proj.uniqueID] = projector_calibration{ projRotation, projPosition, width, height, projIntrinsics };
 		}
+
+		mutex.lock();
+		finalCalibrations = std::move(finalCalibs);
+		mutex.unlock();
 
 		cancel = false;
 		state = calibration_state_none;
@@ -1040,13 +1046,6 @@ void projector_system_calibration::submitFrustumForVisualization(vec3 position, 
 {
 	mutex.lock();
 	frustaToVisualize.push_back({ rotation, position, width, height, intrinsics, color });
-	mutex.unlock();
-}
-
-void projector_system_calibration::submitFinalCalibration(const std::string& uniqueID, vec3 position, quat rotation, uint32 width, uint32 height, camera_intrinsics intrinsics)
-{
-	mutex.lock();
-	finalCalibrations.push_back({ uniqueID, projector_calibration{ rotation, position, width, height, intrinsics } });
 	mutex.unlock();
 }
 
@@ -1244,11 +1243,11 @@ bool projector_system_calibration::edit(game_scene& scene)
 void projector_system_calibration::update()
 {
 	mutex.lock();
-	for (const auto& fc : finalCalibrations)
+	if (finalCalibrations.size() > 0)
 	{
-		manager->reportLocalCalibration(fc.uniqueID, fc.calib);
+		manager->reportLocalCalibration(finalCalibrations);
+		finalCalibrations.clear();
 	}
-	finalCalibrations.clear();
 
 	for (software_window* w : windowsToClose)
 	{

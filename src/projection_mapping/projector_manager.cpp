@@ -143,15 +143,16 @@ void projector_manager::updateAndRender(float dt)
 			saveSetup();
 		}
 
-		bool calibrationMode = (solver.settings.mode == projector_mode_calibration);
 
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
 		
 		for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
 		{
+			bool black = (solver.settings.mode == projector_mode_calibration);
+
 			if (isProjectorIndex[i])
 			{
-				if (calibrationMode != blackWindows[i].visible)
+				if (black != blackWindows[i].visible)
 				{
 					blackWindows[i].toggleVisibility();
 				}
@@ -167,7 +168,15 @@ void projector_manager::updateAndRender(float dt)
 
 		if (protocol.initialized && !protocol.isServer)
 		{
-			tracker->disableTracking = !calibrationMode;
+			if (solver.settings.mode == projector_mode_calibration)
+			{
+				tracker->disableTracking = false;
+				tracker->mode = tracking_mode_track_camera;
+			}
+			else
+			{
+				tracker->disableTracking = true;
+			}
 		}
 
 		if (ImGui::Button("Detailed view"))
@@ -336,9 +345,12 @@ void projector_manager::onSceneLoad()
 	protocol.ifServer_broadcastObjectInfo();
 }
 
-void projector_manager::reportLocalCalibration(const std::string& uniqueID, const projector_calibration& calib)
+void projector_manager::reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calib)
 {
-	context.knownProjectorCalibrations[uniqueID] = calib;
+	for (auto& c : calib)
+	{
+		context.knownProjectorCalibrations[c.first] = c.second;
+	}
 
 	std::vector<std::string> myProjectors = getLocalProjectors();
 	std::vector<std::string> remoteProjectors = getRemoteProjectors();

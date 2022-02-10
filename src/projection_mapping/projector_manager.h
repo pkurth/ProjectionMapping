@@ -22,7 +22,7 @@ struct projector_manager
 	projector_context context;
 
 
-	void reportLocalCalibration(const std::string& uniqueID, const projector_calibration& calib);
+	void reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calib);
 
 
 	static constexpr uint32 MAX_NUM_PROJECTORS = 4;
