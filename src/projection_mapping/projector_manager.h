@@ -34,6 +34,8 @@ private:
 
 	// Network callbacks.
 	void network_newClient(const std::string& hostname, uint32 clientID, const std::vector<std::string>& descriptions, const std::vector<std::string>& uniqueIDs);
+	void network_clientCalibration(uint32 clientID, const std::vector<client_calibration_message>& calibrations);
+
 	void network_projectorInstantiations(const std::vector<projector_instantiation>& instantiations);
 
 	struct client_monitor
@@ -45,10 +47,11 @@ private:
 	struct client_info
 	{
 		uint32 clientID;
+		std::string hostname;
 		std::vector<client_monitor> monitors;
 	};
 
-	std::unordered_map<std::string, client_info> clients;
+	std::unordered_map<uint32, client_info> clients;
 
 
 	void loadSetup();

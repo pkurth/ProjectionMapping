@@ -14,6 +14,12 @@ struct projector_instantiation
 	projector_calibration calibration;
 };
 
+struct client_calibration_message
+{
+	uint32 monitorIndex;
+	projector_calibration calibration;
+};
+
 struct projector_network_server
 {
 	bool initialize(game_scene& scene, projector_manager* manager, uint32 port, char* outIP);

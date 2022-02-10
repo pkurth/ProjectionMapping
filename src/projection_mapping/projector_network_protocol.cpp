@@ -402,6 +402,29 @@ bool projector_network_server::update(float dt)
 					LOG_MESSAGE("Client %u requested projection mapping mode", (uint32)header->clientID);
 				}
 			} break;
+
+			case message_client_local_calibration:
+			{
+				if (messageBuffer.sizeRemaining % sizeof(client_calibration_message) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(client_calibration_message). Expected multiple of %u, got %u", (uint32)sizeof(client_calibration_message), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				uint32 numProjectors = messageBuffer.sizeRemaining / (uint32)sizeof(client_calibration_message);
+
+				LOG_MESSAGE("Received %u calibrations from client", numProjectors);
+
+				const client_calibration_message* projectors = messageBuffer.get<client_calibration_message>(numProjectors);
+
+				assert(messageBuffer.sizeRemaining == 0);
+
+				std::vector<client_calibration_message> calibrations(numProjectors);
+				memcpy(calibrations.data(), projectors, numProjectors * sizeof(client_calibration_message));
+
+				manager->network_clientCalibration(header->clientID, calibrations);
+
+			} break;
 		}
 	}
 
@@ -771,6 +794,11 @@ bool projector_network_client::sendHello()
 	messageBuffer.pushValue(hello);
 
 	client_monitor_info* messages = messageBuffer.push<client_monitor_info>(numMonitors);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u client monitors", numMonitors);
+		return false;
+	}
 
 	for (uint32 i = 0; i < numMonitors; ++i)
 	{
@@ -786,7 +814,39 @@ bool projector_network_client::sendHello()
 
 bool projector_network_client::reportLocalCalibration(const std::unordered_map<std::string, projector_calibration>& calibs)
 {
-	return false;
+	send_buffer messageBuffer;
+	messageBuffer.header.type = message_client_local_calibration;
+	messageBuffer.header.clientID = -1;
+	messageBuffer.header.messageID = 0;
+
+	uint32 count = (uint32)calibs.size();
+	client_calibration_message* messages = messageBuffer.push<client_calibration_message>(count);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u client calibrations", count);
+		return false;
+	}
+
+	uint32 pushIndex = 0;
+
+	std::vector<monitor_info>& monitors = win32_window::allConnectedMonitors;
+	for (const auto& it : calibs)
+	{
+		uint32 index = -1;
+		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+		{
+			if (monitors[i].uniqueID == it.first)
+			{
+				index = i;
+				break;
+			}
+		}
+		assert(index != -1);
+
+		messages[pushIndex++] = { index, it.second };
+	}
+
+	return sendToServer(messageBuffer);
 }
 
 bool projector_network_client::sendToServer(send_buffer& buffer)

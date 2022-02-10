@@ -419,13 +419,32 @@ void projector_manager::network_newClient(const std::string& hostname, uint32 cl
 	client_info info;
 
 	info.clientID = clientID;
+	info.hostname = hostname;
 
 	for (uint32 i = 0; i < (uint32)uniqueIDs.size(); ++i)
 	{
 		info.monitors.push_back({ descriptions[i], uniqueIDs[i] });
 	}
 	
-	clients[hostname] = info;
+	clients[clientID] = info;
+
+	createProjectorsAndNotify();
+}
+
+void projector_manager::network_clientCalibration(uint32 clientID, const std::vector<client_calibration_message>& calibrations)
+{
+	auto it = clients.find(clientID);
+	assert(it != clients.end());
+
+	client_info& info = it->second;
+
+	for (const client_calibration_message& msg : calibrations)
+	{
+		uint32 monitorIndex = msg.monitorIndex;
+		const std::string& uniqueID = info.monitors[monitorIndex].uniqueID;
+
+		context.knownProjectorCalibrations[uniqueID] = msg.calibration;
+	}
 
 	createProjectorsAndNotify();
 }
