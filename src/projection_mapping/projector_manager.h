@@ -60,7 +60,7 @@ private:
 	std::vector<projector_instantiation> createInstantiations();
 
 	void createProjectors(const std::vector<projector_instantiation>& instantiations);
-	void createProjector(const std::string& monitorID, bool local);
+	void createProjector(const std::string& monitorID, bool local, const projector_calibration& calib);
 
 	game_scene* scene;
 

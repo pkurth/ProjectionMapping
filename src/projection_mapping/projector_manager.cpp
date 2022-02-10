@@ -495,27 +495,22 @@ void projector_manager::createProjectors(const std::vector<projector_instantiati
 	{
 		if (inst.clientID == myClientID)
 		{
-			createProjector(win32_window::allConnectedMonitors[inst.monitorIndex].uniqueID, true);
+			createProjector(win32_window::allConnectedMonitors[inst.monitorIndex].uniqueID, true, inst.calibration);
 		}
 		else
 		{
-			createProjector("Remote", false);
+			createProjector("Remote", false, inst.calibration);
 		}
 	}
 }
 
-void projector_manager::createProjector(const std::string& monitorID, bool local)
+void projector_manager::createProjector(const std::string& monitorID, bool local, const projector_calibration& calib)
 {
-	auto it = context.knownProjectorCalibrations.find(monitorID);
-	assert(it != context.knownProjectorCalibrations.end());
-
-	auto p = it->second;
-
 	const char* name = local ? "Projector (local)" : "Projector (remote)";
 
 	scene->createEntity(name)
-		.addComponent<position_rotation_component>(p.position, p.rotation)
-		.addComponent<projector_component>(p.width, p.height, p.intrinsics, monitorID, local, true);
+		.addComponent<position_rotation_component>(calib.position, calib.rotation)
+		.addComponent<projector_component>(calib.width, calib.height, calib.intrinsics, monitorID, local, true);
 }
 
 
