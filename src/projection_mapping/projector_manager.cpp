@@ -220,7 +220,7 @@ void projector_manager::updateAndRender(float dt)
 	{
 		if (ImGui::Begin("Projector details", &detailWindowOpen, ImGuiWindowFlags_NoDocking))
 		{
-			if (ImGui::BeginTable("##Table", 7))
+			if (ImGui::BeginTable("##Table", 8))
 			{
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
@@ -229,6 +229,7 @@ void projector_manager::updateAndRender(float dt)
 				ImGui::TableSetupColumn("Color discontinuities");
 				ImGui::TableSetupColumn("Masks");
 				ImGui::TableSetupColumn("Solver intensities");
+				ImGui::TableSetupColumn("Distance field");
 
 				ImGui::TableHeadersRow();
 
@@ -275,6 +276,9 @@ void projector_manager::updateAndRender(float dt)
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.solverIntensityTexture);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.distanceFieldTexture);
 
 					++i;
 				}

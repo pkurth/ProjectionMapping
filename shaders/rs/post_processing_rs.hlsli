@@ -131,6 +131,45 @@ struct morphology_cb
 
 
 // ----------------------------------------
+// JUMP FLOOD VORONOI
+// ----------------------------------------
+
+struct jump_flood_voronoi_init_cb
+{
+    vec2 inputMask;
+};
+
+#define JUMP_FLOOD_VORONOI_INIT_RS \
+    "RootFlags(0), " \
+    "RootConstants(b0, num32BitConstants = 2), " \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
+
+#define JUMP_FLOOD_VORONOI_INIT_RS_CB        0
+#define JUMP_FLOOD_VORONOI_INIT_RS_TEXTURES  1
+
+
+struct jump_flood_voronoi_cb
+{
+    int stepWidth;
+};
+
+#define JUMP_FLOOD_VORONOI_RS \
+    "RootFlags(0), " \
+    "RootConstants(b0, num32BitConstants = 1), " \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
+
+#define JUMP_FLOOD_VORONOI_RS_CB            0
+#define JUMP_FLOOD_VORONOI_RS_TEXTURES      1
+
+
+#define JUMP_FLOOD_VORONOI_DISTANCE_RS \
+    "RootFlags(0), " \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
+
+#define JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES 0
+
+
+// ----------------------------------------
 // HIERARCHICAL DEPTH
 // ----------------------------------------
 

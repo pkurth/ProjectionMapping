@@ -354,7 +354,8 @@ project "D3D12ProjectionMapping"
 			"vec2=float2",
 			"vec3=float3",
 			"vec4=float4",
-			"uint32=uint"
+			"uint32=uint",
+			"int32=int"
 		}
 	
 		shaderoptions {

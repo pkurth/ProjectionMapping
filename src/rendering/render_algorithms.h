@@ -221,6 +221,12 @@ void erodeSmooth(dx_command_list* cl,
 	ref<dx_texture> temp,						// UNORDERED_ACCESS
 	uint32 radius);
 
+void distanceField(dx_command_list* cl, 
+	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE, 1 or 2 channels binary mask.
+	ref<dx_texture> output,						// UNORDERED_ACCESS, same number of channels
+	ref<dx_texture> jumpFloodTemp0,				// UNORDERED_ACCESS
+	ref<dx_texture> jumpFloodTemp1);			// UNORDERED_ACCESS
+
 void depthSobel(dx_command_list* cl,
 	ref<dx_texture> input,						// NON_PIXEL_SHADER_RESOURCE
 	ref<dx_texture> output,						// UNORDERED_ACCESS

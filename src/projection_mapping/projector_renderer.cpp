@@ -69,6 +69,15 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 
 	dilateTempTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(dilateTempTexture->resource, "Depth dilate temp");
+
+	jumpFloodTemp0Texture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16B16A16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(jumpFloodTemp0Texture->resource, "Jump flood temp 0");
+
+	jumpFloodTemp1Texture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16B16A16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(jumpFloodTemp1Texture->resource, "Jump flood temp 1");
+
+	distanceFieldTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(distanceFieldTexture->resource, "Distance field");
 }
 
 void projector_renderer::shutdown()
@@ -96,6 +105,10 @@ void projector_renderer::shutdown()
 	depthDiscontinuitiesTexture = 0;
 	colorDiscontinuitiesTexture = 0;
 	dilateTempTexture = 0;
+
+	jumpFloodTemp0Texture = 0;
+	jumpFloodTemp1Texture = 0;
+	distanceFieldTexture = 0;
 }
 
 void projector_renderer::beginFrameCommon()
@@ -141,6 +154,10 @@ void projector_renderer::beginFrame()
 		resizeTexture(depthDiscontinuitiesTexture, renderWidth / 2, renderHeight / 2);
 		resizeTexture(colorDiscontinuitiesTexture, renderWidth / 2, renderHeight / 2);
 		resizeTexture(dilateTempTexture, renderWidth / 2, renderHeight / 2);
+		
+		resizeTexture(jumpFloodTemp0Texture, renderWidth / 2, renderHeight / 2);
+		resizeTexture(jumpFloodTemp1Texture, renderWidth / 2, renderHeight / 2);
+		resizeTexture(distanceFieldTexture, renderWidth / 2, renderHeight / 2);
 	}
 #endif
 

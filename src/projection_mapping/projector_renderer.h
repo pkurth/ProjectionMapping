@@ -76,6 +76,11 @@ private:
 	ref<dx_texture> ldrPostProcessingTexture;
 
 
+	ref<dx_texture> jumpFloodTemp0Texture;
+	ref<dx_texture> jumpFloodTemp1Texture;
+	ref<dx_texture> distanceFieldTexture;
+
+
 	light_culling culling;
 
 	camera_cb projectorCamera;

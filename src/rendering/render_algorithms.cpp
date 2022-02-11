@@ -60,6 +60,10 @@ static dx_pipeline erosionPipeline;
 static dx_pipeline smoothDilationPipeline;
 static dx_pipeline smoothErosionPipeline;
 
+static dx_pipeline jumpFloodVoronoiInitPipeline;
+static dx_pipeline jumpFloodVoronoiPipeline;
+static dx_pipeline jumpFloodVoronoiDistancePipeline;
+
 static dx_pipeline taaPipeline;
 
 static dx_pipeline blitPipeline;
@@ -221,6 +225,10 @@ void loadCommonShaders()
 
 	smoothDilationPipeline = createReloadablePipeline("dilation_smooth_cs");
 	smoothErosionPipeline = createReloadablePipeline("erosion_smooth_cs");
+
+	jumpFloodVoronoiInitPipeline = createReloadablePipeline("jump_flood_voronoi_init_cs");
+	jumpFloodVoronoiPipeline = createReloadablePipeline("jump_flood_voronoi_cs");
+	jumpFloodVoronoiDistancePipeline = createReloadablePipeline("jump_flood_voronoi_distance_cs");
 
 	taaPipeline = createReloadablePipeline("taa_cs");
 
@@ -1250,6 +1258,76 @@ void erodeSmooth(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_textur
 {
 	DX_PROFILE_BLOCK(cl, "Erode smooth");
 	morphologyCommon(cl, smoothErosionPipeline, inputOutput, temp, radius);
+}
+
+void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, ref<dx_texture> jumpFloodTemp0, ref<dx_texture> jumpFloodTemp1)
+{
+	DX_PROFILE_BLOCK(cl, "Distance field");
+
+	uint32 bucketsX = bucketize(jumpFloodTemp0->width, POST_PROCESSING_BLOCK_SIZE);
+	uint32 bucketsY = bucketize(jumpFloodTemp0->height, POST_PROCESSING_BLOCK_SIZE);
+
+	{
+		DX_PROFILE_BLOCK(cl, "Initialize");
+
+		cl->setPipelineState(*jumpFloodVoronoiInitPipeline.pipeline);
+		cl->setComputeRootSignature(*jumpFloodVoronoiInitPipeline.rootSignature);
+
+		uint32 numChannels = getNumberOfChannels(input->format);
+		assert(numChannels == 1 || numChannels == 2);
+		vec2 inputMask = (numChannels == 1) ? vec2(1.f, 0.f) : vec2(1.f, 1.f);
+
+		cl->setCompute32BitConstants(JUMP_FLOOD_VORONOI_INIT_RS_CB, jump_flood_voronoi_init_cb{ inputMask });
+		cl->setDescriptorHeapUAV(JUMP_FLOOD_VORONOI_INIT_RS_TEXTURES, 0, jumpFloodTemp0);
+		cl->setDescriptorHeapSRV(JUMP_FLOOD_VORONOI_INIT_RS_TEXTURES, 1, input);
+
+		cl->dispatch(bucketsX, bucketsY);
+		cl->transitionBarrier(jumpFloodTemp0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+
+	ref<dx_texture> in = jumpFloodTemp0;
+	ref<dx_texture> out = jumpFloodTemp1;
+
+	{
+		DX_PROFILE_BLOCK(cl, "Jump flood");
+
+		int32 numIterations = max(log2(input->width), log2(input->height));
+
+		cl->setPipelineState(*jumpFloodVoronoiPipeline.pipeline);
+		cl->setComputeRootSignature(*jumpFloodVoronoiPipeline.rootSignature);
+
+		for (int32 i = 0; i < numIterations; ++i)
+		{
+			int32 offset = 1 << (numIterations - i - 1);
+
+			cl->setCompute32BitConstants(JUMP_FLOOD_VORONOI_RS_CB, jump_flood_voronoi_cb{ offset });
+			cl->setDescriptorHeapUAV(JUMP_FLOOD_VORONOI_RS_TEXTURES, 0, out);
+			cl->setDescriptorHeapSRV(JUMP_FLOOD_VORONOI_RS_TEXTURES, 1, in);
+
+			cl->dispatch(bucketsX, bucketsY);
+
+			barrier_batcher(cl)
+				//.uav(out)
+				.transition(out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+				.transition(in, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+			std::swap(in, out);
+		}
+	}
+
+	{
+		DX_PROFILE_BLOCK(cl, "Convert to distances");
+
+		cl->setPipelineState(*jumpFloodVoronoiDistancePipeline.pipeline);
+		cl->setComputeRootSignature(*jumpFloodVoronoiDistancePipeline.rootSignature);
+
+		cl->setDescriptorHeapUAV(JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES, 0, output);
+		cl->setDescriptorHeapSRV(JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES, 1, in);
+
+		cl->dispatch(bucketsX, bucketsY);
+	}
+
+	cl->transitionBarrier(in, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void depthSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, vec4 projectionParams, float threshold)

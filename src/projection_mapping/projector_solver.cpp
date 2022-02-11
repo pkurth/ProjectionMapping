@@ -229,6 +229,16 @@ void projector_solver::solve(const projector_component* projectors, const render
 					.transition(depthDiscontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
 					.transition(halfResolutionDepthBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
+#if 1
+				const ref<dx_texture>& jumpFloodTemp0Texture = projectors[i].renderer.jumpFloodTemp0Texture;
+				const ref<dx_texture>& jumpFloodTemp1Texture = projectors[i].renderer.jumpFloodTemp1Texture;
+				const ref<dx_texture>& distanceFieldTexture = projectors[i].renderer.distanceFieldTexture;
+
+				distanceField(cl, depthDiscontinuitiesTexture, distanceFieldTexture, jumpFloodTemp0Texture, jumpFloodTemp1Texture);
+#endif
+
+
+
 				dilate(cl, depthDiscontinuitiesTexture, dilateTempTexture, settings.depthDiscontinuityDilateRadius);
 				dilateSmooth(cl, depthDiscontinuitiesTexture, dilateTempTexture, settings.depthDiscontinuitySmoothRadius);
 				gaussianBlur(cl, depthDiscontinuitiesTexture, dilateTempTexture, 0, 0, gaussian_blur_5x5);
