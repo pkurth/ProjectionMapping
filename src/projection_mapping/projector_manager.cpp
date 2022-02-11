@@ -91,19 +91,19 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySeparator();
 			ImGui::PropertySeparator();
 
-			setupDirty |= ImGui::PropertyDisableableCheckbox("Server", isServer, !protocol.initialized);
-			if (!isServer)
+			setupDirty |= ImGui::PropertyDisableableCheckbox("Server", isServerCheckbox, !protocol.initialized);
+			if (!isServerCheckbox)
 			{
 				setupDirty |= ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP));
 				setupDirty |= ImGui::PropertyInput("Server port", protocol.serverPort);
 			}
 
-			if (ImGui::PropertyDisableableButton("Network", isServer ? "Start" : "Connect", !protocol.initialized))
+			if (ImGui::PropertyDisableableButton("Network", isServerCheckbox ? "Start" : "Connect", !protocol.initialized))
 			{
-				protocol.start(*scene, this, isServer);
+				protocol.start(*scene, this, isServerCheckbox);
 			}
 
-			if (protocol.initialized && isServer)
+			if (protocol.initialized && isServerCheckbox)
 			{
 				ImGui::PropertyInputText("Server IP", protocol.serverIP, sizeof(protocol.serverIP), true);
 				ImGui::PropertyValue("Server port", protocol.serverPort);
@@ -113,6 +113,7 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
 			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
+			ImGui::PropertyCheckbox("Simulate all projectors", solver.settings.simulateAllProjectors);
 
 			ImGui::PropertySeparator();
 
@@ -313,24 +314,27 @@ void projector_manager::updateAndRender(float dt)
 
 	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 	{
-		dx_command_list* cl = dxContext.getFreeRenderCommandList();
-
-		bool shouldPresent = projector.shouldPresent();
-		projector.renderer.finalizeImage(cl);
-
-		if (shouldPresent)
+		if (!projector.headless || solver.settings.simulateAllProjectors)
 		{
-			dx_resource backbuffer = projector.window.backBuffers[projector.window.currentBackbufferIndex];
-			cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-			cl->copyResource(projector.renderer.frameResult->resource, backbuffer);
-			cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
-		}
+			dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
-		dxContext.executeCommandList(cl);
+			bool shouldPresent = projector.shouldPresent();
+			projector.renderer.finalizeImage(cl);
 
-		if (shouldPresent)
-		{
-			projector.window.swapBuffers();
+			if (shouldPresent)
+			{
+				dx_resource backbuffer = projector.window.backBuffers[projector.window.currentBackbufferIndex];
+				cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+				cl->copyResource(projector.renderer.frameResult->resource, backbuffer);
+				cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+			}
+
+			dxContext.executeCommandList(cl);
+
+			if (shouldPresent)
+			{
+				projector.window.swapBuffers();
+			}
 		}
 	}
 }
@@ -464,9 +468,9 @@ void projector_manager::loadSetup()
 		if (auto monitorNode = n[win32_window::allConnectedMonitors[i].uniqueID]) {	isProjectorIndex[i] = monitorNode.as<bool>(); }
 	}
 
-	if (auto serverNode = n["Server"]) { isServer = serverNode.as<bool>(); }
+	if (auto serverNode = n["Server"]) { isServerCheckbox = serverNode.as<bool>(); }
 
-	if (!isServer)
+	if (!isServerCheckbox)
 	{
 		if (auto sNode = n["Server IP"]) { strncpy(protocol.serverIP, sNode.as<std::string>().c_str(), sizeof(protocol.serverIP)); }
 		if (auto sNode = n["Server Port"]) { protocol.serverPort = sNode.as<uint32>(); }
@@ -483,8 +487,8 @@ void projector_manager::saveSetup()
 		out << YAML::Key << win32_window::allConnectedMonitors[i].uniqueID << YAML::Value << isProjectorIndex[i];
 	}
 
-	out << YAML::Key << "Server" << YAML::Value << isServer;
-	if (!isServer)
+	out << YAML::Key << "Server" << YAML::Value << isServerCheckbox;
+	if (!isServerCheckbox)
 	{
 		out << YAML::Key << "Server IP" << YAML::Value << protocol.serverIP;
 		out << YAML::Key << "Server Port" << YAML::Value << protocol.serverPort;

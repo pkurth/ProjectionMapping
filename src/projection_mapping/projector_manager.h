@@ -69,7 +69,7 @@ private:
 
 	bool detailWindowOpen = false;
 
-	bool isServer = true;
+	bool isServerCheckbox = true;
 
 	projector_network_protocol protocol;
 

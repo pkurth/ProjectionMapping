@@ -335,16 +335,19 @@ void projector_solver::solve(const projector_component* projectors, const render
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
-				uint32 width = projectors[i].renderer.renderWidth;
-				uint32 height = projectors[i].renderer.renderHeight;
+				if (!projectors[i].headless || settings.simulateAllProjectors)
+				{
+					uint32 width = projectors[i].renderer.renderWidth;
+					uint32 height = projectors[i].renderer.renderHeight;
 
-				projector_intensity_cb cb;
-				cb.index = i;
-				cb.numProjectors = numProjectors;
+					projector_intensity_cb cb;
+					cb.index = i;
+					cb.numProjectors = numProjectors;
 
-				cl->setCompute32BitConstants(PROJECTOR_INTENSITIES_RS_CB, cb);
+					cl->setCompute32BitConstants(PROJECTOR_INTENSITIES_RS_CB, cb);
 
-				cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
+					cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));
+				}
 			}
 		}
 
