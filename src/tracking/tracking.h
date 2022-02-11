@@ -21,7 +21,8 @@ struct tracking_data
 	ref<dx_buffer> ataReadbackBuffer;
 
 	uint32 numCorrespondences = 0;
-	struct depth_tracker* tracker;
+
+	mat4 startTrackingMatrix[NUM_BUFFERED_FRAMES];
 };
 
 struct tracking_component

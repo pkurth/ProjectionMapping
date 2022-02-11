@@ -209,8 +209,6 @@ void depth_tracker::initializeTrackingData(ref<tracking_data>& data)
 	SET_NAME(data->ataBuffer0->resource, "ATA 0");
 	SET_NAME(data->ataBuffer1->resource, "ATA 1");
 	SET_NAME(data->ataReadbackBuffer->resource, "ATA readback");
-
-	data->tracker = this;
 }
 
 struct vec6
@@ -553,7 +551,10 @@ void depth_tracker::processLastTrackingJobs()
 
 			transform_component& transform = entity.getComponent<transform_component>();
 
-			mat4 m = getWorldMatrix() * createModelMatrix(translation, rotation) * getTrackingMatrix(transform);
+			//mat4 model = getTrackingMatrix(transform);
+			mat4 model = trackingData->startTrackingMatrix[dxContext.bufferedFrameID];
+
+			mat4 m = getWorldMatrix() * createModelMatrix(translation, rotation) * model;
 
 			if (mode == tracking_mode_track_object)
 			{
@@ -684,6 +685,8 @@ void depth_tracker::createCorrespondences(dx_command_list* cl, tracking_componen
 	barrier_batcher(cl)
 		.uav(trackingData->icpDispatchBuffer)
 		.transition(trackingData->correspondenceBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+	trackingData->startTrackingMatrix[dxContext.bufferedFrameID] = getTrackingMatrix(transform);
 }
 
 void depth_tracker::accumulateCorrespondences(dx_command_list* cl, tracking_component& trackingComponent)
