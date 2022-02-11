@@ -61,14 +61,8 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	bestMaskTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(bestMaskTexture->resource, "Best mask");
 
-	depthDiscontinuitiesTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	SET_NAME(depthDiscontinuitiesTexture->resource, "Depth discontinuities");
-
-	colorDiscontinuitiesTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	SET_NAME(colorDiscontinuitiesTexture->resource, "Color discontinuities");
-
-	dilateTempTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	SET_NAME(dilateTempTexture->resource, "Depth dilate temp");
+	discontinuitiesTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R8G8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(discontinuitiesTexture->resource, "Discontinuities");
 
 	jumpFloodTemp0Texture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16B16A16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(jumpFloodTemp0Texture->resource, "Jump flood temp 0");
@@ -78,6 +72,9 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 
 	distanceFieldTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(distanceFieldTexture->resource, "Distance field");
+
+	blurTempTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(blurTempTexture->resource, "Blur temp");
 }
 
 void projector_renderer::shutdown()
@@ -102,9 +99,7 @@ void projector_renderer::shutdown()
 	halfResolutionColorTexture = 0;
 
 	bestMaskTexture = 0;
-	depthDiscontinuitiesTexture = 0;
-	colorDiscontinuitiesTexture = 0;
-	dilateTempTexture = 0;
+	discontinuitiesTexture = 0;
 
 	jumpFloodTemp0Texture = 0;
 	jumpFloodTemp1Texture = 0;

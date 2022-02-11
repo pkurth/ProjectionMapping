@@ -495,4 +495,26 @@ struct color_sobel_cb
 #define COLOR_SOBEL_RS_TEXTURES     1
 
 
+
+
+// ----------------------------------------
+// COMBINED SOBEL
+// ----------------------------------------
+
+struct combined_sobel_cb
+{
+    vec4 projectionParams;
+    float depthThreshold;
+    float colorThreshold;
+};
+
+#define COMBINED_SOBEL_RS \
+    "RootFlags(0), " \
+    "RootConstants(num32BitConstants=8, b0),"  \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 2) )"
+
+#define COMBINED_SOBEL_RS_CB           0
+#define COMBINED_SOBEL_RS_TEXTURES     1
+
+
 #endif

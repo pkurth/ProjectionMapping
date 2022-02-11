@@ -29,12 +29,16 @@ struct projector_solver_settings
 	float referenceWhite = 0.7f;
 
 	float depthDiscontinuityThreshold = 0.09f;
-	uint32 depthDiscontinuityDilateRadius = 2;
-	uint32 depthDiscontinuitySmoothRadius = 8;
-
 	float colorDiscontinuityThreshold = 0.4f;
-	uint32 colorDiscontinuityDilateRadius = 8;
-	uint32 colorDiscontinuitySmoothRadius = 8;
+
+	float maxDepthDistance = 25.f;
+	float maxColorDistance = 17.f;
+
+	struct
+	{
+		catmull_rom_spline<float, 8> depthDistanceToMask;
+		catmull_rom_spline<float, 8> colorDistanceToMask;
+	} splines;
 
 	float colorMaskStrength = 0.7f;
 
@@ -70,8 +74,7 @@ private:
 			dx_double_descriptor_handle bestMaskSRVBaseDescriptor;
 			dx_double_descriptor_handle bestMaskUAVBaseDescriptor;
 
-			dx_double_descriptor_handle depthDiscontinuitiesTexturesBaseDescriptor;
-			dx_double_descriptor_handle colorDiscontinuitiesTexturesBaseDescriptor;
+			dx_double_descriptor_handle distanceFieldTexturesBaseDescriptor;
 			   
 			dx_double_descriptor_handle intensitiesSRVBaseDescriptor;
 			dx_double_descriptor_handle intensitiesUAVBaseDescriptor;
@@ -86,7 +89,7 @@ private:
 			dx_double_descriptor_handle maskUAVBaseDescriptor;
 		};
 
-		dx_double_descriptor_handle descriptors[16];
+		dx_double_descriptor_handle descriptors[15];
 	};
 
 	D3D12_GPU_VIRTUAL_ADDRESS projectorsGPUAddress;

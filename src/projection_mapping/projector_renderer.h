@@ -67,14 +67,12 @@ private:
 	ref<dx_texture> halfResolutionColorTexture;
 
 	ref<dx_texture> bestMaskTexture;
-	ref<dx_texture> depthDiscontinuitiesTexture;
-	ref<dx_texture> colorDiscontinuitiesTexture;
-
-	ref<dx_texture> dilateTempTexture;
+	ref<dx_texture> discontinuitiesTexture;
 	
 	ref<dx_texture> hdrPostProcessingTexture;
 	ref<dx_texture> ldrPostProcessingTexture;
 
+	ref<dx_texture> blurTempTexture;
 
 	ref<dx_texture> jumpFloodTemp0Texture;
 	ref<dx_texture> jumpFloodTemp1Texture;

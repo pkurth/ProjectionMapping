@@ -1,7 +1,6 @@
 #ifndef PROJECTOR_HLSLI
 #define PROJECTOR_HLSLI
 
-
 #define PROJECTOR_BLOCK_SIZE 16
 
 
@@ -60,22 +59,33 @@ struct projector_attenuation_cb
 #define PROJECTOR_ATTENUATION_RS_DEPTH_TEXTURES      4
 #define PROJECTOR_ATTENUATION_RS_OUTPUT              5
 
-
+#ifdef HLSL
+#include "math.hlsli"
+defineSpline(float, 8)
+#endif
 
 struct projector_mask_cb
 {
     uint32 index;
     float colorMaskStrength;
+    float maxDepthDistance;
+    float maxColorDistance;
+};
+
+struct projector_mask_spline_cb
+{
+    spline(float, 8) depthDistanceToMask;
+    spline(float, 8) colorDistanceToMask;
 };
 
 #define PROJECTOR_MASK_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=2, b0),"  \
+    "RootConstants(num32BitConstants=4, b0),"  \
+    "CBV(b1),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
-    "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "StaticSampler(s0," \
             "addressU = TEXTURE_ADDRESS_CLAMP," \
@@ -85,10 +95,10 @@ struct projector_mask_cb
 
 
 #define PROJECTOR_MASK_RS_CB                  0
-#define PROJECTOR_MASK_RS_PROJECTORS          1
-#define PROJECTOR_MASK_RS_DEPTH_TEXTURES      2
-#define PROJECTOR_MASK_RS_DEPTH_MASKS         3
-#define PROJECTOR_MASK_RS_COLOR_MASKS         4
+#define PROJECTOR_MASK_RS_SPLINE_CB           1
+#define PROJECTOR_MASK_RS_PROJECTORS          2
+#define PROJECTOR_MASK_RS_DEPTH_TEXTURES      3
+#define PROJECTOR_MASK_RS_DISTANCE_FIELDS     4
 #define PROJECTOR_MASK_RS_BEST_MASKS          5
 #define PROJECTOR_MASK_RS_OUTPUT              6
 

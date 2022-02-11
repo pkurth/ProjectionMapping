@@ -116,18 +116,6 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertyCheckbox("Simulate all projectors", solver.settings.simulateAllProjectors);
 
 			ImGui::PropertySeparator();
-
-			ImGui::PropertySlider("Depth discontinuity threshold", solver.settings.depthDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertyDrag("Depth discontinuity dilate radius", solver.settings.depthDiscontinuityDilateRadius);
-			ImGui::PropertyDrag("Depth discontinuity smooth radius", solver.settings.depthDiscontinuitySmoothRadius);
-
-			ImGui::PropertySeparator();
-
-			ImGui::PropertySlider("Color discontinuity threshold", solver.settings.colorDiscontinuityThreshold, 0.f, 1.f);
-			ImGui::PropertyDrag("Color discontinuity dilate radius", solver.settings.colorDiscontinuityDilateRadius);
-			ImGui::PropertyDrag("Color discontinuity smooth radius", solver.settings.colorDiscontinuitySmoothRadius);
-
-			ImGui::PropertySeparator();
 			
 			ImGui::PropertySlider("Color mask strength", solver.settings.colorMaskStrength);
 			
@@ -136,8 +124,19 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySlider("Reference distance", solver.settings.referenceDistance, 0.f, 5.f);
 			ImGui::PropertySlider("Reference white", solver.settings.referenceWhite);
 
+			ImGui::PropertySeparator();
+
+			ImGui::PropertySlider("Depth discontinuity threshold", solver.settings.depthDiscontinuityThreshold, 0.f, 1.f);
+			ImGui::PropertySlider("Color discontinuity threshold", solver.settings.colorDiscontinuityThreshold, 0.f, 1.f);
+
+			ImGui::PropertyDrag("Depth max distance", solver.settings.maxDepthDistance);
+			ImGui::PropertyDrag("Color max distance", solver.settings.maxColorDistance);
+
 			ImGui::EndProperties();
 		}
+
+		ImGui::Spline("Depth distance to mask", ImVec2(256, 256), solver.settings.splines.depthDistanceToMask);
+		ImGui::Spline("Color distance to mask", ImVec2(256, 256), solver.settings.splines.colorDistanceToMask);
 
 		if (setupDirty)
 		{
@@ -220,16 +219,14 @@ void projector_manager::updateAndRender(float dt)
 	{
 		if (ImGui::Begin("Projector details", &detailWindowOpen, ImGuiWindowFlags_NoDocking))
 		{
-			if (ImGui::BeginTable("##Table", 8))
+			if (ImGui::BeginTable("##Table", 6))
 			{
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
 				ImGui::TableSetupColumn("Best mask");
-				ImGui::TableSetupColumn("Depth discontinuities");
-				ImGui::TableSetupColumn("Color discontinuities");
+				ImGui::TableSetupColumn("Distance field");
 				ImGui::TableSetupColumn("Masks");
 				ImGui::TableSetupColumn("Solver intensities");
-				ImGui::TableSetupColumn("Distance field");
 
 				ImGui::TableHeadersRow();
 
@@ -266,19 +263,13 @@ void projector_manager::updateAndRender(float dt)
 					hoverImage(projector.renderer.bestMaskTexture);
 
 					ImGui::TableNextColumn();
-					hoverImage(projector.renderer.depthDiscontinuitiesTexture);
-
-					ImGui::TableNextColumn();
-					hoverImage(projector.renderer.colorDiscontinuitiesTexture);
+					hoverImage(projector.renderer.distanceFieldTexture);
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.maskTexture);
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.solverIntensityTexture);
-
-					ImGui::TableNextColumn();
-					hoverImage(projector.renderer.distanceFieldTexture);
 
 					++i;
 				}
