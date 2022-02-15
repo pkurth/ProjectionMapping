@@ -31,11 +31,11 @@ struct projector_solver_settings
 	float depthDiscontinuityThreshold = 0.09f;
 	float colorDiscontinuityThreshold = 0.4f;
 
-	float depthHardDistance = 8.f;
-	float depthSmoothDistance = 8.f;
+	float depthHardDistance = 0.f;
+	float depthSmoothDistance = 6.f;
 
-	float colorHardDistance = 2.f;
-	float colorSmoothDistance = 8.f;
+	float colorHardDistance = 4.f;
+	float colorSmoothDistance = 10.f;
 
 	float colorMaskStrength = 0.7f;
 

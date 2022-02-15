@@ -1114,7 +1114,7 @@ void gaussianBlur(dx_command_list* cl,
 {
 	PROFILE_ALL(cl, "Gaussian Blur");
 
-	assert(getNumberOfChannels(inputOutput->format) == getNumberOfChannels(temp->format));
+	assert(getNumberOfChannels(inputOutput->format) <= getNumberOfChannels(temp->format));
 
 	uint32 numChannels = getNumberOfChannels(inputOutput->format);
 

@@ -120,14 +120,14 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySlider("Depth discontinuity threshold", solver.settings.depthDiscontinuityThreshold, 0.f, 1.f);
 			ImGui::PropertySlider("Color discontinuity threshold", solver.settings.colorDiscontinuityThreshold, 0.f, 1.f);
 
-			ImGui::PropertyDrag("Depth hard distance", solver.settings.depthHardDistance);
-			ImGui::PropertyDrag("Depth smooth distance", solver.settings.depthSmoothDistance);
-			ImGui::PropertyDrag("Color hard distance", solver.settings.colorHardDistance);
-			ImGui::PropertyDrag("Color smooth distance", solver.settings.colorSmoothDistance);
+			ImGui::PropertySlider("Depth hard distance", solver.settings.depthHardDistance, 0.f, 15.f);
+			ImGui::PropertySlider("Depth smooth distance", solver.settings.depthSmoothDistance, 0.f, 15.f);
+			ImGui::PropertySlider("Color hard distance", solver.settings.colorHardDistance, 0.f, 15.f);
+			ImGui::PropertySlider("Color smooth distance", solver.settings.colorSmoothDistance, 0.f, 15.f);
 
 			ImGui::PropertySeparator();
 			
-			ImGui::PropertySlider("Color mask strength", solver.settings.colorMaskStrength);
+			ImGui::PropertySlider("Color mask strength", solver.settings.colorMaskStrength, 0.f, 0.9f);
 			
 			ImGui::PropertySeparator();
 
