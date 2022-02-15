@@ -38,15 +38,6 @@ void projector_solver::initialize()
 	{
 		heaps[i].initialize(1024);
 	}
-
-	for (uint32 i = 0; i < 8; ++i)
-	{
-		settings.splines.depthDistanceToMask.ts[i] = i / float(8 - 1);
-		settings.splines.depthDistanceToMask.values[i] = 1.f - easeInOutCubic(settings.splines.depthDistanceToMask.ts[i]);
-
-		settings.splines.colorDistanceToMask.ts[i] = i / float(8 - 1);
-		settings.splines.colorDistanceToMask.values[i] = 1.f - easeInOutCubic(settings.splines.colorDistanceToMask.ts[i]);
-	}
 }
 
 static void projectorToCB(const render_camera& camera, projector_cb& proj)
@@ -274,21 +265,20 @@ void projector_solver::solve(const projector_component* projectors, const render
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_BEST_MASKS, bestMaskSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_OUTPUT, maskUAVBaseDescriptor);
 
+			projector_mask_cb cb;
+			cb.colorMaskStrength = settings.colorMaskStrength;
+			cb.depthHardDistance = settings.depthHardDistance;
+			cb.depthSmoothDistance = settings.depthSmoothDistance;
+			cb.colorHardDistance = settings.colorHardDistance;
+			cb.colorSmoothDistance = settings.colorSmoothDistance;
 
-			dx_dynamic_constant_buffer cbv = dxContext.uploadDynamicConstantBuffer(settings.splines);
-			cl->setComputeDynamicConstantBuffer(PROJECTOR_MASK_RS_SPLINE_CB, cbv);
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
 				uint32 width = projectors[i].renderer.renderWidth;
 				uint32 height = projectors[i].renderer.renderHeight;
 
-				projector_mask_cb cb;
 				cb.index = i;
-				cb.colorMaskStrength = settings.colorMaskStrength;
-				cb.maxDepthDistance = settings.maxDepthDistance;
-				cb.maxColorDistance = settings.maxColorDistance;
-
 				cl->setCompute32BitConstants(PROJECTOR_MASK_RS_CB, cb);
 
 				cl->dispatch(bucketize(width, PROJECTOR_BLOCK_SIZE), bucketize(height, PROJECTOR_BLOCK_SIZE));

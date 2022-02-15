@@ -3,7 +3,6 @@
 
 
 ConstantBuffer<projector_mask_cb> cb				: register(b0, space0);
-ConstantBuffer<projector_mask_spline_cb> splines	: register(b1, space0);
 StructuredBuffer<projector_cb> projectors			: register(t0, space0);
 
 Texture2D<float> depthTextures[32]					: register(t0, space1);
@@ -39,13 +38,12 @@ void main(cs_input IN)
 
 
 	float2 distances = discontinuityDistanceFields[index].SampleLevel(clampSampler, uv, 0);
-	distances = saturate(distances / float2(cb.maxDepthDistance, cb.maxColorDistance));
-	float depthMask = 1.f - smoothstep(0.f, 1.f, distances.x); //saturate(splines.depthDistanceToMask.evaluate(8, distances.x));
-	float colorMask = 1.f - smoothstep(0.f, 1.f, distances.y); //saturate(splines.colorDistanceToMask.evaluate(8, distances.y));
+	float depthMask = saturate(1.f - smoothstep(cb.depthHardDistance, cb.depthHardDistance + cb.depthSmoothDistance, distances.x));
+	float colorMask = saturate(1.f - smoothstep(cb.colorHardDistance, cb.colorHardDistance + cb.colorSmoothDistance, distances.y));
 	
 	//float depthMask = depthMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
 	//float colorMask = colorMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
-	float bestMask = bestMasks[index].SampleLevel(clampSampler, uv, 0); // 1 where best, 0 everywhere else.
+	float bestMask = saturate(bestMasks[index].SampleLevel(clampSampler, uv, 0)); // 1 where best, 0 everywhere else.
 
 	float2 distanceFromEdge2 = min(texCoord, dimensions - texCoord);
 	float distanceFromEdge = min(distanceFromEdge2.x, distanceFromEdge2.y);

@@ -31,14 +31,11 @@ struct projector_solver_settings
 	float depthDiscontinuityThreshold = 0.09f;
 	float colorDiscontinuityThreshold = 0.4f;
 
-	float maxDepthDistance = 25.f;
-	float maxColorDistance = 17.f;
+	float depthHardDistance = 8.f;
+	float depthSmoothDistance = 8.f;
 
-	struct
-	{
-		catmull_rom_spline<float, 8> depthDistanceToMask;
-		catmull_rom_spline<float, 8> colorDistanceToMask;
-	} splines;
+	float colorHardDistance = 2.f;
+	float colorSmoothDistance = 8.f;
 
 	float colorMaskStrength = 0.7f;
 
