@@ -11,7 +11,7 @@ Texture2D<float4> renderResults[32]			: register(t0, space1);
 Texture2D<float2> worldNormals[32]			: register(t0, space2);
 Texture2D<float> depthTextures[32]			: register(t0, space3);
 
-RWTexture2D<float2> output[32]				: register(u0, space0);
+RWTexture2D<float3> output[32]				: register(u0, space0);
 
 SamplerState clampSampler					: register(s0);
 
@@ -34,7 +34,7 @@ void main(cs_input IN)
 	const float depth = depthTextures[index][texCoord];
 	if (depth == 1.f)
 	{
-		output[index][texCoord] = (float2)0.f;
+		output[index][texCoord] = (float3)0.f;
 		return;
 	}
 
@@ -64,5 +64,18 @@ void main(cs_input IN)
 
 	float maxComponent = max(color.r, max(color.g, color.b));
 
-	output[index][texCoord] = float2(possibleWhiteIntensity, maxComponent);
+#if 0
+	float d = depthBufferDepthToEyeDepth(depth, projectors[index].projectionParams);
+	float offsetFromOptimal = abs(d - projectors[index].optimalDepth);
+	float depthRangeWeight = 1.f - 0.8f * smoothstep(0.f, projectors[index].depthRange, offsetFromOptimal);
+#else
+	float depthRangeWeight = 1.f;
+#endif
+
+
+	const float k = 4.f;
+	float E = pow(possibleWhiteIntensity, k) * depthRangeWeight;
+
+
+	output[index][texCoord] = float3(possibleWhiteIntensity, E, maxComponent);
 }

@@ -3,6 +3,7 @@
 
 
 ConstantBuffer<projector_mask_cb> cb				: register(b0, space0);
+ConstantBuffer<projector_mask_common_cb> common		: register(b1, space0);
 StructuredBuffer<projector_cb> projectors			: register(t0, space0);
 
 Texture2D<float> depthTextures[32]					: register(t0, space1);
@@ -38,8 +39,8 @@ void main(cs_input IN)
 
 
 	float2 distances = discontinuityDistanceFields[index].SampleLevel(clampSampler, uv, 0);
-	float depthMask = saturate(1.f - smoothstep(cb.depthHardDistance, cb.depthHardDistance + cb.depthSmoothDistance, distances.x));
-	float colorMask = saturate(1.f - smoothstep(cb.colorHardDistance, cb.colorHardDistance + cb.colorSmoothDistance, distances.y));
+	float depthMask = saturate(1.f - smoothstep(common.depthHardDistance, common.depthHardDistance + common.depthSmoothDistance, distances.x));
+	float colorMask = saturate(1.f - smoothstep(common.colorHardDistance, common.colorHardDistance + common.colorSmoothDistance, distances.y));
 	
 	//float depthMask = depthMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
 	//float colorMask = colorMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
@@ -54,7 +55,7 @@ void main(cs_input IN)
 	float edgeMask = maskFactor;
 	
 	depthMask *= 1.f;
-	colorMask = 1.f - lerp(colorMask * cb.colorMaskStrength, 0.f, bestMask);
+	colorMask = 1.f - lerp(colorMask * common.colorMaskStrength, 0.f, bestMask);
 	
 	
 	float softMask = min(colorMask, edgeMask);

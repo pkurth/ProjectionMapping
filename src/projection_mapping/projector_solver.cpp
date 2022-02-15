@@ -49,6 +49,9 @@ static void projectorToCB(const render_camera& camera, projector_cb& proj)
 	proj.invScreenDims = 1.f / proj.screenDims;
 	proj.projectionParams = camera.getShaderProjectionParams();
 	proj.forward = vec4(camera.rotation * vec3(0.f, 0.f, -1.f), 0.f);
+
+	proj.optimalDepth = 1.5f;
+	proj.depthRange = 0.1f;
 }
 
 void projector_solver::solve(const projector_component* projectors, const render_camera* cameras, uint32 numProjectors)
@@ -268,12 +271,13 @@ void projector_solver::solve(const projector_component* projectors, const render
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_BEST_MASKS, bestMaskSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_OUTPUT, maskUAVBaseDescriptor);
 
-			projector_mask_cb cb;
-			cb.colorMaskStrength = settings.colorMaskStrength;
-			cb.depthHardDistance = settings.depthHardDistance;
-			cb.depthSmoothDistance = settings.depthSmoothDistance;
-			cb.colorHardDistance = settings.colorHardDistance;
-			cb.colorSmoothDistance = settings.colorSmoothDistance;
+			projector_mask_common_cb common;
+			common.colorMaskStrength = settings.colorMaskStrength;
+			common.depthHardDistance = settings.depthHardDistance;
+			common.depthSmoothDistance = settings.depthSmoothDistance;
+			common.colorHardDistance = settings.colorHardDistance;
+			common.colorSmoothDistance = settings.colorSmoothDistance;
+			cl->setCompute32BitConstants(PROJECTOR_MASK_RS_COMMON_CB, common);
 
 
 			for (uint32 i = 0; i < numProjectors; ++i)
@@ -281,6 +285,7 @@ void projector_solver::solve(const projector_component* projectors, const render
 				uint32 width = projectors[i].renderer.renderWidth;
 				uint32 height = projectors[i].renderer.renderHeight;
 
+				projector_mask_cb cb;
 				cb.index = i;
 				cl->setCompute32BitConstants(PROJECTOR_MASK_RS_CB, cb);
 

@@ -13,6 +13,9 @@ struct projector_cb
     vec2 invScreenDims;
     vec4 projectionParams;
     vec4 forward;
+    float optimalDepth;
+    float depthRange;
+    vec2 padding;
 };
 
 
@@ -62,6 +65,10 @@ struct projector_attenuation_cb
 struct projector_mask_cb
 {
     uint32 index;
+};
+
+struct projector_mask_common_cb
+{
     float colorMaskStrength;
 
     float depthHardDistance;
@@ -73,7 +80,8 @@ struct projector_mask_cb
 
 #define PROJECTOR_MASK_RS \
     "RootFlags(0), " \
-    "RootConstants(num32BitConstants=6, b0),"  \
+    "RootConstants(num32BitConstants=1, b0),"  \
+    "RootConstants(num32BitConstants=5, b1),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
@@ -87,11 +95,12 @@ struct projector_mask_cb
 
 
 #define PROJECTOR_MASK_RS_CB                  0
-#define PROJECTOR_MASK_RS_PROJECTORS          1
-#define PROJECTOR_MASK_RS_DEPTH_TEXTURES      2
-#define PROJECTOR_MASK_RS_DISTANCE_FIELDS     3
-#define PROJECTOR_MASK_RS_BEST_MASKS          4
-#define PROJECTOR_MASK_RS_OUTPUT              5
+#define PROJECTOR_MASK_RS_COMMON_CB           1
+#define PROJECTOR_MASK_RS_PROJECTORS          2
+#define PROJECTOR_MASK_RS_DEPTH_TEXTURES      3
+#define PROJECTOR_MASK_RS_DISTANCE_FIELDS     4
+#define PROJECTOR_MASK_RS_BEST_MASKS          5
+#define PROJECTOR_MASK_RS_OUTPUT              6
 
 
 

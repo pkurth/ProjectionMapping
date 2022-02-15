@@ -5,7 +5,7 @@
 ConstantBuffer<projector_intensity_cb> cb		: register(b0, space0);
 StructuredBuffer<projector_cb> allProjectors	: register(t0, space0);
 
-Texture2D<float2> attenuationTextures[32]		: register(t0, space1);
+Texture2D<float3> attenuationTextures[32]		: register(t0, space1);
 Texture2D<float2> maskTextures[32]				: register(t0, space2);
 Texture2D<float> depthTextures[32]				: register(t0, space3);
 
@@ -23,14 +23,14 @@ struct projector_data
 	float partialSum;
 };
 
-static projector_data fillOutData(float2 atten, float2 masks)
+static projector_data fillOutData(float3 atten, float2 masks)
 {
 	float attenuation = atten.x;
+	float E = atten.y;
 	float hardMask = masks.x;
 	float softMask = masks.y;
 
-	const float k = 4.f;
-	projector_data result = { attenuation, pow(attenuation, k) * softMask, hardMask, 0.f };
+	projector_data result = { attenuation, E * softMask, hardMask, 0.f };
 	return result;
 }
 
@@ -63,7 +63,7 @@ void main(cs_input IN)
 
 	float ESum = 0.f;
 
-	float2 attenuationAndTargetIntensity = attenuationTextures[index][texCoord];
+	float3 attenuationAndTargetIntensity = attenuationTextures[index][texCoord];
 	projectors[0] = fillOutData(attenuationAndTargetIntensity, maskTextures[index][texCoord]);
 	ESum += projectors[0].E;
 
@@ -71,7 +71,7 @@ void main(cs_input IN)
 	uint numProjectors = 1;
 
 
-	float targetIntensity = max(attenuationAndTargetIntensity.y, 0.001f);
+	float targetIntensity = max(attenuationAndTargetIntensity.z, 0.001f);
 
 
 	for (uint projIndex = 0; projIndex < cb.numProjectors; ++projIndex)

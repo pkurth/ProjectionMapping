@@ -46,7 +46,7 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	solverIntensityTempTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16_UNORM, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
 	SET_NAME(solverIntensityTempTexture->resource, "Solver intensity temp");
 
-	attenuationTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
+	attenuationTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R11G11B10_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
 	SET_NAME(attenuationTexture->resource, "Attenuation");
 
 	maskTexture = createTexture(0, renderWidth, renderHeight, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_GENERIC_READ);
