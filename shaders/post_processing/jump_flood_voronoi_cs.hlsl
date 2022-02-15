@@ -1,6 +1,8 @@
 #include "cs.hlsli"
 #include "post_processing_rs.hlsli"
 
+// https://blog.demofox.org/2016/02/29/fast-voronoi-diagrams-and-distance-dield-textures-on-the-gpu-with-the-jump-flooding-algorithm/
+// https://www.shadertoy.com/view/4syGWK
 
 ConstantBuffer<jump_flood_voronoi_cb> cb	: register(b0);
 Texture2D<float4> seedTexture				: register(t0);
