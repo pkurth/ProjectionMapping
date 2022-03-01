@@ -29,6 +29,13 @@ template <typename T>
 struct intrinsics
 {
 	T fx, fy, cx, cy;
+
+	template <typename T2>
+	intrinsics<T2> cast() const
+	{
+		intrinsics<T2> result = { (T2)fx, (T2)fy, (T2)cx, (T2)cy };
+		return result;
+	}
 };
 
 template <typename T>
@@ -67,6 +74,63 @@ static inline extrinsics<T> getExtrinsics(const T* const trans, const T* const r
 		* Eigen::AngleAxis<T>(rot[2], evec3<T>::UnitX()).toRotationMatrix()); // Rot X
 
 	result.translation = evec3<T>(trans[0], trans[1], trans[2]);
+	return result;
+}
+
+template <typename T>
+static evec3<T> unproject(evec2<T> p, const intrinsics<T>& intr)
+{
+	T x = (p.x() - intr.cx) / intr.fx;
+	T y = (p.y() - intr.cy) / intr.fy;
+
+	return evec3<T>(x, -y, T(-1.));
+}
+
+template <typename T> static T dot(evec3<T> a, evec3<T> b) { return a.dot(b); }
+
+template <typename T>
+static evec3<T> triangulateStereoT(evec3<T> camRay, const intrinsics<T>& projIntr, 
+	evec3<T> projPosition, equat<T> projRotation, evec2<T> projPixel, 
+	triangulation_mode mode = triangulate_clamp_to_cam)
+{
+	evec3<T> camOrigin(T(0.), T(0.), T(0.));
+
+	evec3<T> projRay = projRotation * unproject(projPixel, projIntr);
+
+	// Approximate ray intersection.
+	T v1tv1 = dot(camRay, camRay);
+	T v2tv2 = dot(projRay, projRay);
+	T v1tv2 = dot(camRay, projRay);
+	T v2tv1 = dot(projRay, camRay);
+
+	T detV = v1tv1 * v2tv2 - v1tv2 * v2tv1;
+
+	evec3<T> q2_q1 = projPosition - camOrigin;
+	T Q1 = dot(camRay, q2_q1);
+	T Q2 = -dot(projRay, q2_q1);
+
+	T lambda1 = (v2tv2 * Q1 + v1tv2 * Q2) / detV;
+	T lambda2 = (v2tv1 * Q1 + v1tv1 * Q2) / detV;
+
+	evec3<T> p1 = lambda1 * camRay + camOrigin;
+	evec3<T> p2 = lambda2 * projRay + projPosition;
+
+	evec3<T> result;
+
+	if (mode == triangulate_clamp_to_cam)
+	{
+		result = p1;
+	}
+	else if (mode == triangulate_clamp_to_proj)
+	{
+		result = p2;
+	}
+	else
+	{
+		assert(mode == triangulate_center_point);
+		result = (p1 + p2) * T(0.5);
+	}
+
 	return result;
 }
 
@@ -140,6 +204,38 @@ struct backprojection_functor : autodiff_cost_function<backprojection_functor, 2
 	}
 };
 
+struct depth_functor : autodiff_cost_function<depth_functor, 1, 4, 3, 3>
+{
+	evec3<double> camRay;
+	evec2<double> projPixel;
+	double wantedDepth;
+
+	static inline const double depthWeight = 25.0;
+
+	depth_functor(evec3<double> camRay, evec2<double> projPixel, double wantedDepth)
+		: autodiff_cost_function(this), camRay(camRay), projPixel(projPixel), wantedDepth(wantedDepth) {}
+	
+	depth_functor(const depth_functor& o)
+		: autodiff_cost_function(this), camRay(o.camRay), projPixel(o.projPixel), wantedDepth(o.wantedDepth) {}
+
+	template <typename T>
+	bool operator()(const T* const intr, const T* const trans, const T* const rot, T* residual) const
+	{
+		intrinsics<T> projIntr = getIntrinsics(intr);
+		extrinsics<T> extr = getExtrinsics(trans, rot);
+
+		equat<T> projRotation = extr.rotation.conjugate();
+		evec3<T> projPosition = -(projRotation * extr.translation);
+
+		evec3<T> scannedPosition = triangulateStereoT(camRay.cast<T>().eval(), projIntr, projPosition, projRotation, projPixel.cast<T>().eval(), triangulate_clamp_to_cam);
+		T scannedDepth = scannedPosition.norm();
+
+		residual[0] = ((T)wantedDepth - scannedDepth) * T(depthWeight);
+
+		return true;
+	}
+};
+
 
 
 void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration_solver_input>& input, 
@@ -173,6 +269,7 @@ void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration
 	problem.AddParameterBlock(rot, 3, 0);
 
 	std::vector<std::vector<backprojection_functor>> backprojResiduals(input.size());
+	std::vector<std::vector<depth_functor>> depthResiduals(input.size());
 
 
 	random_number_generator rng = { 61923 };
@@ -181,6 +278,7 @@ void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration
 	for (const calibration_solver_input& in : input)
 	{
 		backprojResiduals[index].reserve(in.renderedPC.numEntries);
+		depthResiduals[index].reserve(in.renderedPC.numEntries);
 
 		for (uint32 y = 0, i = 0; y < in.renderedPC.entries.height; ++y)
 		{
@@ -191,13 +289,21 @@ void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration
 
 				if (e.position.z != 0.f && validPixel(proj))
 				{
+					assert(e.position.z < 0.f);
+
 					if (rng.randomFloat01() < settings.percentageOfCorrespondencesToUse)
 					{
 						evec3<double> camPos = { e.position.x, e.position.y, e.position.z };
 						evec2<double> projPixel = { proj.x, proj.y };
 
+						double wantedDepth = camPos.norm();
+						evec3<double> camRay = camPos / abs(camPos.z());
+
 						auto& b = backprojResiduals[index].emplace_back(camPos, projPixel);
 						problem.AddResidualBlock(&b, nullptr, intr, trans, rot);
+
+						auto& d = depthResiduals[index].emplace_back(camRay, projPixel, wantedDepth);
+						problem.AddResidualBlock(&d, nullptr, intr, trans, rot);
 					}
 				}
 			}

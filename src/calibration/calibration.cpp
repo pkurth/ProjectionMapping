@@ -34,6 +34,7 @@
 #include "calibration_rs.hlsli"
 
 #include <random>
+#include <shellapi.h>
 
 static fs::path calibrationBaseDirectory = "calibration_temp";
 
@@ -1210,7 +1211,19 @@ bool projector_system_calibration::edit(game_scene& scene)
 	ImGui::Separator();
 
 	ImGui::Text("Disk cache: ./%ws", calibrationBaseDirectory.c_str());
-	if (ImGui::Button("Change disk cache directory"))
+	
+	ImGui::SameLine();
+	if (ImGui::Button("Open"))
+	{
+		if (!fs::exists(calibrationBaseDirectory))
+		{
+			fs::create_directories(calibrationBaseDirectory);
+		}
+		ShellExecuteW(0, 0, calibrationBaseDirectory.c_str(), 0, 0, SW_SHOWNORMAL);
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Change"))
 	{
 		std::string newBaseDir = directoryDialog();
 		if (!newBaseDir.empty())
@@ -1218,8 +1231,6 @@ bool projector_system_calibration::edit(game_scene& scene)
 			calibrationBaseDirectory = newBaseDir;
 		}
 	}
-
-	ImGui::SameLine();
 
 	if (ImGui::DisableableButton("Clear disk cache", uiActive))
 	{
