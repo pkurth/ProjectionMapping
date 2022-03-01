@@ -605,20 +605,23 @@ void serializeSceneToDisk(game_scene& scene, const renderer_settings& rendererSe
 		{
 			if (tag_component* tag = entity.getComponentIfExists<tag_component>())
 			{
-				out << YAML::BeginMap;
+				if (std::string(tag->name) != "Tracker") // Don't serialize the tracker dummy.
+				{
+					out << YAML::BeginMap;
 
-				out << YAML::Key << "Tag" << YAML::Value << tag->name;
+					out << YAML::Key << "Tag" << YAML::Value << tag->name;
 
-				if (auto* c = entity.getComponentIfExists<transform_component>()) { out << YAML::Key << "Transform" << YAML::Value << *c; }
-				if (auto* c = entity.getComponentIfExists<position_component>()) { out << YAML::Key << "Position" << YAML::Value << *c; }
-				if (auto* c = entity.getComponentIfExists<position_rotation_component>()) { out << YAML::Key << "Position/Rotation" << YAML::Value << *c; }
-				if (entity.hasComponent<dynamic_transform_component>()) { out << YAML::Key << "Dynamic" << YAML::Value << true; }
-				if (auto* c = entity.getComponentIfExists<point_light_component>()) { out << YAML::Key << "Point light" << YAML::Value << *c; }
-				if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
-				if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
-				if (entity.hasComponent<tracking_component>()) { out << YAML::Key << "Tracking" << YAML::Value << true;	}
+					if (auto* c = entity.getComponentIfExists<transform_component>()) { out << YAML::Key << "Transform" << YAML::Value << *c; }
+					if (auto* c = entity.getComponentIfExists<position_component>()) { out << YAML::Key << "Position" << YAML::Value << *c; }
+					if (auto* c = entity.getComponentIfExists<position_rotation_component>()) { out << YAML::Key << "Position/Rotation" << YAML::Value << *c; }
+					if (entity.hasComponent<dynamic_transform_component>()) { out << YAML::Key << "Dynamic" << YAML::Value << true; }
+					if (auto* c = entity.getComponentIfExists<point_light_component>()) { out << YAML::Key << "Point light" << YAML::Value << *c; }
+					if (auto* c = entity.getComponentIfExists<spot_light_component>()) { out << YAML::Key << "Spot light" << YAML::Value << *c; }
+					if (auto* c = entity.getComponentIfExists<raster_component>()) { out << YAML::Key << "Raster" << YAML::Value << *c; }
+					if (entity.hasComponent<tracking_component>()) { out << YAML::Key << "Tracking" << YAML::Value << true; }
 
-				out << YAML::EndMap;
+					out << YAML::EndMap;
+				}
 			}
 		}
 		});
@@ -650,7 +653,7 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 		return false;
 	}
 
-	scene = game_scene();
+	scene.clearAll();
 	scene.savePath = std::move(filename);
 	projectorContext->knownProjectorCalibrations.clear();
 
@@ -672,6 +675,8 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 	for (auto entityNode : entitiesNode)
 	{
 		std::string name = entityNode["Tag"].as<std::string>();
+		assert(name != "Tracker");
+
 		scene_entity entity = scene.createEntity(name.c_str());
 
 #define LOAD_COMPONENT(type, name) if (auto node = entityNode[name]) { entity.addComponent<type>(node.as<type>()); }
