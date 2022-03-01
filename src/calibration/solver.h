@@ -5,7 +5,7 @@
 
 struct calibration_solver_settings
 {
-	float percentageOfCorrespondencesToUse = 0.2f;
+	float percentageOfCorrespondencesToUse = 1.f;
 	uint32 maxNumIterations = 300;
 };
 
