@@ -1338,7 +1338,7 @@ void depthSobel(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> outp
 	cl->setPipelineState(*depthSobelPipeline.pipeline);
 	cl->setComputeRootSignature(*depthSobelPipeline.rootSignature);
 
-	cl->setCompute32BitConstants(DEPTH_SOBEL_RS_CB, depth_sobel_cb{ projectionParams, threshold });
+	cl->setCompute32BitConstants(DEPTH_SOBEL_RS_CB, depth_sobel_cb{ projectionParams, (int32)input->width, (int32)input->height, threshold });
 	cl->setDescriptorHeapUAV(DEPTH_SOBEL_RS_TEXTURES, 0, output);
 	cl->setDescriptorHeapSRV(DEPTH_SOBEL_RS_TEXTURES, 1, input);
 
@@ -1366,7 +1366,7 @@ void combinedSobel(dx_command_list* cl, ref<dx_texture> depthInput, ref<dx_textu
 	cl->setPipelineState(*combinedSobelPipeline.pipeline);
 	cl->setComputeRootSignature(*combinedSobelPipeline.rootSignature);
 
-	cl->setCompute32BitConstants(COMBINED_SOBEL_RS_CB, combined_sobel_cb{ projectionParams, depthThreshold, colorThreshold });
+	cl->setCompute32BitConstants(COMBINED_SOBEL_RS_CB, combined_sobel_cb{ projectionParams, (int32)depthInput->width, (int32)depthInput->height, depthThreshold, colorThreshold });
 	cl->setDescriptorHeapUAV(COMBINED_SOBEL_RS_TEXTURES, 0, output);
 	cl->setDescriptorHeapSRV(COMBINED_SOBEL_RS_TEXTURES, 1, depthInput);
 	cl->setDescriptorHeapSRV(COMBINED_SOBEL_RS_TEXTURES, 2, colorInput);

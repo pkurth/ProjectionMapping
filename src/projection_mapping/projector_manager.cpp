@@ -218,11 +218,12 @@ void projector_manager::updateAndRender(float dt)
 	{
 		if (ImGui::Begin("Projector details", &detailWindowOpen, ImGuiWindowFlags_NoDocking))
 		{
-			if (ImGui::BeginTable("##Table", 6))
+			if (ImGui::BeginTable("##Table", 7))
 			{
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
 				ImGui::TableSetupColumn("Best mask");
+				ImGui::TableSetupColumn("Discontinuities");
 				ImGui::TableSetupColumn("Distance field");
 				ImGui::TableSetupColumn("Masks");
 				ImGui::TableSetupColumn("Solver intensities");
@@ -260,6 +261,9 @@ void projector_manager::updateAndRender(float dt)
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.bestMaskTexture);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.discontinuitiesTexture);
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.distanceFieldTexture);

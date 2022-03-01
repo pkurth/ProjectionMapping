@@ -10,6 +10,16 @@ RWTexture2D<float2> output				: register(u0);
 Texture2D<float> depth					: register(t0);
 Texture2D<float4> color					: register(t1);
 
+static float getDepthAt(int2 c, float centerD)
+{
+	float d = centerD;
+	if (all(c >= 0) && all(c < int2(cb.resolutionX, cb.resolutionY)))
+	{
+		d = depth[c];
+	}
+	return depthBufferDepthToEyeDepth(d, cb.projectionParams);
+}
+
 [numthreads(POST_PROCESSING_BLOCK_SIZE, POST_PROCESSING_BLOCK_SIZE, 1)]
 [RootSignature(COMBINED_SOBEL_RS)]
 void main(cs_input IN)
@@ -21,14 +31,16 @@ void main(cs_input IN)
 
 
 	{
-		float tl = depthBufferDepthToEyeDepth(depth[xy + int2(-1, -1)], cb.projectionParams);
-		float t = depthBufferDepthToEyeDepth(depth[xy + int2(0, -1)], cb.projectionParams);
-		float tr = depthBufferDepthToEyeDepth(depth[xy + int2(1, -1)], cb.projectionParams);
-		float l = depthBufferDepthToEyeDepth(depth[xy + int2(-1, 0)], cb.projectionParams);
-		float r = depthBufferDepthToEyeDepth(depth[xy + int2(1, 0)], cb.projectionParams);
-		float bl = depthBufferDepthToEyeDepth(depth[xy + int2(-1, 1)], cb.projectionParams);
-		float b = depthBufferDepthToEyeDepth(depth[xy + int2(0, 1)], cb.projectionParams);
-		float br = depthBufferDepthToEyeDepth(depth[xy + int2(1, 1)], cb.projectionParams);
+		float center = depth[xy];
+
+		float tl = getDepthAt(xy + int2(-1, -1), center);
+		float t = getDepthAt(xy + int2(0, -1), center);
+		float tr = getDepthAt(xy + int2(1, -1), center);
+		float l = getDepthAt(xy + int2(-1, 0), center);
+		float r = getDepthAt(xy + int2(1, 0), center);
+		float bl = getDepthAt(xy + int2(-1, 1), center);
+		float b = getDepthAt(xy + int2(0, 1), center);
+		float br = getDepthAt(xy + int2(1, 1), center);
 
 		float horizontal = abs((tl + 2.f * t + tr) - (bl + 2.f * b + br));
 		float vertical = abs((tl + 2.f * l + bl) - (tr + 2.f * r + br));

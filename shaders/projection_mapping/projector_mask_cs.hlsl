@@ -39,11 +39,8 @@ void main(cs_input IN)
 
 
 	float2 distances = discontinuityDistanceFields[index].SampleLevel(clampSampler, uv, 0);
-	float depthMask = saturate(1.f - smoothstep(common.depthHardDistance, common.depthHardDistance + common.depthSmoothDistance, distances.x));
-	float colorMask = saturate(1.f - smoothstep(common.colorHardDistance, common.colorHardDistance + common.colorSmoothDistance, distances.y));
-	
-	//float depthMask = depthMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
-	//float colorMask = colorMasks[index].SampleLevel(clampSampler, uv, 0); // 1 at edges, 0 everywhere else.
+	float depthMask = saturate(1.f - smoothstep(common.depthHardDistance, common.depthHardDistance + common.depthSmoothDistance, distances.x)); // 1 at edges, 0 everywhere else.
+	float colorMask = saturate(1.f - smoothstep(common.colorHardDistance, common.colorHardDistance + common.colorSmoothDistance, distances.y)); // 1 at edges, 0 everywhere else.
 	float bestMask = saturate(bestMasks[index].SampleLevel(clampSampler, uv, 0)); // 1 where best, 0 everywhere else.
 
 	float2 distanceFromEdge2 = min(texCoord, dimensions - texCoord);

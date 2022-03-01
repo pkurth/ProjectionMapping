@@ -463,6 +463,8 @@ struct present_cb
 struct depth_sobel_cb
 {
     vec4 projectionParams;
+    int resolutionX;
+    int resolutionY;
     float threshold;
 };
 
@@ -504,6 +506,8 @@ struct color_sobel_cb
 struct combined_sobel_cb
 {
     vec4 projectionParams;
+    int resolutionX;
+    int resolutionY;
     float depthThreshold;
     float colorThreshold;
 };

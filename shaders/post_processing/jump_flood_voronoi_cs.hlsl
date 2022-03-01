@@ -24,6 +24,7 @@ void main(cs_input IN)
         for (int x = -1; x <= 1; ++x) 
         {
             int2 fc = tc + int2(x, y) * cb.stepWidth;
+
             float4 ntc = seedTexture[fc];
 
             float4 o = ntc - center.xyxy;
