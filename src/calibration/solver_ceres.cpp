@@ -6,6 +6,7 @@
 #include "graycode.h"
 
 #include "core/random.h"
+#include "core/log.h"
 
 #undef arraysize
 #define GLOG_NO_ABBREVIATED_SEVERITIES
@@ -244,6 +245,9 @@ void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration
 {
 	Eigen::initParallel();
 
+
+	LOG_MESSAGE("Initializing Ceres solver");
+
 	ceres::Problem::Options problemOptions;
 	problemOptions.cost_function_ownership = ceres::DO_NOT_TAKE_OWNERSHIP;
 	problemOptions.loss_function_ownership = ceres::DO_NOT_TAKE_OWNERSHIP;
@@ -273,6 +277,8 @@ void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration
 
 
 	random_number_generator rng = { 61923 };
+
+	uint32 count = 0;
 
 	uint32 index = 0;
 	for (const calibration_solver_input& in : input)
@@ -309,8 +315,11 @@ void solveForCameraToProjectorParametersUsingCeres(const std::vector<calibration
 			}
 		}
 
+		count += (uint32)backprojResiduals[index].size();
 		++index;
 	}
+
+	LOG_MESSAGE("Solving with %u residuals", count);
 
 	ceres::Solver::Options options;
 	options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
