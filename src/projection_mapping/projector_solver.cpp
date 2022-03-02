@@ -242,7 +242,11 @@ void projector_solver::solve(const projector_component* projectors, const render
 				const ref<dx_texture>& jumpFloodTemp1Texture = projectors[i].renderer.jumpFloodTemp1Texture;
 				const ref<dx_texture>& distanceFieldTexture = projectors[i].renderer.distanceFieldTexture;
 
-				distanceField(cl, discontinuitiesTexture, distanceFieldTexture, jumpFloodTemp0Texture, jumpFloodTemp1Texture);
+				float depthTotalDistance = settings.depthHardDistance + settings.depthSmoothDistance;
+				float colorTotalDistance = settings.colorHardDistance + settings.colorSmoothDistance;
+				int32 truncationDistance = (int32)ceil(max(depthTotalDistance, colorTotalDistance));
+
+				distanceField(cl, discontinuitiesTexture, distanceFieldTexture, jumpFloodTemp0Texture, jumpFloodTemp1Texture, truncationDistance);
 
 				barrier_batcher(cl)
 					//.uav(distanceFieldTexture)

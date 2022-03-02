@@ -1,8 +1,9 @@
 #include "cs.hlsli"
 #include "post_processing_rs.hlsli"
 
-Texture2D<float4> input				: register(t0);
-RWTexture2D<float2> output			: register(u0);
+ConstantBuffer<jump_flood_voronoi_distance_cb> cb   : register(b0);
+Texture2D<float4> input								: register(t0);
+RWTexture2D<float2> output							: register(u0);
 
 
 [numthreads(POST_PROCESSING_BLOCK_SIZE, POST_PROCESSING_BLOCK_SIZE, 1)]
@@ -18,8 +19,8 @@ void main(cs_input IN)
 
 	float2 center = (float2)tc;
 
-	float l1 = 0.f;
-	float l2 = 0.f;
+	float l1 = 99999;
+	float l2 = 99999;
 
 	if (xy1.x != 0.f && xy1.y != 0.f)
 	{
@@ -29,6 +30,9 @@ void main(cs_input IN)
 	{
 		l2 = length(xy2 - center);
 	}
+
+	l1 = min(l1, cb.truncationDistance);
+	l2 = min(l2, cb.truncationDistance);
 
 	output[tc] = float2(l1, l2);
 }

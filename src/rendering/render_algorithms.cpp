@@ -1261,7 +1261,7 @@ void erodeSmooth(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_textur
 	morphologyCommon(cl, smoothErosionPipeline, inputOutput, temp, radius);
 }
 
-void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, ref<dx_texture> jumpFloodTemp0, ref<dx_texture> jumpFloodTemp1)
+void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, ref<dx_texture> jumpFloodTemp0, ref<dx_texture> jumpFloodTemp1, int32 truncationDistance)
 {
 	DX_PROFILE_BLOCK(cl, "Distance field");
 
@@ -1292,7 +1292,10 @@ void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> o
 	{
 		DX_PROFILE_BLOCK(cl, "Jump flood");
 
-		int32 numIterations = max(log2(input->width), log2(input->height));
+		int32 maxNumIterations = max(log2(input->width), log2(input->height));
+		int32 numIterations = (truncationDistance < 0) 
+			? maxNumIterations 
+			: min(log2(truncationDistance), maxNumIterations);
 
 		cl->setPipelineState(*jumpFloodVoronoiPipeline.pipeline);
 		cl->setComputeRootSignature(*jumpFloodVoronoiPipeline.rootSignature);
@@ -1322,6 +1325,7 @@ void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> o
 		cl->setPipelineState(*jumpFloodVoronoiDistancePipeline.pipeline);
 		cl->setComputeRootSignature(*jumpFloodVoronoiDistancePipeline.rootSignature);
 
+		cl->setCompute32BitConstants(JUMP_FLOOD_VORONOI_DISTANCE_RS_CB, jump_flood_voronoi_distance_cb{ (truncationDistance < 0) ? max(output->width, output->height) : (float)truncationDistance });
 		cl->setDescriptorHeapUAV(JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES, 0, output);
 		cl->setDescriptorHeapSRV(JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES, 1, in);
 

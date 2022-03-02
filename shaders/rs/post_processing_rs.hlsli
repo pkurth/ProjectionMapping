@@ -162,11 +162,18 @@ struct jump_flood_voronoi_cb
 #define JUMP_FLOOD_VORONOI_RS_TEXTURES      1
 
 
+struct jump_flood_voronoi_distance_cb
+{
+    float truncationDistance;
+};
+
 #define JUMP_FLOOD_VORONOI_DISTANCE_RS \
     "RootFlags(0), " \
+    "RootConstants(b0, num32BitConstants = 1), " \
     "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 1) )"
 
-#define JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES 0
+#define JUMP_FLOOD_VORONOI_DISTANCE_RS_CB       0
+#define JUMP_FLOOD_VORONOI_DISTANCE_RS_TEXTURES 1
 
 
 // ----------------------------------------
