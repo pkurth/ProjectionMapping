@@ -55,6 +55,7 @@ struct projector_component
 			}
 
 			window.initialize(TEXT("Projector"), width, height, color_depth_8, false, true);
+			window.setIcon("assets/icons/projector.png");
 
 			headless = false;
 
