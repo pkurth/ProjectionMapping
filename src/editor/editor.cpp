@@ -164,6 +164,11 @@ void scene_editor::drawMainMenuBar()
 				deserializeFromFile();
 			}
 
+			if (ImGui::MenuItem(ICON_FA_BARCODE "  Load projector calibrations"))
+			{
+				deserializeProjectorCalibrationsFromFile();
+			}
+
 			ImGui::Separator();
 			if (ImGui::MenuItem(ICON_FA_TIMES "  Exit", "Esc"))
 			{
@@ -1017,6 +1022,20 @@ bool scene_editor::deserializeFromFile()
 		setEnvironment(environmentName);
 
 		projectorManager->onSceneLoad();
+
+		return true;
+	}
+	return false;
+}
+
+bool scene_editor::deserializeProjectorCalibrationsFromFile()
+{
+	projector_context context;
+	if (deserializeProjectorCalibrationOnly(&context, tracker->globalCameraPosition, tracker->globalCameraRotation))
+	{
+		setSelectedEntityNoUndo({});
+
+		projectorManager->reportLocalCalibration(context.knownProjectorCalibrations);
 
 		return true;
 	}

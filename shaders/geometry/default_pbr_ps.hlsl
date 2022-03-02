@@ -314,6 +314,10 @@ ps_output main(ps_input IN)
 
 	float3 rgb = (xy.x != xy.y) ? float3(1.f, 1.f, 1.f) : float3(0.f, 0.f, 0.f);
 
-	OUT.hdrColor.rgb = rgb;
+	//OUT.hdrColor.rgb = rgb;
+
+	//OUT.hdrColor.rgb = float3(1, 1, 1);
+	//OUT.hdrColor.a = 0.f;
+
 	return OUT;
 }

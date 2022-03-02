@@ -696,3 +696,50 @@ bool deserializeSceneFromDisk(game_scene& scene, renderer_settings& rendererSett
 	return true;
 }
 
+bool deserializeProjectorCalibrationOnly(projector_context* projectorContext, vec3 globalCameraPosition, quat globalCameraRotation)
+{
+	fs::path filename = openFileDialog("Scene files", "sc");
+	if (filename.empty())
+	{
+		return false;
+	}
+
+	std::ifstream stream(filename);
+	YAML::Node n = YAML::Load(stream);
+	if (!n["Scene"])
+	{
+		return false;
+	}
+
+	projectorContext->knownProjectorCalibrations.clear();
+
+	vec3 storedCameraPosition(0.f, 0.f, 0.f);
+	quat storedCameraRotation = quat::identity;
+	YAML_LOAD(n, storedCameraPosition, "Tracker position");
+	YAML_LOAD(n, storedCameraRotation, "Tracker rotation");
+
+	YAML_LOAD(n, *projectorContext, "Projector context");
+
+
+	quat invStoredRotation = conjugate(storedCameraRotation);
+	vec3 invStoredTranslation = invStoredRotation * (-storedCameraPosition);
+
+	for (auto& c : projectorContext->knownProjectorCalibrations)
+	{
+		// In stored space.
+		vec3& pos = c.second.position;
+		quat& rot = c.second.rotation;
+
+		// Transform such that camera is at center.
+		rot = invStoredRotation * rot;
+		pos = invStoredRotation * pos + invStoredTranslation;
+
+		// Transform to global space.
+		rot = globalCameraRotation * rot;
+		pos = globalCameraRotation * pos + globalCameraPosition;
+	}
+
+
+	return true;
+}
+

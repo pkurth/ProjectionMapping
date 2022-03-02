@@ -35,6 +35,7 @@ private:
 
 	void serializeToFile();
 	bool deserializeFromFile();
+	bool deserializeProjectorCalibrationsFromFile();
 
 	game_scene* scene;
 	main_renderer* renderer;
