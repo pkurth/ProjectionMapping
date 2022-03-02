@@ -354,6 +354,11 @@ void projector_manager::reportLocalCalibration(const std::unordered_map<std::str
 	createProjectorsAndNotify();
 }
 
+bool projector_manager::isNetworkServer()
+{
+	return !protocol.initialized || protocol.isServer;
+}
+
 void projector_manager::createProjectorsAndNotify()
 {
 	if (!protocol.initialized)

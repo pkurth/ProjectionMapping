@@ -28,6 +28,8 @@ struct projector_manager
 	static constexpr uint32 MAX_NUM_PROJECTORS = 4;
 	bool isProjectorIndex[MAX_NUM_PROJECTORS] = {};
 
+	bool isNetworkServer();
+
 private:
 
 	depth_tracker* tracker;

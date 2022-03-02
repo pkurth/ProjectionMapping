@@ -159,12 +159,12 @@ void scene_editor::drawMainMenuBar()
 				serializeToFile();
 			}
 
-			if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Load scene", "Ctrl+O"))
+			if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Load scene", "Ctrl+O", nullptr, projectorManager->isNetworkServer()))
 			{
 				deserializeFromFile();
 			}
 
-			if (ImGui::MenuItem(ICON_FA_BARCODE "  Load projector calibrations"))
+			if (ImGui::MenuItem(ICON_FA_BARCODE "  Load projector calibrations", "Ctrl+Shift+O"))
 			{
 				deserializeProjectorCalibrationsFromFile();
 			}
@@ -896,9 +896,15 @@ bool scene_editor::handleUserInput(const user_input& input, ldr_render_pass* ldr
 			inputCaptured = true;
 			ImGui::GetIO().KeysDown['S'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
 		}
-		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('O'))
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyPressed('O') && projectorManager->isNetworkServer())
 		{
 			deserializeFromFile();
+			inputCaptured = true;
+			ImGui::GetIO().KeysDown['O'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
+		}
+		if (!inputCaptured && ImGui::IsKeyDown(key_ctrl) && ImGui::IsKeyDown(key_shift) && ImGui::IsKeyPressed('O'))
+		{
+			deserializeProjectorCalibrationsFromFile();
 			inputCaptured = true;
 			ImGui::GetIO().KeysDown['O'] = false; // Hack: Window does not get notified of inputs due to the file dialog.
 		}
