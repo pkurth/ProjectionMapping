@@ -706,6 +706,17 @@ bool scene_editor::drawSceneHierarchy()
 							ImGui::EndProperties();
 						}
 					});
+
+
+					if (!selectedEntity.hasComponent<tracking_component>() && selectedEntity.hasComponent<raster_component>() && selectedEntity.hasComponent<transform_component>())
+					{
+						ImGui::Separator();
+						if (ImGui::Button("Track this object"))
+						{
+							selectedEntity.addComponent<tracking_component>();
+						}
+					}
+
 				}
 			}
 			ImGui::EndChild();
