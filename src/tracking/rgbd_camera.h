@@ -95,6 +95,11 @@ struct realsense_handle
 
 	struct rs2_processing_block* align = 0;
 	struct rs2_frame_queue* alignQueue = 0;
+
+	struct rs2_options* depthSensorOptions = 0;
+
+	float laserPowerMin = 0.f;
+	float laserPowerMax = 1.f;
 };
 
 struct rgbd_camera
@@ -117,6 +122,8 @@ struct rgbd_camera
 	bool getFrame(rgbd_frame& result, int32 timeOutInMilliseconds = 0); // 0: Return immediately.
 	void releaseFrame(rgbd_frame& frame);
 
+	void toggleIRProjector();
+
 	azure_handle azure;
 	realsense_handle realsense;
 
@@ -124,6 +131,7 @@ struct rgbd_camera
 
 	rgbd_camera_sensor colorSensor;
 	rgbd_camera_sensor depthSensor;
+	bool irProjectorOn = true;
 
 	float depthScale;
 	bool alignDepthToColor;

@@ -966,6 +966,12 @@ void depth_tracker::drawSettings()
 			ImGui::PropertyCheckbox("Visualize depth", showDepth);
 			ImGui::PropertyDisableableCheckbox("Tracking", tracking, !disableTracking, disableTracking ? "Tracking has been disabled from outside" : 0);
 
+			bool irProjectorOn = camera.irProjectorOn;
+			if (ImGui::PropertyDisableableCheckbox("Enable IR projector", irProjectorOn, !disableTracking, disableTracking ? "Tracking has been disabled from outside" : 0))
+			{
+				camera.toggleIRProjector();
+			}
+
 			ImGui::PropertyDropdown("Mode", trackingModeNames, 2, (uint32&)mode);
 
 

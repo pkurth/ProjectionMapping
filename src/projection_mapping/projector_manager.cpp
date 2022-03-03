@@ -175,6 +175,11 @@ void projector_manager::updateAndRender(float dt)
 			else
 			{
 				tracker->disableTracking = true;
+
+				if (tracker->camera.isInitialized() && tracker->camera.irProjectorOn)
+				{
+					tracker->camera.toggleIRProjector();
+				}
 			}
 		}
 

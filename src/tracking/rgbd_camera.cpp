@@ -1,9 +1,11 @@
 #include "pch.h"
 #include "rgbd_camera.h"
+#include "core/log.h"
 
 #include <azure-kinect/k4a.h>
 #include <realsense/rs.h>
 #include <realsense/h/rs_pipeline.h>
+
 
 static rs2_context* rsContext;
 
@@ -504,6 +506,19 @@ bool rgbd_camera::initializeRealsense(uint32 deviceIndex, bool alignDepthToColor
                     depthScale = ds;
                 }
                 //depthScale = rs2_get_option((const rs2_options*)sensor, RS2_OPTION_DEPTH_UNITS, &e);
+
+
+                rs2_options* options = (rs2_options*)sensor;
+                realsense.depthSensorOptions = options;
+                if (rs2_supports_option(options, RS2_OPTION_LASER_POWER, &e))
+                {
+                    float step, def;
+                    rs2_get_option_range(options, RS2_OPTION_LASER_POWER, &realsense.laserPowerMin, &realsense.laserPowerMax, &step, &def, &e);
+                    assertRealsenseSuccess(e);
+
+                    rs2_set_option(options, RS2_OPTION_LASER_POWER, realsense.laserPowerMax, &e);
+                    assertRealsenseSuccess(e);
+                }
             }
             else
             {
@@ -727,4 +742,29 @@ void rgbd_camera::releaseFrame(rgbd_frame& frame)
 
     frame.depth = 0;
     frame.color = 0;
+}
+
+void rgbd_camera::toggleIRProjector()
+{
+    if (info.type == rgbd_camera_type_realsense)
+    {
+        rs2_error* e = 0;
+
+        if (irProjectorOn)
+        {
+            rs2_set_option(realsense.depthSensorOptions, RS2_OPTION_LASER_POWER, realsense.laserPowerMin, &e);
+        }
+        else
+        {
+            rs2_set_option(realsense.depthSensorOptions, RS2_OPTION_LASER_POWER, realsense.laserPowerMax, &e);
+        }
+
+        assertRealsenseSuccess(e);
+
+        irProjectorOn = !irProjectorOn;
+    }
+    else if (info.type != rgbd_camera_type_uninitialized)
+    {
+        LOG_WARNING("Toggling the IR projector is not implemented for cameras other than Realsense");
+    }
 }
