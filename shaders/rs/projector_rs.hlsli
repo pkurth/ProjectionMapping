@@ -226,6 +226,30 @@ struct projector_visualization_cb
 
 
 
+struct projector_specular_ambient_cb
+{
+    vec4 viewerPosition;
+    vec2 invDimensions;
+};
+
+#define PROJECTOR_SPECULAR_AMBIENT_RS \
+    "RootFlags(0), " \
+    "RootConstants(b0, num32BitConstants = 6), " \
+    "CBV(b1), " \
+    "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 6) )," \
+    "StaticSampler(s0," \
+        "addressU = TEXTURE_ADDRESS_CLAMP," \
+        "addressV = TEXTURE_ADDRESS_CLAMP," \
+        "addressW = TEXTURE_ADDRESS_CLAMP," \
+        "filter = FILTER_MIN_MAG_MIP_LINEAR)"
+
+
+#define PROJECTOR_SPECULAR_AMBIENT_RS_CB           0
+#define PROJECTOR_SPECULAR_AMBIENT_RS_CAMERA       1
+#define PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES     2
+
+
+
 
 
 

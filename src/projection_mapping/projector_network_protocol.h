@@ -39,6 +39,7 @@ private:
 	bool createObjectMessage(struct send_buffer& buffer);
 	bool createSettingsMessage(struct send_buffer& buffer);
 	bool createObjectUpdateMessage(struct send_buffer& buffer);
+	bool createViewerCameraUpdateMessage(struct send_buffer& buffer);
 	bool createProjectorInstantiationMessage(struct send_buffer& buffer, const std::vector<projector_instantiation>& instantiations);
 
 	bool sendToAllClients(struct send_buffer& buffer);
@@ -83,6 +84,7 @@ private:
 	uint32 latestSettingsMessageID = 0;
 	uint32 latestObjectMessageID = 0;
 	uint32 latestObjectUpdateMessageID = 0;
+	uint32 latestViewerCameraUpdateMessageID = 0;
 	uint32 latestProjectorInstantiationMessageID = 0;
 
 	projector_solver_settings oldSolverSettings;

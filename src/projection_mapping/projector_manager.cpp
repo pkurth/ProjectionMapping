@@ -288,6 +288,16 @@ void projector_manager::updateAndRender(float dt)
 		ImGui::End();
 	}
 
+	if (!isNetworkServer())
+	{
+		render_camera networkedViewerCamera;
+		networkedViewerCamera.initializeIngame(networkCameraPosition, networkCameraRotation, deg2rad(70.f), 0.01f);
+		networkedViewerCamera.setViewport(1000, 1000); // Doesn't matter. The shaders use position and rotation only.
+		networkedViewerCamera.updateMatrices();
+
+		projector_renderer::setViewerCamera(networkedViewerCamera);
+	}
+
 
 	uint32 numProjectors = scene->numberOfComponentsOfType<projector_component>();
 	render_camera projectorCameras[32];

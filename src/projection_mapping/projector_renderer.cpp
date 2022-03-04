@@ -8,10 +8,12 @@
 
 
 static dx_pipeline projectorPresentPipeline;
+static dx_pipeline projectorSpecularAmbientPipeline;
 
 void projector_renderer::initializeCommon()
 {
 	projectorPresentPipeline = createReloadablePipeline("projector_present_cs");
+	projectorSpecularAmbientPipeline = createReloadablePipeline("projector_specular_ambient_cs");
 }
 
 void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint32 windowHeight)
@@ -271,8 +273,7 @@ void projector_renderer::endFrame()
 			.transition(reflectanceTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 
-		specularAmbient(cl, hdrColorTexture, 0, worldNormalsTexture, reflectanceTexture,
-			environment ? environment->environment : 0, render_resources::whiteTexture, hdrPostProcessingTexture, materialInfo.cameraCBV);
+		specularAmbient(cl, projectorCameraCBV);
 
 		barrier_batcher(cl)
 			//.uav(hdrPostProcessingTexture)
@@ -311,6 +312,27 @@ void projector_renderer::present(dx_command_list* cl,
 	cl->setCompute32BitConstants(PROJECTOR_PRESENT_RS_CB, projector_present_cb{ present_sdr, 0.f, sharpenSettings.strength });
 
 	cl->dispatch(bucketize(output->width, PROJECTOR_BLOCK_SIZE), bucketize(output->height, PROJECTOR_BLOCK_SIZE));
+}
+
+void projector_renderer::specularAmbient(dx_command_list* cl, dx_dynamic_constant_buffer cameraCBV)
+{
+	PROFILE_ALL(cl, "Specular ambient");
+
+	cl->setPipelineState(*projectorSpecularAmbientPipeline.pipeline);
+	cl->setComputeRootSignature(*projectorSpecularAmbientPipeline.rootSignature);
+
+	cl->setCompute32BitConstants(PROJECTOR_SPECULAR_AMBIENT_RS_CB, projector_specular_ambient_cb{ viewerCamera.position, vec2(1.f / hdrPostProcessingTexture->width, 1.f / hdrPostProcessingTexture->height) });
+	cl->setComputeDynamicConstantBuffer(PROJECTOR_SPECULAR_AMBIENT_RS_CAMERA, cameraCBV);
+
+	cl->setDescriptorHeapUAV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 0, hdrPostProcessingTexture);
+	cl->setDescriptorHeapSRV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 1, hdrColorTexture);
+	cl->setDescriptorHeapSRV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 2, worldNormalsTexture);
+	cl->setDescriptorHeapSRV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 3, reflectanceTexture);
+	cl->setDescriptorHeapSRV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 4, depthStencilBuffer);
+	cl->setDescriptorHeapSRV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 5, environment ? environment->environment : render_resources::blackCubeTexture);
+	cl->setDescriptorHeapSRV(PROJECTOR_SPECULAR_AMBIENT_RS_TEXTURES, 6, render_resources::brdfTex);
+
+	cl->dispatch(bucketize(hdrPostProcessingTexture->width, PROJECTOR_BLOCK_SIZE), bucketize(hdrPostProcessingTexture->height, PROJECTOR_BLOCK_SIZE));
 }
 
 void projector_renderer::finalizeImage(dx_command_list* cl)

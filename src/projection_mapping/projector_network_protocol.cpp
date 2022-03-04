@@ -19,6 +19,7 @@ enum message_type : uint16
 	message_server_solver_settings,
 	message_server_object_info,
 	message_server_object_update,
+	message_server_viewer_camera_update,
 	message_server_projector_instantiation,
 };
 
@@ -118,6 +119,12 @@ struct server_object_update_message
 	float rotation[4];
 	float position[3];
 	uint32 id;
+};
+
+struct server_viewer_camera_update_message
+{
+	float rotation[4];
+	float position[3];
 };
 
 
@@ -291,6 +298,14 @@ bool projector_network_server::update(float dt)
 		{
 			send_buffer messageBuffer;
 			if (createObjectUpdateMessage(messageBuffer))
+			{
+				sendToAllClients(messageBuffer);
+			}
+		}
+
+		{
+			send_buffer messageBuffer;
+			if (createViewerCameraUpdateMessage(messageBuffer))
 			{
 				sendToAllClients(messageBuffer);
 			}
@@ -523,6 +538,18 @@ bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
 	return true;
 }
 
+bool projector_network_server::createViewerCameraUpdateMessage(send_buffer& buffer)
+{
+	buffer.header.type = message_server_viewer_camera_update;
+	buffer.header.messageID = runningMessageID++;
+
+	server_viewer_camera_update_message msg;
+	memcpy(msg.rotation, scene->camera.rotation.v4.data, sizeof(quat));
+	memcpy(msg.position, scene->camera.position.data, sizeof(vec3));
+
+	return buffer.pushValue(msg);
+}
+
 bool projector_network_server::createProjectorInstantiationMessage(struct send_buffer& buffer, const std::vector<projector_instantiation>& instantiations)
 {
 	buffer.header.type = message_server_projector_instantiation;
@@ -646,7 +673,7 @@ bool projector_network_client::update()
 
 				if (header->messageID < latestSettingsMessageID)
 				{
-					// Ignore out-of-order tracking messages.
+					// Ignore out-of-order messages.
 					break;
 				}
 
@@ -668,6 +695,7 @@ bool projector_network_client::update()
 
 				if (header->messageID < latestObjectMessageID)
 				{
+					// Ignore out-of-order messages.
 					break;
 				}
 
@@ -719,6 +747,7 @@ bool projector_network_client::update()
 
 				if (header->messageID < latestObjectUpdateMessageID)
 				{
+					// Ignore out-of-order messages.
 					break;
 				}
 
@@ -741,6 +770,30 @@ bool projector_network_client::update()
 						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
 					}
 				}
+
+			} break;
+
+			case message_server_viewer_camera_update:
+			{
+				if (messageBuffer.sizeRemaining != sizeof(server_viewer_camera_update_message))
+				{
+					LOG_ERROR("Message size does not equal sizeof(server_viewer_camera_update_message). Expected %u, got %u", (uint32)sizeof(server_viewer_camera_update_message), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				if (header->messageID < latestViewerCameraUpdateMessageID)
+				{
+					// Ignore out-of-order messages.
+					break;
+				}
+
+				latestViewerCameraUpdateMessageID = header->messageID;
+
+
+				const server_viewer_camera_update_message* cam = messageBuffer.get<server_viewer_camera_update_message>(1);
+
+				memcpy(manager->networkCameraRotation.v4.data, cam->rotation, sizeof(quat));
+				memcpy(manager->networkCameraPosition.data, cam->position, sizeof(vec3));
 
 			} break;
 

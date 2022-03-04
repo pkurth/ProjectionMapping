@@ -40,6 +40,10 @@ private:
 
 	void network_projectorInstantiations(const std::vector<projector_instantiation>& instantiations);
 
+	vec3 networkCameraPosition;
+	quat networkCameraRotation;
+
+
 	struct client_monitor
 	{
 		std::string description;

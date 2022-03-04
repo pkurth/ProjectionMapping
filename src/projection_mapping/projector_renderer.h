@@ -49,6 +49,9 @@ private:
 		ref<dx_texture> output,
 		sharpen_settings sharpenSettings);
 
+	void specularAmbient(dx_command_list* cl,
+		dx_dynamic_constant_buffer cameraCBV);
+
 	const opaque_render_pass* opaqueRenderPass = 0;
 
 
