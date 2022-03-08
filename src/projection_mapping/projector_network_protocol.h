@@ -36,9 +36,14 @@ private:
 		network_address address;
 	};
 
-	bool createObjectMessage(struct send_buffer& buffer);
 	bool createSettingsMessage(struct send_buffer& buffer);
+
+	bool createObjectMessage(struct send_buffer& buffer);
 	bool createObjectUpdateMessage(struct send_buffer& buffer);
+
+	bool createSpotLightMessage(struct send_buffer& buffer);
+	bool createSpotLightUpdateMessage(struct send_buffer& buffer);
+
 	bool createViewerCameraUpdateMessage(struct send_buffer& buffer);
 	bool createProjectorInstantiationMessage(struct send_buffer& buffer, const std::vector<projector_instantiation>& instantiations);
 
@@ -84,6 +89,8 @@ private:
 	uint32 latestSettingsMessageID = 0;
 	uint32 latestObjectMessageID = 0;
 	uint32 latestObjectUpdateMessageID = 0;
+	uint32 latestSpotLightMessageID = 0;
+	uint32 latestSpotLightUpdateMessageID = 0;
 	uint32 latestViewerCameraUpdateMessageID = 0;
 	uint32 latestProjectorInstantiationMessageID = 0;
 
@@ -91,6 +98,7 @@ private:
 
 
 	std::unordered_map<uint32, scene_entity> objectIDToEntity;
+	std::unordered_map<uint32, scene_entity> spotLightIDToEntity;
 };
 
 

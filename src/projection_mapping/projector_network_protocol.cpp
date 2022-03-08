@@ -16,10 +16,18 @@ enum message_type : uint16
 	message_client_request_calibration_mode,
 	message_client_local_calibration,
 
+
+
 	message_server_solver_settings,
+
 	message_server_object_info,
 	message_server_object_update,
+
+	message_server_spot_light_info,
+	message_server_spot_light_update,
+
 	message_server_viewer_camera_update,
+
 	message_server_projector_instantiation,
 };
 
@@ -35,6 +43,11 @@ struct message_header
 struct send_buffer
 {
 	uint32 size = sizeof(message_header);
+
+	void reset()
+	{
+		size = sizeof(message_header);
+	}
 
 	template <typename T>
 	T* push(uint32 count)
@@ -115,6 +128,27 @@ struct server_object_message
 };
 
 struct server_object_update_message
+{
+	float rotation[4];
+	float position[3];
+	uint32 id;
+};
+
+struct server_spot_light_message
+{
+	float rotation[4];
+	float position[3];
+	float color[3];
+	float intensity;
+	float distance;
+	float innerAngle;
+	float outerAngle;
+	bool castsShadow;
+	uint32 shadowMapResolution;
+	uint32 id;
+};
+
+struct server_spot_light_update_message
 {
 	float rotation[4];
 	float position[3];
@@ -305,6 +339,14 @@ bool projector_network_server::update(float dt)
 
 		{
 			send_buffer messageBuffer;
+			if (createSpotLightUpdateMessage(messageBuffer))
+			{
+				sendToAllClients(messageBuffer);
+			}
+		}
+
+		{
+			send_buffer messageBuffer;
 			if (createViewerCameraUpdateMessage(messageBuffer))
 			{
 				sendToAllClients(messageBuffer);
@@ -377,18 +419,26 @@ bool projector_network_server::update(float dt)
 				}
 
 				{
-					send_buffer response;
-					if (createObjectMessage(response))
+					send_buffer msg;
+					if (createObjectMessage(msg))
 					{
-						sendToClient(response, connection);
+						sendToClient(msg, connection);
 					}
 				}
 
 				{
-					send_buffer response;
-					if (createSettingsMessage(response))
+					send_buffer msg;
+					if (createSpotLightMessage(msg))
 					{
-						sendToClient(response, connection);
+						sendToClient(msg, connection);
+					}
+				}
+
+				{
+					send_buffer msg;
+					if (createSettingsMessage(msg))
+					{
+						sendToClient(msg, connection);
 					}
 				}
 
@@ -449,7 +499,8 @@ bool projector_network_server::update(float dt)
 bool projector_network_server::broadcastObjectInfo()
 {
 	send_buffer messageBuffer;
-	return createObjectMessage(messageBuffer) && sendToAllClients(messageBuffer);
+	return createObjectMessage(messageBuffer) && sendToAllClients(messageBuffer)
+		&& createSpotLightMessage(messageBuffer) && sendToAllClients(messageBuffer);
 }
 
 bool projector_network_server::broadcastProjectors(const std::vector<projector_instantiation>& instantiations)
@@ -464,9 +515,25 @@ static auto getObjectGroup(game_scene* scene)
 	return objectGroup;
 }
 
+static auto getSpotLightGroup(game_scene* scene)
+{
+	auto lightGroup = scene->group<spot_light_component, position_rotation_component>();
+	return lightGroup;
+}
+
+
+bool projector_network_server::createSettingsMessage(send_buffer& buffer)
+{
+	buffer.reset();
+	buffer.header.type = message_server_solver_settings;
+	buffer.header.messageID = runningMessageID++;
+	return buffer.pushValue(manager->solver.settings);
+}
 
 bool projector_network_server::createObjectMessage(send_buffer& buffer)
 {
+	buffer.reset();
+
 	auto objectGroup = getObjectGroup(scene);
 	uint32 numObjectsInScene = (uint32)objectGroup.size();
 
@@ -501,17 +568,17 @@ bool projector_network_server::createObjectMessage(send_buffer& buffer)
 	return true;
 }
 
-bool projector_network_server::createSettingsMessage(send_buffer& buffer)
-{
-	buffer.header.type = message_server_solver_settings;
-	buffer.header.messageID = runningMessageID++;
-	return buffer.pushValue(manager->solver.settings);
-}
-
 bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
 {
+	buffer.reset();
+
 	auto objectGroup = getObjectGroup(scene);
 	uint32 numObjectsInScene = (uint32)objectGroup.size();
+
+	if (numObjectsInScene == 0)
+	{
+		return false;
+	}
 
 	buffer.header.type = message_server_object_update;
 	buffer.header.messageID = runningMessageID++;
@@ -538,8 +605,87 @@ bool projector_network_server::createObjectUpdateMessage(send_buffer& buffer)
 	return true;
 }
 
+bool projector_network_server::createSpotLightMessage(send_buffer& buffer)
+{
+	buffer.reset();
+
+	auto slGroup = getSpotLightGroup(scene);
+	uint32 numSLsInScene = (uint32)slGroup.size();
+
+	buffer.header.type = message_server_spot_light_info;
+
+	server_spot_light_message* messages = buffer.push<server_spot_light_message>(numSLsInScene);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u spot light infos", numSLsInScene);
+		return false;
+	}
+
+	uint32 id = 0;
+	for (auto [entityHandle, sl, transform] : slGroup.each())
+	{
+		scene_entity entity = { entityHandle, *scene };
+
+		server_spot_light_message& msg = messages[id];
+
+		memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
+		memcpy(msg.position, transform.position.data, sizeof(vec3));
+		memcpy(msg.color, sl.color.data, sizeof(vec3));
+		msg.intensity = sl.intensity;
+		msg.distance = sl.distance;
+		msg.innerAngle = sl.innerAngle;
+		msg.outerAngle = sl.outerAngle;
+		msg.castsShadow = sl.castsShadow;
+		msg.shadowMapResolution = sl.shadowMapResolution;
+		msg.id = (uint32)entityHandle;
+
+		++id;
+	}
+
+	return true;
+}
+
+bool projector_network_server::createSpotLightUpdateMessage(send_buffer& buffer)
+{
+	buffer.reset();
+
+	auto slGroup = getSpotLightGroup(scene);
+	uint32 numSLsInScene = (uint32)slGroup.size();
+
+	if (numSLsInScene == 0)
+	{
+		return false;
+	}
+
+	buffer.header.type = message_server_spot_light_update;
+	buffer.header.messageID = runningMessageID++;
+
+	server_spot_light_update_message* messages = buffer.push<server_spot_light_update_message>(numSLsInScene);
+	if (!messages)
+	{
+		LOG_ERROR("Not enough space in message buffer to fit %u spot light updates", numSLsInScene);
+		return false;
+	}
+
+	uint32 id = 0;
+	for (auto [entityHandle, sl, transform] : slGroup.each())
+	{
+		server_spot_light_update_message& msg = messages[id];
+
+		memcpy(msg.rotation, transform.rotation.v4.data, sizeof(quat));
+		memcpy(msg.position, transform.position.data, sizeof(vec3));
+		msg.id = (uint32)entityHandle;
+
+		++id;
+	}
+
+	return true;
+}
+
 bool projector_network_server::createViewerCameraUpdateMessage(send_buffer& buffer)
 {
+	buffer.reset();
+
 	buffer.header.type = message_server_viewer_camera_update;
 	buffer.header.messageID = runningMessageID++;
 
@@ -552,6 +698,8 @@ bool projector_network_server::createViewerCameraUpdateMessage(send_buffer& buff
 
 bool projector_network_server::createProjectorInstantiationMessage(struct send_buffer& buffer, const std::vector<projector_instantiation>& instantiations)
 {
+	buffer.reset();
+
 	buffer.header.type = message_server_projector_instantiation;
 	buffer.header.messageID = runningMessageID++;
 
@@ -771,6 +919,87 @@ bool projector_network_client::update()
 					}
 				}
 
+			} break;
+
+			case message_server_spot_light_info:
+			{
+				if (messageBuffer.sizeRemaining % sizeof(server_spot_light_message) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(server_spot_light_message). Expected multiple of %u, got %u", (uint32)sizeof(server_spot_light_message), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				if (header->messageID < latestSpotLightMessageID)
+				{
+					// Ignore out-of-order messages.
+					break;
+				}
+
+				latestSpotLightMessageID = header->messageID;
+
+				// Delete objects in scene.
+				auto slGroup = getSpotLightGroup(scene);
+				scene->registry.destroy(slGroup.begin(), slGroup.end());
+				spotLightIDToEntity.clear();
+
+				// Populate with received objects.
+				uint32 numSLs = messageBuffer.sizeRemaining / (uint32)sizeof(server_spot_light_message);
+				const server_spot_light_message* sls = messageBuffer.get<server_spot_light_message>(numSLs);
+
+				LOG_MESSAGE("Received message containing %u spot lights", numSLs);
+				for (uint32 i = 0; i < numSLs; ++i)
+				{
+					position_rotation_component transform;
+					memcpy(transform.rotation.v4.data, sls[i].rotation, sizeof(quat));
+					memcpy(transform.position.data, sls[i].position, sizeof(vec3));
+
+					const auto& sl = sls[i];
+
+					vec3 color;
+					memcpy(color.data, sl.color, sizeof(vec3));
+
+					spot_light_component spotLight(color, sl.innerAngle, sl.distance, sl.innerAngle, sl.outerAngle, sl.castsShadow, sl.shadowMapResolution);
+
+					auto entity = scene->createEntity("Spot Light")
+						.addComponent<position_rotation_component>(transform)
+						.addComponent<spot_light_component>(spotLight);
+
+					spotLightIDToEntity[sl.id] = entity;
+				}
+
+			} break;
+
+			case message_server_spot_light_update:
+			{
+				if (messageBuffer.sizeRemaining % sizeof(server_spot_light_update_message) != 0)
+				{
+					LOG_ERROR("Message size is not evenly divisible by sizeof(server_spot_light_update_message). Expected multiple of %u, got %u", (uint32)sizeof(server_spot_light_update_message), messageBuffer.sizeRemaining);
+					break;
+				}
+
+				if (header->messageID < latestSpotLightUpdateMessageID)
+				{
+					// Ignore out-of-order messages.
+					break;
+				}
+
+				latestSpotLightUpdateMessageID = header->messageID;
+
+				uint32 numObjects = messageBuffer.sizeRemaining / (uint32)sizeof(server_spot_light_update_message);
+				const server_spot_light_update_message* objects = messageBuffer.get<server_spot_light_update_message>(numObjects);
+
+				for (uint32 i = 0; i < numObjects; ++i)
+				{
+					auto it = spotLightIDToEntity.find(objects[i].id);
+					if (it != spotLightIDToEntity.end())
+					{
+						scene_entity e = it->second;
+
+						position_rotation_component& transform = e.getComponent<position_rotation_component>();
+						memcpy(transform.rotation.v4.data, objects[i].rotation, sizeof(quat));
+						memcpy(transform.position.data, objects[i].position, sizeof(vec3));
+					}
+				}
 			} break;
 
 			case message_server_viewer_camera_update:
