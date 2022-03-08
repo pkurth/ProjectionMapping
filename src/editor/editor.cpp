@@ -568,16 +568,17 @@ bool scene_editor::drawSceneOutliner()
 							if (ImGui::PropertyButton("Global orientation", "Rotate world to match",
 								"Rotates the world such that this object stands upright"))
 							{
-								quat delta = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));;
+								quat delta = rotateFromTo(transform.rotation * vec3(0.f, 1.f, 0.f), vec3(0.f, 1.f, 0.f));
 								tracker->globalCameraRotation = delta * tracker->globalCameraRotation;
-
-								// No need to set the tracker dummy object, since this is handled by transforming the position_rotation_components below.
 
 								for (auto [entityHandle, transform] : this->scene->view<transform_component>().each())
 								{
 									transform.position = delta * transform.position;
 									transform.rotation = delta * transform.rotation;
 								}
+
+#if 0
+								// No need to set the tracker dummy object, since this is handled by transforming the position_rotation_components below.
 
 								for (auto [entityHandle, transform] : this->scene->view<position_rotation_component>().each())
 								{
@@ -589,6 +590,11 @@ bool scene_editor::drawSceneOutliner()
 								{
 									transform.position = delta * transform.position;
 								}
+#else
+								auto& trackerTransform = tracker->dummyTrackerEntity.getComponent<position_rotation_component>();
+								trackerTransform.position = delta * trackerTransform.position;
+								trackerTransform.rotation = delta * trackerTransform.rotation;
+#endif
 
 								for (auto& calib : projectorManager->context.knownProjectorCalibrations)
 								{

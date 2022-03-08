@@ -79,11 +79,12 @@ struct depth_tracker
 	tracking_rotation_representation rotationRepresentation = tracking_rotation_representation_lie;
 	tracking_mode mode = tracking_mode_track_object;
 
+	scene_entity dummyTrackerEntity;
+
 private:
 
 	game_scene& scene;
 
-	scene_entity dummyTrackerEntity;
 
 	void initialize(rgbd_camera_type cameraType, uint32 deviceIndex);
 	void initializeDummy();
