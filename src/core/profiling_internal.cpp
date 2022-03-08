@@ -152,12 +152,12 @@ static const ImColor colorTable[] =
 	ImColor(128, 0, 0), 
 	ImColor(124, 252, 0), 
 	ImColor(60, 179, 113), 
-	ImColor(250, 235, 215), 
+	//ImColor(250, 235, 215), 
 	ImColor(0, 100, 0), 
 	ImColor(0, 255, 255), 
 	ImColor(143, 188, 143), 
 	ImColor(233, 150, 122), 
-	ImColor(255, 255, 0), 
+	//ImColor(255, 255, 0), 
 	ImColor(147, 112, 219), 
 	ImColor(255, 69, 0), 
 	ImColor(255, 215, 0), 
@@ -169,9 +169,9 @@ static const ImColor colorTable[] =
 	ImColor(189, 183, 107), 
 	ImColor(176, 224, 230), 
 	ImColor(65, 105, 225), 
-	ImColor(255, 250, 240), 
+	//ImColor(255, 250, 240), 
 	ImColor(139, 69, 19), 
-	ImColor(245, 255, 250), 
+	//ImColor(245, 255, 250), 
 	ImColor(188, 143, 143), 
 };
 
@@ -328,7 +328,7 @@ void profiler_timeline::drawCallStack(profile_block* blocks, uint16 startIndex)
 		{
 			ImGui::SetCursorPos(ImVec2(left, top));
 			ImGui::ColorButton(current->name, colorTable[colorIndex++],
-				ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder | ImGuiColorEditFlags_NoDragDrop,
+				ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
 				ImVec2(width, barHeight));
 
 			if (ImGui::IsItemHovered())

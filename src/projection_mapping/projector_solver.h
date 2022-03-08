@@ -23,7 +23,7 @@ static const char* projectorModeNames[] =
 struct projector_solver_settings
 {
 	bool applySolverIntensity = false;
-	bool simulateAllProjectors = true;
+	bool simulateAllProjectors = false;
 
 	float referenceDistance = 0.5f;
 	float referenceWhite = 0.7f;

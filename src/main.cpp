@@ -118,7 +118,7 @@ int main(int argc, char** argv)
 	audio::initialize();
 
 	dx_window window;
-	window.initialize(TEXT("D3D12 Projection Mapping"), 1920, 1080);
+	window.initialize(TEXT("Projection Mapping"), 1920, 1080);
 	window.setIcon("assets/icons/project_icon_pm.png");
 	window.setCustomWindowStyle();
 	window.maximize();

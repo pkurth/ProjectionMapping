@@ -671,15 +671,10 @@ void main_renderer::endFrame(const user_input& input)
 					hdrResult = hdrColorTexture;
 				}
 
-				// At this point hdrResult is either the TAA result, the hdrColorTexture, or the hdrPostProcessingTexture. Either one is in read state.
-
-
-				tonemap(cl, hdrResult, ldrPostProcessingTexture, settings.tonemapSettings);
 			}
-			else
-			{
-				blit(cl, hdrResult, ldrPostProcessingTexture);
-			}
+
+			// At this point hdrResult is either the TAA result, the hdrColorTexture, or the hdrPostProcessingTexture. Either one is in read state.
+			tonemap(cl, hdrResult, ldrPostProcessingTexture, settings.tonemapSettings);
 
 
 			// ----------------------------------------

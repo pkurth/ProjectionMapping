@@ -105,7 +105,7 @@ bool scene_editor::update(const user_input& input, ldr_render_pass* ldrRenderPas
 
 	bool objectDragged = false;
 	objectDragged |= handleUserInput(input, ldrRenderPass, dt);
-	objectDragged |= drawSceneHierarchy();
+	objectDragged |= drawSceneOutliner();
 	drawHardwareWindow();
 	drawMainMenuBar();
 	drawSettings(dt);
@@ -279,7 +279,7 @@ void scene_editor::drawMainMenuBar()
 			"Left-click on objects to select them. Toggle through gizmos using\n"
 			"Q (no gizmo), W (translate), E (rotate), R (scale).\n"
 			"Press G to toggle between global and local coordinate system.\n"
-			"You can also change the object's transform in the Scene Hierarchy window."
+			"You can also change the object's transform in the Scene Outliner window."
 		);
 		ImGui::Separator();
 		ImGui::Text(
@@ -367,13 +367,13 @@ static void drawComponent(scene_entity entity, const char* componentName, ui_fun
 	}
 }
 
-bool scene_editor::drawSceneHierarchy()
+bool scene_editor::drawSceneOutliner()
 {
 	game_scene& scene = *this->scene;
 
 	bool objectMovedByWidget = false;
 
-	if (ImGui::Begin("Scene Hierarchy"))
+	if (ImGui::Begin("Scene"))
 	{
 		if (ImGui::BeginChild("Outliner", ImVec2(0, 250)))
 		{
@@ -711,7 +711,7 @@ bool scene_editor::drawSceneHierarchy()
 					if (!selectedEntity.hasComponent<tracking_component>() && selectedEntity.hasComponent<raster_component>() && selectedEntity.hasComponent<transform_component>())
 					{
 						ImGui::Separator();
-						if (ImGui::Button("Track this object"))
+						if (ImGui::Button("Make this object trackable"))
 						{
 							selectedEntity.addComponent<tracking_component>();
 						}
@@ -1332,13 +1332,25 @@ void scene_editor::drawSettings(float dt)
 
 		if (ImGui::BeginTree("Post processing"))
 		{
-			if (renderer->spec.allowAO) { editAO(renderer->settings.enableAO, renderer->settings.aoSettings, renderer->getAOResult()); ImGui::Separator(); }
-			if (renderer->spec.allowSSS) { editSSS(renderer->settings.enableSSS, renderer->settings.sssSettings, renderer->getSSSResult()); ImGui::Separator(); }
-			if (renderer->spec.allowSSR) { editSSR(renderer->settings.enableSSR, renderer->settings.ssrSettings, renderer->getSSRResult()); ImGui::Separator(); }
-			if (renderer->spec.allowTAA) { editTAA(renderer->settings.enableTAA, renderer->settings.taaSettings); ImGui::Separator(); }
-			if (renderer->spec.allowBloom) { editBloom(renderer->settings.enableBloom, renderer->settings.bloomSettings, renderer->getBloomResult()); ImGui::Separator(); }
-			editSharpen(renderer->settings.enableSharpen, renderer->settings.sharpenSettings);
+			if (ImGui::BeginProperties())
+			{
+				ImGui::PropertyCheckbox("Disable all post processing", renderer->disableAllPostProcessing);
 
+				ImGui::EndProperties();
+			}
+
+			if (!renderer->disableAllPostProcessing)
+			{
+				ImGui::Separator();
+				ImGui::Separator();
+
+				if (renderer->spec.allowAO) { editAO(renderer->settings.enableAO, renderer->settings.aoSettings, renderer->getAOResult()); ImGui::Separator(); }
+				if (renderer->spec.allowSSS) { editSSS(renderer->settings.enableSSS, renderer->settings.sssSettings, renderer->getSSSResult()); ImGui::Separator(); }
+				if (renderer->spec.allowSSR) { editSSR(renderer->settings.enableSSR, renderer->settings.ssrSettings, renderer->getSSRResult()); ImGui::Separator(); }
+				if (renderer->spec.allowTAA) { editTAA(renderer->settings.enableTAA, renderer->settings.taaSettings); ImGui::Separator(); }
+				if (renderer->spec.allowBloom) { editBloom(renderer->settings.enableBloom, renderer->settings.bloomSettings, renderer->getBloomResult()); ImGui::Separator(); }
+				editSharpen(renderer->settings.enableSharpen, renderer->settings.sharpenSettings);
+			}
 			ImGui::EndTree();
 		}
 

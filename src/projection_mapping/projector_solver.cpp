@@ -223,7 +223,7 @@ void projector_solver::solve(const projector_component* projectors, const render
 					.transition(discontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 				// This is a bit dirty. This removes some of the jaggies in the low-res distance field.
-				gaussianBlur(cl, bestMaskDistanceFieldTexture, jumpFloodTemp0Texture, 0, 0, gaussian_blur_9x9, 1);
+				gaussianBlur(cl, bestMaskDistanceFieldTexture, jumpFloodTemp0Texture, 0, 0, gaussian_blur_5x5, 1);
 			}
 		}
 
