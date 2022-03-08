@@ -1261,7 +1261,7 @@ void erodeSmooth(dx_command_list* cl, ref<dx_texture> inputOutput, ref<dx_textur
 	morphologyCommon(cl, smoothErosionPipeline, inputOutput, temp, radius);
 }
 
-void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, ref<dx_texture> jumpFloodTemp0, ref<dx_texture> jumpFloodTemp1, int32 truncationDistance)
+void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> output, ref<dx_texture> jumpFloodTemp0, ref<dx_texture> jumpFloodTemp1, uint32 numChannels, int32 truncationDistance)
 {
 	DX_PROFILE_BLOCK(cl, "Distance field");
 
@@ -1274,7 +1274,6 @@ void distanceField(dx_command_list* cl, ref<dx_texture> input, ref<dx_texture> o
 		cl->setPipelineState(*jumpFloodVoronoiInitPipeline.pipeline);
 		cl->setComputeRootSignature(*jumpFloodVoronoiInitPipeline.rootSignature);
 
-		uint32 numChannels = getNumberOfChannels(input->format);
 		assert(numChannels == 1 || numChannels == 2);
 		vec2 inputMask = (numChannels == 1) ? vec2(1.f, 0.f) : vec2(1.f, 1.f);
 

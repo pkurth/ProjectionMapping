@@ -84,7 +84,8 @@ void projector_solver::solve(const projector_component* projectors, const render
 		(depthTexturesBaseDescriptor + i).createDepthTextureSRV(p.renderer.depthStencilBuffer);
 		(bestMaskSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.bestMaskTexture);
 		(bestMaskUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.bestMaskTexture);
-		(distanceFieldTexturesBaseDescriptor + i).create2DTextureSRV(p.renderer.distanceFieldTexture);
+		(distanceFieldTexturesBaseDescriptor + i).create2DTextureSRV(p.renderer.discontinuityDistanceFieldTexture);
+		(bestMaskDistanceFieldSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.bestMaskDistanceFieldTexture);
 		(intensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTexture);
 		(intensitiesUAVBaseDescriptor + i).create2DTextureUAV(p.renderer.solverIntensityTexture);
 		(tempIntensitiesSRVBaseDescriptor + i).create2DTextureSRV(p.renderer.solverIntensityTempTexture);
@@ -131,6 +132,8 @@ void projector_solver::solve(const projector_component* projectors, const render
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
+				PROFILE_ALL(cl, "Attenuation");
+
 				uint32 width = projectors[i].renderer.renderWidth;
 				uint32 height = projectors[i].renderer.renderHeight;
 
@@ -159,6 +162,8 @@ void projector_solver::solve(const projector_component* projectors, const render
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
+				PROFILE_ALL(cl, "Mask");
+
 				uint32 width = projectors[i].renderer.bestMaskTexture->width;
 				uint32 height = projectors[i].renderer.bestMaskTexture->height;
 
@@ -189,17 +194,50 @@ void projector_solver::solve(const projector_component* projectors, const render
 
 
 		{
-			PROFILE_ALL(cl, "Blur best masks");
+			PROFILE_ALL(cl, "Best mask distance fields");
 
 			for (uint32 i = 0; i < numProjectors; ++i)
 			{
+				const ref<dx_texture>& discontinuitiesTexture = projectors[i].renderer.discontinuitiesTexture;
 				const ref<dx_texture>& bestMaskTexture = projectors[i].renderer.bestMaskTexture;
-				const ref<dx_texture>& blurTempTexture = projectors[i].renderer.blurTempTexture;
 
-				gaussianBlur(cl, bestMaskTexture, blurTempTexture, 0, 0, gaussian_blur_13x13, 3);
+				colorSobel(cl, bestMaskTexture, discontinuitiesTexture, 0.5f);
+
+
+				barrier_batcher(cl)
+					//.uav(discontinuitiesTexture)
+					.transition(discontinuitiesTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+
+				const ref<dx_texture>& jumpFloodTemp0Texture = projectors[i].renderer.jumpFloodTemp0Texture;
+				const ref<dx_texture>& jumpFloodTemp1Texture = projectors[i].renderer.jumpFloodTemp1Texture;
+				const ref<dx_texture>& bestMaskDistanceFieldTexture = projectors[i].renderer.bestMaskDistanceFieldTexture;
+
+				int32 truncationDistance = (int32)ceil(settings.bestMaskHardDistance + settings.bestMaskSmoothDistance);
+
+				distanceField(cl, discontinuitiesTexture, bestMaskDistanceFieldTexture, jumpFloodTemp0Texture, jumpFloodTemp1Texture, 1, truncationDistance);
+
+				barrier_batcher(cl)
+					//.uav(bestMaskDistanceFieldTexture)
+					.transition(bestMaskDistanceFieldTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+					.transition(discontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+				// This is a bit dirty. This removes some of the jaggies in the low-res distance field.
+				gaussianBlur(cl, bestMaskDistanceFieldTexture, jumpFloodTemp0Texture, 0, 0, gaussian_blur_9x9, 1);
 			}
 		}
 
+		//{
+		//	PROFILE_ALL(cl, "Blur best masks");
+		//
+		//	for (uint32 i = 0; i < numProjectors; ++i)
+		//	{
+		//		const ref<dx_texture>& bestMaskTexture = projectors[i].renderer.bestMaskTexture;
+		//		const ref<dx_texture>& blurTempTexture = projectors[i].renderer.blurTempTexture;
+		//
+		//		gaussianBlur(cl, bestMaskTexture, blurTempTexture, 0, 0, gaussian_blur_13x13, 3);
+		//	}
+		//}
 
 
 		{
@@ -240,21 +278,21 @@ void projector_solver::solve(const projector_component* projectors, const render
 
 				const ref<dx_texture>& jumpFloodTemp0Texture = projectors[i].renderer.jumpFloodTemp0Texture;
 				const ref<dx_texture>& jumpFloodTemp1Texture = projectors[i].renderer.jumpFloodTemp1Texture;
-				const ref<dx_texture>& distanceFieldTexture = projectors[i].renderer.distanceFieldTexture;
+				const ref<dx_texture>& discontinuityDistanceFieldTexture = projectors[i].renderer.discontinuityDistanceFieldTexture;
 
 				float depthTotalDistance = settings.depthHardDistance + settings.depthSmoothDistance;
 				float colorTotalDistance = settings.colorHardDistance + settings.colorSmoothDistance;
 				int32 truncationDistance = (int32)ceil(max(depthTotalDistance, colorTotalDistance));
 
-				distanceField(cl, discontinuitiesTexture, distanceFieldTexture, jumpFloodTemp0Texture, jumpFloodTemp1Texture, truncationDistance);
+				distanceField(cl, discontinuitiesTexture, discontinuityDistanceFieldTexture, jumpFloodTemp0Texture, jumpFloodTemp1Texture, 2, truncationDistance);
 
 				barrier_batcher(cl)
 					//.uav(distanceFieldTexture)
-					.transition(distanceFieldTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+					.transition(discontinuityDistanceFieldTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
 					.transition(discontinuitiesTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 				// This is a bit dirty. This removes some of the jaggies in the low-res distance field.
-				gaussianBlur(cl, distanceFieldTexture, jumpFloodTemp0Texture, 0, 0, gaussian_blur_9x9, 1);
+				gaussianBlur(cl, discontinuityDistanceFieldTexture, jumpFloodTemp0Texture, 0, 0, gaussian_blur_9x9, 1);
 
 			}
 		}
@@ -273,6 +311,7 @@ void projector_solver::solve(const projector_component* projectors, const render
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_DEPTH_TEXTURES, depthTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_DISTANCE_FIELDS, distanceFieldTexturesBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_BEST_MASKS, bestMaskSRVBaseDescriptor);
+			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_BEST_MASK_DISTANCES, bestMaskDistanceFieldSRVBaseDescriptor);
 			cl->setComputeDescriptorTable(PROJECTOR_MASK_RS_OUTPUT, maskUAVBaseDescriptor);
 
 			projector_mask_common_cb common;
@@ -281,6 +320,8 @@ void projector_solver::solve(const projector_component* projectors, const render
 			common.depthSmoothDistance = settings.depthSmoothDistance;
 			common.colorHardDistance = settings.colorHardDistance;
 			common.colorSmoothDistance = settings.colorSmoothDistance;
+			common.bestMaskHardDistance = settings.bestMaskHardDistance;
+			common.bestMaskSmoothDistance = settings.bestMaskSmoothDistance;
 			cl->setCompute32BitConstants(PROJECTOR_MASK_RS_COMMON_CB, common);
 
 
@@ -305,7 +346,8 @@ void projector_solver::solve(const projector_component* projectors, const render
 				batch.transition(projectors[i].renderer.maskTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 				batch.transition(projectors[i].renderer.solverIntensityTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 				batch.transition(projectors[i].renderer.bestMaskTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-				batch.transition(projectors[i].renderer.distanceFieldTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.discontinuityDistanceFieldTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.bestMaskDistanceFieldTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
 		}
 

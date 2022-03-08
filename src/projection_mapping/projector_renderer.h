@@ -79,7 +79,9 @@ private:
 
 	ref<dx_texture> jumpFloodTemp0Texture;
 	ref<dx_texture> jumpFloodTemp1Texture;
-	ref<dx_texture> distanceFieldTexture;
+
+	ref<dx_texture> discontinuityDistanceFieldTexture;
+	ref<dx_texture> bestMaskDistanceFieldTexture;
 
 
 	light_culling culling;

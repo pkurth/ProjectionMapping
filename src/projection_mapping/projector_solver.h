@@ -37,6 +37,9 @@ struct projector_solver_settings
 	float colorHardDistance = 4.f;
 	float colorSmoothDistance = 10.f;
 
+	float bestMaskHardDistance = 3.f;
+	float bestMaskSmoothDistance = 12.f;
+
 	float colorMaskStrength = 0.7f;
 
 	projector_mode mode = projector_mode_projection_mapping;
@@ -72,6 +75,7 @@ private:
 			dx_double_descriptor_handle bestMaskUAVBaseDescriptor;
 
 			dx_double_descriptor_handle distanceFieldTexturesBaseDescriptor;
+			dx_double_descriptor_handle bestMaskDistanceFieldSRVBaseDescriptor;
 			   
 			dx_double_descriptor_handle intensitiesSRVBaseDescriptor;
 			dx_double_descriptor_handle intensitiesUAVBaseDescriptor;
@@ -86,7 +90,7 @@ private:
 			dx_double_descriptor_handle maskUAVBaseDescriptor;
 		};
 
-		dx_double_descriptor_handle descriptors[15];
+		dx_double_descriptor_handle descriptors[16];
 	};
 
 	D3D12_GPU_VIRTUAL_ADDRESS projectorsGPUAddress;

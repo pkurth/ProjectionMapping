@@ -124,6 +124,8 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySlider("Depth smooth distance", solver.settings.depthSmoothDistance, 0.f, 15.f);
 			ImGui::PropertySlider("Color hard distance", solver.settings.colorHardDistance, 0.f, 15.f);
 			ImGui::PropertySlider("Color smooth distance", solver.settings.colorSmoothDistance, 0.f, 15.f);
+			ImGui::PropertySlider("Best mask hard distance", solver.settings.bestMaskHardDistance, 0.f, 30.f);
+			ImGui::PropertySlider("Best mask smooth distance", solver.settings.bestMaskSmoothDistance, 0.f, 50.f);
 
 			ImGui::PropertySeparator();
 			
@@ -223,13 +225,14 @@ void projector_manager::updateAndRender(float dt)
 	{
 		if (ImGui::Begin("Projector details", &detailWindowOpen, ImGuiWindowFlags_NoDocking))
 		{
-			if (ImGui::BeginTable("##Table", 7))
+			if (ImGui::BeginTable("##Table", 8))
 			{
 				ImGui::TableSetupColumn("Projector");
 				ImGui::TableSetupColumn("Rendering");
 				ImGui::TableSetupColumn("Best mask");
 				ImGui::TableSetupColumn("Discontinuities");
-				ImGui::TableSetupColumn("Distance field");
+				ImGui::TableSetupColumn("Discontinuity distance field");
+				ImGui::TableSetupColumn("Best mask distance field");
 				ImGui::TableSetupColumn("Masks");
 				ImGui::TableSetupColumn("Solver intensities");
 
@@ -271,7 +274,10 @@ void projector_manager::updateAndRender(float dt)
 					hoverImage(projector.renderer.discontinuitiesTexture);
 
 					ImGui::TableNextColumn();
-					hoverImage(projector.renderer.distanceFieldTexture);
+					hoverImage(projector.renderer.discontinuityDistanceFieldTexture);
+
+					ImGui::TableNextColumn();
+					hoverImage(projector.renderer.bestMaskDistanceFieldTexture);
 
 					ImGui::TableNextColumn();
 					hoverImage(projector.renderer.maskTexture);

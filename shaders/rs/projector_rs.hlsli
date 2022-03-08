@@ -76,16 +76,20 @@ struct projector_mask_common_cb
 
     float colorHardDistance;
     float colorSmoothDistance;
+
+    float bestMaskHardDistance;
+    float bestMaskSmoothDistance;
 };
 
 #define PROJECTOR_MASK_RS \
     "RootFlags(0), " \
     "RootConstants(num32BitConstants=1, b0),"  \
-    "RootConstants(num32BitConstants=5, b1),"  \
+    "RootConstants(num32BitConstants=7, b1),"  \
     "SRV(t0, space=0), " \
     "DescriptorTable( SRV(t0, space=1, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=2, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( SRV(t0, space=3, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
+    "DescriptorTable( SRV(t0, space=4, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "DescriptorTable( UAV(u0, space=0, numDescriptors=unbounded, flags=DESCRIPTORS_VOLATILE) ), " \
     "StaticSampler(s0," \
             "addressU = TEXTURE_ADDRESS_CLAMP," \
@@ -100,7 +104,8 @@ struct projector_mask_common_cb
 #define PROJECTOR_MASK_RS_DEPTH_TEXTURES      3
 #define PROJECTOR_MASK_RS_DISTANCE_FIELDS     4
 #define PROJECTOR_MASK_RS_BEST_MASKS          5
-#define PROJECTOR_MASK_RS_OUTPUT              6
+#define PROJECTOR_MASK_RS_BEST_MASK_DISTANCES 6
+#define PROJECTOR_MASK_RS_OUTPUT              7
 
 
 
@@ -234,7 +239,7 @@ struct projector_specular_ambient_cb
 
 #define PROJECTOR_SPECULAR_AMBIENT_RS \
     "RootFlags(0), " \
-    "RootConstants(b0, num32BitConstants = 6), " \
+    "RootConstants(b0, num32BitConstants = 8), " \
     "CBV(b1), " \
     "DescriptorTable( UAV(u0, numDescriptors = 1), SRV(t0, numDescriptors = 6) )," \
     "StaticSampler(s0," \

@@ -72,8 +72,11 @@ void projector_renderer::initialize(color_depth colorDepth, uint32 windowWidth, 
 	jumpFloodTemp1Texture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16B16A16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(jumpFloodTemp1Texture->resource, "Jump flood temp 1");
 
-	distanceFieldTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	SET_NAME(distanceFieldTexture->resource, "Distance field");
+	discontinuityDistanceFieldTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16G16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(discontinuityDistanceFieldTexture->resource, "Discontinuity distance field");
+
+	bestMaskDistanceFieldTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R16_FLOAT, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	SET_NAME(bestMaskDistanceFieldTexture->resource, "Best mask distance field");
 
 	blurTempTexture = createTexture(0, renderWidth / 2, renderHeight / 2, DXGI_FORMAT_R8_UNORM, false, false, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	SET_NAME(blurTempTexture->resource, "Blur temp");
@@ -105,7 +108,8 @@ void projector_renderer::shutdown()
 
 	jumpFloodTemp0Texture = 0;
 	jumpFloodTemp1Texture = 0;
-	distanceFieldTexture = 0;
+	discontinuityDistanceFieldTexture = 0;
+	bestMaskDistanceFieldTexture = 0;
 }
 
 void projector_renderer::beginFrameCommon()
@@ -154,7 +158,8 @@ void projector_renderer::beginFrame()
 		
 		resizeTexture(jumpFloodTemp0Texture, renderWidth / 2, renderHeight / 2);
 		resizeTexture(jumpFloodTemp1Texture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(distanceFieldTexture, renderWidth / 2, renderHeight / 2);
+		resizeTexture(discontinuityDistanceFieldTexture, renderWidth / 2, renderHeight / 2);
+		resizeTexture(bestMaskDistanceFieldTexture, renderWidth / 2, renderHeight / 2);
 	}
 #endif
 

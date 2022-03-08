@@ -9,6 +9,7 @@ StructuredBuffer<projector_cb> projectors			: register(t0, space0);
 Texture2D<float> depthTextures[32]					: register(t0, space1);
 Texture2D<float2> discontinuityDistanceFields[32]	: register(t0, space2);
 Texture2D<float> bestMasks[32]						: register(t0, space3);
+Texture2D<float> bestMaskDistanceFields[32]			: register(t0, space4);
 
 RWTexture2D<float2> output[32]						: register(u0, space0);
 
@@ -41,7 +42,11 @@ void main(cs_input IN)
 	float2 distances = discontinuityDistanceFields[index].SampleLevel(clampSampler, uv, 0);
 	float depthMask = saturate(1.f - smoothstep(common.depthHardDistance, common.depthHardDistance + common.depthSmoothDistance, distances.x)); // 1 at edges, 0 everywhere else.
 	float colorMask = saturate(1.f - smoothstep(common.colorHardDistance, common.colorHardDistance + common.colorSmoothDistance, distances.y)); // 1 at edges, 0 everywhere else.
+
 	float bestMask = saturate(bestMasks[index].SampleLevel(clampSampler, uv, 0)); // 1 where best, 0 everywhere else.
+	float bestMaskDistance = bestMaskDistanceFields[index].SampleLevel(clampSampler, uv, 0);
+	float bestMaskFactor = saturate(smoothstep(common.bestMaskHardDistance, common.bestMaskHardDistance + common.bestMaskSmoothDistance, bestMaskDistance));
+	bestMask *= bestMaskFactor;
 
 	float2 distanceFromEdge2 = min(texCoord, dimensions - texCoord);
 	float distanceFromEdge = min(distanceFromEdge2.x, distanceFromEdge2.y);
@@ -60,5 +65,5 @@ void main(cs_input IN)
 	
 	output[index][texCoord] = saturate(float2(hardMask, softMask));
 
-	//output[index][texCoord] = distances;
+	//output[index][texCoord] = float2(bestMask, bestMask);
 }

@@ -226,6 +226,7 @@ void distanceField(dx_command_list* cl,
 	ref<dx_texture> output,						// UNORDERED_ACCESS, same number of channels
 	ref<dx_texture> jumpFloodTemp0,				// UNORDERED_ACCESS
 	ref<dx_texture> jumpFloodTemp1,				// UNORDERED_ACCESS
+	uint32 numChannels,							// Must be 1 or 2.
 	int32 truncationDistance = -1);				// If <0, don't truncate.
 
 void depthSobel(dx_command_list* cl,
