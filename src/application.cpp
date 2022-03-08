@@ -202,11 +202,14 @@ void application::update(const user_input& input, float dt)
 	bool objectDragged = editor.update(input, &ldrRenderPass, dt);
 
 
-	quat spotLightDeltaRotation(vec3(0.f, 1.f, 0.f), deg2rad(10.f * dt));
-	for (auto [entityHandle, transform, sl] : scene.group<position_rotation_component, spot_light_component>().each())
+	if (projectorManager->isNetworkServer())
 	{
-		transform.position = spotLightDeltaRotation * transform.position;
-		transform.rotation = normalize(spotLightDeltaRotation * transform.rotation);
+		quat spotLightDeltaRotation(vec3(0.f, 1.f, 0.f), deg2rad(10.f * dt));
+		for (auto [entityHandle, transform, sl] : scene.group<position_rotation_component, spot_light_component>().each())
+		{
+			transform.position = spotLightDeltaRotation * transform.position;
+			transform.rotation = normalize(spotLightDeltaRotation * transform.rotation);
+		}
 	}
 
 
