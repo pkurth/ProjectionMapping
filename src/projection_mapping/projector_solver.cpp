@@ -115,6 +115,7 @@ void projector_solver::solve(const projector_component* projectors, const render
 			{
 				batch.transition(projectors[i].renderer.attenuationTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 				batch.transition(projectors[i].renderer.maskTexture, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			}
 		}
 
@@ -348,6 +349,7 @@ void projector_solver::solve(const projector_component* projectors, const render
 				batch.transition(projectors[i].renderer.bestMaskTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 				batch.transition(projectors[i].renderer.discontinuityDistanceFieldTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 				batch.transition(projectors[i].renderer.bestMaskDistanceFieldTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				batch.transition(projectors[i].renderer.ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
 		}
 
