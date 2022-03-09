@@ -32,14 +32,6 @@ projector_manager::projector_manager(game_scene& scene, depth_tracker* tracker)
 	this->tracker = tracker;
 }
 
-void projector_manager::beginFrame()
-{
-	for (auto& [entityHandle, projector] : scene->view<projector_component>().each())
-	{
-		projector.renderer.beginFrame();
-	}
-}
-
 void projector_manager::updateAndRender(float dt)
 {
 	bool setupDirty = false;
@@ -136,6 +128,17 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertySlider("Reference distance", solver.settings.referenceDistance, 0.f, 5.f);
 			ImGui::PropertySlider("Reference white", solver.settings.referenceWhite);
 
+			ImGui::PropertySeparator();
+
+			if (ImGui::PropertyDisableableButton("Demo", "Go", solver.settings.mode != projector_mode_demo))
+			{
+				solver.settings.mode = projector_mode_demo;
+				solver.settings.demoPC = -1;
+				solver.settings.demoMonitor = -1;
+
+				demoTimer = 0.f; // Set to 0, such that it is evaluated right in this frame.
+			}
+
 			ImGui::EndProperties();
 		}
 
@@ -145,11 +148,55 @@ void projector_manager::updateAndRender(float dt)
 		}
 
 
+		if (isNetworkServer() && solver.settings.mode == projector_mode_demo)
+		{
+			demoTimer -= dt;
+			if (demoTimer <= 0.f)
+			{
+				demoTimer += 1.f;
+
+				auto& pc = solver.settings.demoPC;
+				auto& mon = solver.settings.demoMonitor;
+
+				while (true)
+				{
+					++mon;
+					projector_check check = isProjector(pc, mon);
+					
+					if (check == projector_check_yes)
+					{
+						break;
+					}
+
+					if (check == projector_check_no)
+					{
+						continue;
+					}
+
+					assert(check == projector_check_out_of_range);
+					++pc;
+					mon = 0;
+
+					if ((int32)pc > highestClientID)
+					{
+						solver.settings.mode = projector_mode_projection_mapping;
+						break;
+					}
+				}
+			}
+		}
+
 		projector_renderer::applySolverIntensity = solver.settings.applySolverIntensity;
-		
+		uint32 myClientID = protocol.client_getID();
+
 		for (uint32 i = 0; i < (uint32)win32_window::allConnectedMonitors.size(); ++i)
 		{
 			bool black = (solver.settings.mode == projector_mode_calibration);
+
+			if (solver.settings.mode == projector_mode_demo)
+			{
+				black = solver.settings.demoPC != myClientID || solver.settings.demoMonitor != i;
+			}
 
 			if (isProjectorIndex[i])
 			{
@@ -380,6 +427,33 @@ bool projector_manager::isNetworkServer()
 	return !protocol.initialized || protocol.isServer;
 }
 
+projector_manager::projector_check projector_manager::isProjector(uint32 pc, uint32 monitor)
+{
+	if (pc == -1)
+	{
+		if (monitor >= (uint32)win32_window::allConnectedMonitors.size())
+		{
+			return projector_check_out_of_range;
+		}
+		return isProjectorIndex[monitor] ? projector_check_yes : projector_check_no;
+	}
+	else
+	{
+		auto it = clients.find(pc);
+		if (it != clients.end())
+		{
+			auto& client = it->second;
+			if (monitor >= client.monitors.size())
+			{
+				return projector_check_out_of_range;
+			}
+
+			return (context.knownProjectorCalibrations.find(client.monitors[monitor].uniqueID) != context.knownProjectorCalibrations.end()) ? projector_check_yes : projector_check_no;
+		}
+		return projector_check_out_of_range;
+	}
+}
+
 void projector_manager::createProjectorsAndNotify()
 {
 	if (!protocol.initialized)
@@ -455,6 +529,8 @@ void projector_manager::network_newClient(const std::string& hostname, uint32 cl
 	}
 	
 	clients[clientID] = info;
+
+	highestClientID = max((int32)clientID, highestClientID);
 
 	createProjectorsAndNotify();
 }

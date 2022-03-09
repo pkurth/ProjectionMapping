@@ -14,7 +14,6 @@ struct projector_renderer
 	void shutdown();
 
 	static void beginFrameCommon();
-	void beginFrame();
 	void endFrame();
 	void finalizeImage(dx_command_list* cl);
 
@@ -30,7 +29,7 @@ struct projector_renderer
 	static void setSpotLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer);
 
 
-	void submitRenderPass(const opaque_render_pass* renderPass) { assert(!opaqueRenderPass); opaqueRenderPass = renderPass; }
+	void submitRenderPass(const opaque_render_pass* renderPass) { opaqueRenderPass = renderPass; }
 
 	uint32 renderWidth;
 	uint32 renderHeight;

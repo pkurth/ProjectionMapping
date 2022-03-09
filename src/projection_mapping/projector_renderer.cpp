@@ -122,50 +122,6 @@ void projector_renderer::beginFrameCommon()
 	numSpotLights = 0;
 }
 
-void projector_renderer::beginFrame()
-{
-	opaqueRenderPass = 0;
-
-#if 0
-	if (this->renderWidth != windowWidth || this->renderHeight != windowHeight)
-	{
-		this->renderWidth = windowWidth;
-		this->renderHeight = windowHeight;
-
-		resizeTexture(hdrColorTexture, renderWidth, renderHeight);
-		resizeTexture(worldNormalsTexture, renderWidth, renderHeight);
-		resizeTexture(reflectanceTexture, renderWidth, renderHeight);
-		resizeTexture(depthStencilBuffer, renderWidth, renderHeight);
-
-		resizeTexture(hdrPostProcessingTexture, renderWidth, renderHeight);
-		resizeTexture(ldrPostProcessingTexture, renderWidth, renderHeight);
-
-		resizeTexture(frameResult, renderWidth, renderHeight);
-
-		resizeTexture(solverIntensityTexture, renderWidth, renderHeight);
-		resizeTexture(solverIntensityTempTexture, renderWidth, renderHeight);
-
-		resizeTexture(attenuationTexture, renderWidth, renderHeight);
-		resizeTexture(maskTexture, renderWidth, renderHeight);
-
-		resizeTexture(halfResolutionDepthBuffer, renderWidth / 2, renderHeight / 2);
-		resizeTexture(halfResolutionColorTexture, renderWidth / 2, renderHeight / 2);
-
-		resizeTexture(bestMaskTexture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(depthDiscontinuitiesTexture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(colorDiscontinuitiesTexture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(dilateTempTexture, renderWidth / 2, renderHeight / 2);
-		
-		resizeTexture(jumpFloodTemp0Texture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(jumpFloodTemp1Texture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(discontinuityDistanceFieldTexture, renderWidth / 2, renderHeight / 2);
-		resizeTexture(bestMaskDistanceFieldTexture, renderWidth / 2, renderHeight / 2);
-	}
-#endif
-
-	culling.allocateIfNecessary(renderWidth, renderHeight);
-}
-
 void projector_renderer::setProjectorCamera(const render_camera& camera)
 {
 	buildCameraConstantBuffer(camera, 0.f, this->projectorCamera);
@@ -204,6 +160,8 @@ void projector_renderer::setSpotLights(const ref<dx_buffer>& lights, uint32 numL
 
 void projector_renderer::endFrame()
 {
+	culling.allocateIfNecessary(renderWidth, renderHeight);
+
 	auto projectorCameraCBV = dxContext.uploadDynamicConstantBuffer(projectorCamera);
 	auto viewerCameraCBV = dxContext.uploadDynamicConstantBuffer(viewerCamera);
 	auto sunCBV = dxContext.uploadDynamicConstantBuffer(sun);

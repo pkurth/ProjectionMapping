@@ -10,8 +10,9 @@
 
 enum projector_mode
 {
-	projector_mode_calibration,
 	projector_mode_projection_mapping,
+	projector_mode_calibration,
+	projector_mode_demo,
 };
 
 static const char* projectorModeNames[] =
@@ -43,6 +44,9 @@ struct projector_solver_settings
 	float colorMaskStrength = 0.7f;
 
 	projector_mode mode = projector_mode_projection_mapping;
+
+	uint32 demoPC = 0;
+	uint32 demoMonitor = 0;
 };
 
 struct projector_solver

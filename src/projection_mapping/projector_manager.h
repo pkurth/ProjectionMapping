@@ -13,7 +13,6 @@ struct projector_manager
 {
 	projector_manager(game_scene& scene, depth_tracker* tracker);
 
-	void beginFrame();
 	void updateAndRender(float dt);
 
 	void onSceneLoad();
@@ -32,6 +31,15 @@ struct projector_manager
 
 private:
 
+	enum projector_check
+	{
+		projector_check_yes,
+		projector_check_no,
+		projector_check_out_of_range,
+	};
+
+	projector_check isProjector(uint32 pc, uint32 monitor);
+
 	depth_tracker* tracker;
 
 	// Network callbacks.
@@ -43,6 +51,7 @@ private:
 	vec3 networkCameraPosition;
 	quat networkCameraRotation;
 
+	float demoTimer = 0.f;
 
 	struct client_monitor
 	{
@@ -57,6 +66,7 @@ private:
 		std::vector<client_monitor> monitors;
 	};
 
+	int32 highestClientID = -1;
 	std::unordered_map<uint32, client_info> clients;
 
 

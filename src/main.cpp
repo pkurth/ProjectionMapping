@@ -261,7 +261,6 @@ int main(int argc, char** argv)
 		calibration.update();
 
 		projector_renderer::beginFrameCommon();
-		projectorManager.beginFrame();
 
 		shadow_map_renderer::beginFrame();
 		renderer.beginFrame(renderWidth, renderHeight);
