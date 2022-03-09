@@ -183,7 +183,7 @@ void projector_manager::updateAndRender(float dt)
 
 					assert(check == projector_check_out_of_range);
 					++pc;
-					mon = 0;
+					mon = -1;
 
 					if ((int32)pc > highestClientID)
 					{
