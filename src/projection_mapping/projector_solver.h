@@ -17,8 +17,9 @@ enum projector_mode
 
 static const char* projectorModeNames[] =
 {
-	"Calibration",
 	"Projection mapping",
+	"Calibration",
+	"Demo",
 };
 
 struct projector_solver_settings

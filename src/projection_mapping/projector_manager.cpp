@@ -103,7 +103,15 @@ void projector_manager::updateAndRender(float dt)
 
 			ImGui::PropertySeparator();
 
-			ImGui::PropertyDropdown("Projector mode", projectorModeNames, arraysize(projectorModeNames), (uint32&)solver.settings.mode);
+			if (solver.settings.mode == projector_mode_demo)
+			{
+				ImGui::BeginDisabled();
+			}
+			ImGui::PropertyDropdown("Projector mode", projectorModeNames, 2, (uint32&)solver.settings.mode);
+			if (solver.settings.mode == projector_mode_demo)
+			{
+				ImGui::EndDisabled();
+			}
 			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
 			ImGui::PropertyCheckbox("Simulate all projectors", solver.settings.simulateAllProjectors);
 
