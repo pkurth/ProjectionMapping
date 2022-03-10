@@ -78,6 +78,13 @@ ps_output main(ps_input IN)
 		: float4(1.f, 1.f, 1.f, 1.f))
 		* material.getAlbedo();
 
+	if ((flags & USE_ALBEDO_TEXTURE) == 0)
+	{
+		float3 color = float3(53, 88, 154) / 255.f;
+		color = pow(color, 2.2);
+		surface.albedo = float4(color, 1);
+	}
+
 	const float normalMapStrength = material.getNormalMapStrength() * 0.2f;
 	surface.N = (flags & USE_NORMAL_TEXTURE)
 		? mul(float3(normalMapStrength, normalMapStrength, 1.f) * (normalTex.Sample(wrapSampler, materialUV).xyz * 2.f - 1.f), IN.tbn)
@@ -316,8 +323,15 @@ ps_output main(ps_input IN)
 
 	//OUT.hdrColor.rgb = rgb;
 
-	//OUT.hdrColor.rgb = float3(1, 1, 1);
+	//OUT.hdrColor.rgb = float3(1, 0, 0);
 	//OUT.hdrColor.a = 0.f;
+
+	//if ((flags & USE_ALBEDO_TEXTURE) == 0)
+	//{
+	//	float3 color = float3(53, 88, 154) / 255.f;
+	//	color = pow(color, 2.2);
+	//	OUT.hdrColor = float4(color, 1);
+	//}
 
 	return OUT;
 }
