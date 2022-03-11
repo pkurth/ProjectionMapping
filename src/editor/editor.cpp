@@ -1329,6 +1329,8 @@ void scene_editor::drawSettings(float dt)
 
 			ImGui::PropertyCheckbox("Static shadow map caching", enableStaticShadowMapCaching);
 
+			ImGui::PropertySlider("Time scale", timeScale);
+
 			ImGui::EndProperties();
 		}
 

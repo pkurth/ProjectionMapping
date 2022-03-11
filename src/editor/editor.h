@@ -21,6 +21,8 @@ struct scene_editor
 	void setSelectedEntity(scene_entity entity);
 	void setEnvironment(const fs::path& filename);
 
+	float timeScale = 1.f;
+
 private:
 	void drawSettings(float dt);
 	void drawMainMenuBar();

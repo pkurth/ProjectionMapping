@@ -119,27 +119,27 @@ void application::initialize(main_renderer* renderer, projector_manager* project
 	}
 
 
-	random_number_generator rng = { 618923 };
-
-	const uint32 numSpotLights = 15;
-	for (uint32 i = 0; i < numSpotLights; ++i)
-	{
-		float angle = (float)i / numSpotLights * M_TAU;
-		float radius = 0.8f;
-		vec3 offset(cos(angle), rng.randomFloatBetween(0.2f, 0.7f), sin(angle));
-
-		auto sl = scene.createEntity("Spot light")
-			.addComponent<position_rotation_component>(offset * radius, lookAtQuaternion(vec3(-offset.x, 0.f, -offset.z), vec3(0.f, 1.f, 0.f)))
-			.addComponent<spot_light_component>(
-				randomRGB(rng),
-				0.1f,
-				25.f,
-				deg2rad(5.f),
-				deg2rad(7.f),
-				true,
-				512u
-				);
-	}
+	//random_number_generator rng = { 618923 };
+	//
+	//const uint32 numSpotLights = 15;
+	//for (uint32 i = 0; i < numSpotLights; ++i)
+	//{
+	//	float angle = (float)i / numSpotLights * M_TAU;
+	//	float radius = 0.8f;
+	//	vec3 offset(cos(angle), rng.randomFloatBetween(0.2f, 0.7f), sin(angle));
+	//
+	//	auto sl = scene.createEntity("Spot light")
+	//		.addComponent<position_rotation_component>(offset * radius, lookAtQuaternion(vec3(-offset.x, 0.f, -offset.z), vec3(0.f, 1.f, 0.f)))
+	//		.addComponent<spot_light_component>(
+	//			randomRGB(rng),
+	//			0.1f,
+	//			25.f,
+	//			deg2rad(5.f),
+	//			deg2rad(7.f),
+	//			true,
+	//			512u
+	//			);
+	//}
 
 	stackArena.initialize();
 }
@@ -199,7 +199,11 @@ void application::update(const user_input& input, float dt)
 
 	resetRenderPasses();
 
+
+
 	bool objectDragged = editor.update(input, &ldrRenderPass, dt);
+
+	dt *= editor.timeScale;
 
 
 	if (projectorManager->isNetworkServer())
