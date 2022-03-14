@@ -1,129 +1,31 @@
-# D3D12Renderer
+# Projection Mapping
 
-This project implements a custom rendering engine build from the ground up in C++ using Direct3D 12. 
-It supports some "new" features like raytracing, mesh shaders etc. 
-
-It also features a custom written physics engine written completely from scratch.
-
-## Table of Contents
-- [Graphics](#graphics-features)
-- [Physics](#physics-features)
-- [Other](#other-features)
-- [System Requirements](#system-requirements)
-- [Build Instructions](#build-instructions)
-
-## Graphics features
-
-<img align="right" src="assets/samples/raster.png" width="300"/>
-<img align="right" width="100%" height="0" />
-
-<img align="right" src="assets/samples/raster2.png" width="300"/>
-<img align="right" width="100%" height="0" />
-
-<img align="right" src="assets/samples/raster3.png" width="300"/>
-
-<p align="left">
-
-- Forward+ rendering
-- Physically based rendering
-- Dynamic lights and dynamic shadows
-	- Sun (with cascaded shadow maps)
-	- Point lights
-	- Spot lights
-- Decals
-- Post processing stack
-	- Temporal anti-aliasing
-	- Horizon-based ambient occlusion
-	- Screen space shadows
-	- Bloom
-	- Filmic tone-mapping
-	- Sharpening
-- Tiled light and decal culling
-- Screen space reflections
-- Real-time raytracing (DXR)
-- Integrated path tracer
-- Skeletal animation
-- Mesh shaders
-- Hot-reloading of shaders
-
-</p>
-
-<img width="100%" height="0" />
-
-It has an integrated (albeit pretty simple) path tracer (using hardware-accelerated raytracing), which in the future will be integrated into the real-time pipeline in some form to compute global illumination effects.
-
-<img src="assets/samples/path_trace.png" width="512"/><br>
+![](./assets/samples/teaser.jpg)
 
 
-## Physics features
+This project implements an open-source projection mapping system, which supports a large number of projectors illuminating one or more target objects.
+The objects are tracked in real-time using a depth camera.
+The system corrects the brightness of all images sent to the projectors to ensure a consistent illumination on the object surface and mitigates common artifacts stemming from incorrect calibrations.
+In order to support many projectors, you can employ multiple computers, which communicate over a simple network protocol.
 
-<a href="https://youtu.be/FqwCIoI-c_A"><img align="right" src="https://img.youtube.com/vi/FqwCIoI-c_A/mqdefault.jpg" width="300" /></a>
-<img align="right" width="100%" height="0" />
-<a href="https://youtu.be/YLASi_r13cc"><img align="right" src="https://img.youtube.com/vi/YLASi_r13cc/mqdefault.jpg" width="300" /></a>
-<img align="right" width="100%" height="0" />
-<a href="https://youtu.be/3I1dQZXHvrQ"><img align="right" src="https://img.youtube.com/vi/3I1dQZXHvrQ/mqdefault.jpg" width="300" /></a>
-<img align="right" width="100%" height="0" />
-<a href="https://youtu.be/j3n3yseyKFU"><img align="right" src="https://img.youtube.com/vi/j3n3yseyKFU/mqdefault.jpg" width="300" /></a>
+The code includes all parts necessary to get a projection mapping system up and running, including a high-quality calibration routine, a depth-camera based object tracker, the actual brightness solver, and the networking.
 
-<p align="left">
-Images to the right are links to YouTube videos showcasing the various physics features.
 
-- Rigid body dynamics
-- Cloth simulation
-- Various constraints between rigid bodies (many with limits and motors)
-  - Distance
-  - Ball joints
-  - Hinge joints
-  - Cone twist
-  - Slider
-- Various collider types
-  - Spheres
-  - Capsules
-  - Cylinders
-  - AABBs and OBBs
-  - Arbitrary convex hulls
-- SIMD support for constraint resolution (SSE4 and AVX2)
-- Ragdolls
-- Vehicle physics
-- Machine learning for ragdoll locomotion. Based on [Machine Learning Summit: Ragdoll Motion Matching](https://www.youtube.com/watch?v=JZKaqQKcAnw) and [DReCon: Data-Driven Responsive Control of Physics-Based Characters](https://static-wordpress.akamaized.net/montreal.ubisoft.com/wp-content/uploads/2019/11/13214229/DReCon.pdf) by Ubisoft
+The source code is based on this project: https://github.com/pkurth/D3D12Renderer
 
-</p>
 
-## Other features
+![](./assets/samples/nike2.jpg)  |  ![](./assets/samples/nike2.jpg)
 
-- Editor tools
-- Integrated CPU and GPU profiler (with multi-threading support)
-
-## System Requirements
-
-Since this project uses Direct3D 12 as the only rendering backend, the only supported platforms are Windows 10 or higher. 
-The project is only tested with Visual Studio 2019, and only on NVIDIA GPUs.
-
-For mesh shaders you will need the Windows 10 SDK version 10.0.19041.0 or higher.
-This can be downloaded using the Visual Studio Installer.
-If you only have an older version of the SDK installed, the build system will automatically disable mesh shaders. 
-To run you will need the Windows 10 May 2020 Update (20H1) or newer.
-If these requirements are not met, you should still be able to build and run the program, but without mesh shader support.
-
-If you want to use raytracing or mesh shaders, you need a compatible NVIDIA GPU. 
-For raytracing these are the GPUs with the Pascal architecture or newer.
-For mesh shaders you will need a Turing GPU or newer.
-
-The project files are currently generated with the AVX2 instruction set. 
-If your processor does not support this, set another instruction set (either in Visual Studio or in premake5.lua).
-
-All other dependencies (external libraries) either come directly with the source code or in the form of submodules.
 
 
 ## Build Instructions
 
 I have tried to keep the build process as simple as possible.
 Therefore you will not need any build tools installed on your machine.
-The project uses Premake, but all you need comes with the source.
+The project uses [Premake](https://github.com/premake/premake-core), but all you need comes with the source.
 
 - Clone the repository and make sure to clone with submodules. 
 - Double-click the _generate.bat_ file in the root directory to generate a Visual Studio 2019 solution.
-The build process will automatically enable and disable certain features based on your installed GPU and the available Windows 10 SDK.
 - Open the solution and build. 
 This _should_ work directly. 
 Visual Studio sometimes reports an "Unspecified error" when building. 
@@ -134,4 +36,16 @@ The assets seen in the screenshots above are not included with the source code.
 
 
 
+## System Requirements
+
+This project uses Direct3D 12 as the only rendering backend and thus the only supported platforms are Windows 10 or higher. 
+The project is only tested with Visual Studio 2019, and only on NVIDIA GPUs, but _should_ work fine on AMD.
+
+You will probably need a GPU which supports shader model 6.1 or higher.
+You can try setting this to something lower (top of _premake5.lua_), but there might be shader compilation errors, because for shader models lower than 6, Visual Studio switches to another shader compiler (FXC).
+
+The project files are currently generated with the AVX2 instruction set. 
+If your processor does not support this, set another instruction set (again, top of _premake5.lua_).
+
+All other dependencies (external libraries) either come directly with the source code or in the form of submodules.
 

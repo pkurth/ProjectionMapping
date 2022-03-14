@@ -1,6 +1,7 @@
 
 
 local SHADER_MODEL = "6.1"
+local VECTOR_INSTRUCTIONS = "AVX2"
 
 
 -- Premake extension to include files at solution-scope. From https://github.com/premake/premake-core/issues/1061#issuecomment-441417853
@@ -154,7 +155,7 @@ project "ProjectionMapping"
 		"ECHO Compiling shaders..."
 	}
 
-	vectorextensions "AVX2"
+	vectorextensions (VECTOR_INSTRUCTIONS)
 	floatingpoint "Fast"
 
 	filter "configurations:Debug"
