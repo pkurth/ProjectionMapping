@@ -13,8 +13,10 @@ The code includes all parts necessary to get a projection mapping system up and 
 
 The source code is based on this project: https://github.com/pkurth/D3D12Renderer
 
-
-![](./assets/samples/nike2.jpg)  |  ![](./assets/samples/nike2.jpg)
+<p float="left">
+  <img src="./assets/samples/nike2.jpg" width="40%" />
+  <img src="./assets/samples/nike3.jpg" width="40%" /> 
+</p>
 
 
 
