@@ -1022,7 +1022,6 @@ void scene_editor::drawEntityCreationPopup()
 void scene_editor::setEnvironment(const fs::path& filename)
 {
 	scene->environment = createEnvironment(filename); // Currently synchronous (on render queue).
-	renderer->pathTracer.resetRendering();
 
 	if (!scene->environment)
 	{
@@ -1309,16 +1308,11 @@ void scene_editor::drawSettings(float dt)
 {
 	if (ImGui::Begin("Settings"))
 	{
-		path_tracer& pathTracer = renderer->pathTracer;
-
 		ImGui::Text("%.3f ms, %u FPS", dt * 1000.f, (uint32)(1.f / dt));
 
 		if (ImGui::BeginProperties())
 		{
-			if (ImGui::PropertyDropdown("Renderer mode", rendererModeNames, renderer_mode_count, (uint32&)renderer->mode))
-			{
-				pathTracer.resetRendering();
-			}
+			ImGui::PropertyDropdown("Renderer mode", rendererModeNames, renderer_mode_count, (uint32&)renderer->mode);
 
 			dx_memory_usage memoryUsage = dxContext.getMemoryUsage();
 
@@ -1399,39 +1393,6 @@ void scene_editor::drawSettings(float dt)
 				audio::notifyOnSettingsChange();
 			}
 			ImGui::EndTree();
-		}
-
-		if (renderer->mode == renderer_mode_pathtraced)
-		{
-			bool pathTracerDirty = false;
-			if (ImGui::BeginProperties())
-			{
-				pathTracerDirty |= ImGui::PropertySlider("Max recursion depth", pathTracer.recursionDepth, 0, pathTracer.maxRecursionDepth - 1);
-				pathTracerDirty |= ImGui::PropertySlider("Start russian roulette after", pathTracer.startRussianRouletteAfter, 0, pathTracer.recursionDepth);
-				pathTracerDirty |= ImGui::PropertyCheckbox("Use thin lens camera", pathTracer.useThinLensCamera);
-				if (pathTracer.useThinLensCamera)
-				{
-					pathTracerDirty |= ImGui::PropertySlider("Focal length", pathTracer.focalLength, 0.5f, 50.f);
-					pathTracerDirty |= ImGui::PropertySlider("F-Number", pathTracer.fNumber, 1.f, 128.f);
-				}
-				pathTracerDirty |= ImGui::PropertyCheckbox("Use real materials", pathTracer.useRealMaterials);
-				pathTracerDirty |= ImGui::PropertyCheckbox("Enable direct lighting", pathTracer.enableDirectLighting);
-				if (pathTracer.enableDirectLighting)
-				{
-					pathTracerDirty |= ImGui::PropertySlider("Light intensity scale", pathTracer.lightIntensityScale, 0.f, 50.f);
-					pathTracerDirty |= ImGui::PropertySlider("Point light radius", pathTracer.pointLightRadius, 0.01f, 1.f);
-
-					pathTracerDirty |= ImGui::PropertyCheckbox("Multiple importance sampling", pathTracer.multipleImportanceSampling);
-				}
-
-				ImGui::EndProperties();
-			}
-
-
-			if (pathTracerDirty)
-			{
-				pathTracer.numAveragedFrames = 0;
-			}
 		}
 	}
 

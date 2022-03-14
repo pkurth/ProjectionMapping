@@ -7,7 +7,6 @@
 #include "render_resources.h"
 #include "render_algorithms.h"
 #include "pbr.h"
-#include "scene/particle_systems.h"
 #include "bitonic_sort.h"
 #include "debug_visualization.h"
 
@@ -32,9 +31,7 @@ void initializeRenderUtils()
 	debug_unlit_line_pipeline::initialize();
 	opaque_pbr_pipeline::initialize();
 	transparent_pbr_pipeline::initialize();
-	particle_system::initializePipeline();
 	initializeBitonicSort();
-	loadAllParticleSystemPipelines();
 
 
 	createAllPendingReloadablePipelines();

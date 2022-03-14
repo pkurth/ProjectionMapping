@@ -610,16 +610,6 @@ void dx_command_list::dispatchIndirect(uint32 maxNumCommands, const ref<dx_buffe
 	dispatchIndirect(dxContext.defaultDispatchCommandSignature, maxNumCommands, numDispatchesBuffer, commandBuffer, commandBufferOffset);
 }
 
-void dx_command_list::dispatchMesh(uint32 numGroupsX, uint32 numGroupsY, uint32 numGroupsZ)
-{
-#if ADVANCED_GPU_FEATURES_ENABLED
-	dynamicDescriptorHeap.commitStagedDescriptorsForDraw(this);
-	commandList->DispatchMesh(numGroupsX, numGroupsY, numGroupsZ);
-#else
-	assert(!"Mesh shaders are not supported with your Windows SDK version.");
-#endif
-}
-
 void dx_command_list::raytrace(D3D12_DISPATCH_RAYS_DESC& raytraceDesc)
 {
 	dynamicDescriptorHeap.commitStagedDescriptorsForDispatch(this);

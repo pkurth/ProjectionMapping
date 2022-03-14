@@ -150,11 +150,6 @@ void main_renderer::initialize(color_depth colorDepth, uint32 windowWidth, uint3
 		objectIDsTexture = createTexture(0, renderWidth, renderHeight, objectIDsFormat, false, true, false, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		SET_NAME(objectIDsTexture->resource, "Object IDs");
 	}
-
-	if (dxContext.featureSupport.raytracing())
-	{
-		pathTracer.initialize();
-	}
 }
 
 void main_renderer::beginFrame(uint32 windowWidth, uint32 windowHeight)
@@ -369,7 +364,7 @@ void main_renderer::endFrame(const user_input& input)
 
 
 
-	if (mode == renderer_mode_rasterized)
+	if (mode == renderer_mode_default)
 	{
 		dx_command_list* cls[3];
 
@@ -766,55 +761,6 @@ void main_renderer::endFrame(const user_input& input)
 			//.uav(frameResult)
 			.transition(depthStencilBuffer, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE)
 			.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
-
-		dxContext.executeCommandList(cl);
-	}
-	else if (mode == renderer_mode_pathtraced && dxContext.featureSupport.raytracing())
-	{
-		pathTracer.rebuildBindingTable();
-
-		dx_command_list* cl = dxContext.getFreeRenderCommandList();
-
-
-		D3D12_RESOURCE_STATES frameResultState = D3D12_RESOURCE_STATE_COMMON;
-
-		if (aspectRatioModeChanged)
-		{
-			cl->transitionBarrier(frameResult, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET);
-			cl->clearRTV(frameResult, 0.f, 0.f, 0.f);
-			frameResultState = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		}
-
-		barrier_batcher(cl)
-			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-			.transitionEnd(frameResult, frameResultState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-		{
-			PROFILE_ALL(cl, "Raytracing");
-
-			dxContext.renderQueue.waitForOtherQueue(dxContext.computeQueue); // Wait for AS-rebuilds. TODO: This is not the way to go here. We should wait for the specific value returned by executeCommandList.
-
-			pathTracer.render(cl, *tlas, hdrColorTexture, materialInfo);
-		}
-
-		cl->resetToDynamicDescriptorHeap();
-
-		barrier_batcher(cl)
-			//.uav(hdrColorTexture)
-			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-		tonemap(cl, hdrColorTexture, ldrPostProcessingTexture, settings.tonemapSettings);
-
-		barrier_batcher(cl)
-			.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-		present(cl, ldrPostProcessingTexture, frameResult, { 0.f });
-
-		barrier_batcher(cl)
-			.transition(hdrColorTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)
-			.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-			.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
-
 
 		dxContext.executeCommandList(cl);
 	}

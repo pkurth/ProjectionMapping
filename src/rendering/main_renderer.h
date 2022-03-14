@@ -63,18 +63,16 @@ static const char* aspectRatioNames[] =
 
 enum renderer_mode
 {
-	renderer_mode_rasterized,
+	renderer_mode_default,
 	renderer_mode_visualize_sun_shadow_cascades,
-	renderer_mode_pathtraced,
 
 	renderer_mode_count,
 };
 
 static const char* rendererModeNames[] =
 {
-	"Rasterized",
+	"Default",
 	"Visualize sun shadow cascades",
-	"Path-traced",
 };
 
 
@@ -114,7 +112,7 @@ struct main_renderer
 
 
 	// Settings.
-	renderer_mode mode = renderer_mode_rasterized;
+	renderer_mode mode = renderer_mode_default;
 	aspect_ratio_mode aspectRatioMode = aspect_ratio_free;
 
 
@@ -130,8 +128,6 @@ struct main_renderer
 	uint32 hoveredObjectID = -1;
 
 	const renderer_spec spec;
-
-	path_tracer pathTracer;
 
 
 	const ref<dx_texture>& getAOResult() const { return aoTextures[aoHistoryIndex]; }
@@ -215,7 +211,7 @@ private:
 
 
 	aspect_ratio_mode oldAspectRatioMode = aspect_ratio_free;
-	renderer_mode oldMode = renderer_mode_rasterized;
+	renderer_mode oldMode = renderer_mode_default;
 
 	void recalculateViewport(bool resizeTextures);
 };

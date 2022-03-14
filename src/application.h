@@ -7,7 +7,6 @@
 #include "core/math.h"
 #include "scene/scene.h"
 #include "rendering/main_renderer.h"
-#include "scene/particle_systems.h"
 #include "rendering/raytracing.h"
 #include "editor/editor.h"
 #include "projection_mapping/projector_manager.h"

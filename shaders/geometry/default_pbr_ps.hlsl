@@ -314,15 +314,6 @@ ps_output main(ps_input IN)
 	// Normal and reflectance are not needed for transparent surfaces.
 #endif
 
-
-	float2 xy = surface.P.xy;
-	xy.x = (int)(xy.x / 0.05f) % 2 == 0;
-	xy.y = (int)(xy.y / 0.05f) % 2 == 0;
-
-	float3 rgb = (xy.x != xy.y) ? float3(1.f, 1.f, 1.f) : float3(0.f, 0.f, 0.f);
-
-	//OUT.hdrColor.rgb = rgb;
-
 	//OUT.hdrColor.rgb = float3(1, 0, 0);
 	//OUT.hdrColor.a = 0.f;
 

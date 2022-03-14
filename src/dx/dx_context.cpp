@@ -223,18 +223,6 @@ static dx_feature_support checkFeatureSupport(dx_device device)
 		result.raytracingTier = (dx_raytracing_tier)options5.RaytracingTier;
 	}
 
-#if ADVANCED_GPU_FEATURES_ENABLED
-	D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {};
-	if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))))
-	{
-		result.meshShaderTier = (dx_mesh_shader_tier)options7.MeshShaderTier;
-	}
-	else
-	{
-		std::cerr << "Checking support for mesh shader feature failed. Maybe you need to update your Windows version.\n";
-	}
-#endif
-
 	return result;
 }
 
