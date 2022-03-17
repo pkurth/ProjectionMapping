@@ -51,3 +51,31 @@ If your processor does not support this, set another instruction set (again, top
 
 All other dependencies (external libraries) either come directly with the source code or in the form of submodules.
 
+
+
+## Cite this Project
+
+If you use this project in a publication, cite this paper:
+
+```
+TODO
+```
+
+
+and this paper for the calibration:
+
+```
+@article{kurth_AutoCalibration_2018,
+  title = {Auto-{{Calibration}} for {{Dynamic Multi-Projection Mapping}} on {{Arbitrary Surfaces}}},
+  author = {Kurth, Philipp and Lange, Vanessa and Siegl, Christian and Stamminger, Marc and Bauer, Frank},
+  year = {2018},
+  month = Nov,
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  volume = {24},
+  number = {11},
+  pages = {2886--2894},
+  issn = {1077-2626, 1941-0506, 2160-9306},
+  doi = {10.1109/TVCG.2018.2868530}
+}
+```
+
