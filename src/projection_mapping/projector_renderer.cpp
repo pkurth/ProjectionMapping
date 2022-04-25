@@ -317,5 +317,17 @@ void projector_renderer::finalizeImage(dx_command_list* cl)
 	barrier_batcher(cl)
 		.transition(frameResult, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON)
 		.transition(ldrPostProcessingTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+}
+
+void projector_renderer::rerenderDepthBuffer(dx_command_list* cl)
+{
+	cl->clearDepthAndStencil(depthStencilBuffer);
+
+	auto depthOnlyRenderTarget = dx_render_target(renderWidth, renderHeight)
+		.depthAttachment(depthStencilBuffer);
+
+	depthPrePass(cl, depthOnlyRenderTarget, opaqueRenderPass,
+		projectorCamera.viewProj, projectorCamera.prevFrameViewProj, projectorCamera.jitter, projectorCamera.prevFrameJitter);
 }
 

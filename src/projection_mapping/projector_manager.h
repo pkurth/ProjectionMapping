@@ -29,6 +29,8 @@ struct projector_manager
 
 	bool isNetworkServer();
 
+	bool simulationMode = false;
+
 private:
 
 	enum projector_check
@@ -88,6 +90,11 @@ private:
 	bool isServerCheckbox = true;
 
 	projector_network_protocol protocol;
+
+
+	float maxSimulatedPositionError = 0.01f;
+	float maxSimulatedRotationError = deg2rad(0.1f);
+
 
 	friend struct projector_network_server;
 	friend struct projector_network_client;

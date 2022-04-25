@@ -115,6 +115,16 @@ void projector_manager::updateAndRender(float dt)
 			ImGui::PropertyCheckbox("Apply solver intensity", solver.settings.applySolverIntensity);
 			ImGui::PropertyCheckbox("Simulate all projectors", solver.settings.simulateAllProjectors);
 
+			ImGui::PropertyCheckbox("Synthetic environment", simulationMode);
+
+			if (simulationMode)
+			{
+				solver.settings.simulateAllProjectors = true;
+
+				ImGui::PropertySlider("    Position calibration error", maxSimulatedPositionError, 0.f, 0.1f);
+				ImGui::PropertySliderAngle("    Rotation calibration error", maxSimulatedRotationError, 0.f, 1.f, "%.6f deg");
+			}
+
 			ImGui::PropertySeparator();
 
 			ImGui::PropertySlider("Depth discontinuity threshold", solver.settings.depthDiscontinuityThreshold, 0.f, 1.f);
@@ -385,10 +395,10 @@ void projector_manager::updateAndRender(float dt)
 
 
 
-
+	projectorIndex = numProjectors - 1; // EnTT iterates back to front.
 	for (auto [entityHandle, projector] : scene->view<projector_component>().each())
 	{
-		if (!projector.headless || solver.settings.simulateAllProjectors)
+		if (!projector.headless || solver.settings.simulateAllProjectors || simulationMode)
 		{
 			dx_command_list* cl = dxContext.getFreeRenderCommandList();
 
@@ -403,6 +413,30 @@ void projector_manager::updateAndRender(float dt)
 				cl->transitionBarrier(backbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
 			}
 
+
+			if (simulationMode)
+			{
+				scene_entity entity = { entityHandle, *scene };
+				position_rotation_component& transform = entity.getComponent<position_rotation_component>();
+
+				vec3 position = transform.position;
+				quat rotation = transform.rotation;
+				camera_intrinsics intrinsics = projector.intrinsics;
+
+				random_number_generator rng = { 619324 * (uint32)entityHandle }; // Random, but deterministic.
+
+				position += rng.randomPointOnUnitSphere() * maxSimulatedPositionError;
+				rotation = rng.randomRotation(maxSimulatedRotationError) * rotation;
+
+				render_camera& camera = projectorCameras[projectorIndex--];
+				camera.initializeCalibrated(position, rotation, projector.width, projector.height, intrinsics, 0.01f);
+				camera.updateMatrices();
+
+				projector.renderer.setProjectorCamera(camera);
+				projector.renderer.rerenderDepthBuffer(cl);
+			}
+
+
 			dxContext.executeCommandList(cl);
 
 			if (shouldPresent)
@@ -410,6 +444,11 @@ void projector_manager::updateAndRender(float dt)
 				projector.window.swapBuffers();
 			}
 		}
+	}
+
+	if (simulationMode)
+	{
+		solver.resetCameras(scene->raw<projector_component>(), projectorCameras, numProjectors);
 	}
 }
 
@@ -489,6 +528,7 @@ std::vector<projector_instantiation> projector_manager::createInstantiations()
 {
 	std::vector<projector_instantiation> instantiations;
 
+	if (!simulationMode)
 	{
 		auto& monitors = win32_window::allConnectedMonitors;
 		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
@@ -504,20 +544,28 @@ std::vector<projector_instantiation> projector_manager::createInstantiations()
 				}
 			}
 		}
-	}
 
-	for (auto& client : clients)
-	{
-		auto& monitors = client.second.monitors;
-		for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
+		for (auto& client : clients)
 		{
-			auto& monitor = monitors[i];
-
-			auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
-			if (it != context.knownProjectorCalibrations.end())
+			auto& monitors = client.second.monitors;
+			for (uint32 i = 0; i < (uint32)monitors.size(); ++i)
 			{
-				instantiations.push_back(projector_instantiation{ client.second.clientID, i, it->second });
+				auto& monitor = monitors[i];
+
+				auto it = context.knownProjectorCalibrations.find(monitor.uniqueID);
+				if (it != context.knownProjectorCalibrations.end())
+				{
+					instantiations.push_back(projector_instantiation{ client.second.clientID, i, it->second });
+				}
 			}
+		}
+	}
+	else
+	{
+		uint32 i = 0;
+		for (auto& calib : context.knownProjectorCalibrations)
+		{
+			instantiations.push_back(projector_instantiation{ 9999, i++, calib.second });
 		}
 	}
 

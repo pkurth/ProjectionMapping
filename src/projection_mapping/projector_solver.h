@@ -55,6 +55,7 @@ struct projector_solver
 	void initialize();
 
 	void solve(const projector_component* projectors, const render_camera* cameras, uint32 numProjectors);
+	void resetCameras(const projector_component* projectors, const render_camera* cameras, uint32 numProjectors);
 
 	projector_solver_settings settings;
 

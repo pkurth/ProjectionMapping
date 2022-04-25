@@ -369,7 +369,7 @@ void application::update(const user_input& input, float dt)
 					}
 					else
 					{
-						if (false)
+						if (projectorManager->simulationMode)
 						{
 							projectorManager->solver.simulateProjectors(&opaqueRenderPass, m, mesh.vertexBuffer, mesh.indexBuffer, submesh, (uint32)entityHandle);
 						}

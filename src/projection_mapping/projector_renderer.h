@@ -16,9 +16,8 @@ struct projector_renderer
 	static void beginFrameCommon();
 	void endFrame();
 	void finalizeImage(dx_command_list* cl);
+	void rerenderDepthBuffer(dx_command_list* cl);
 
-
-	// Set these with your application.
 	void setProjectorCamera(const render_camera& camera);
 
 
@@ -27,7 +26,6 @@ struct projector_renderer
 	static void setSun(const directional_light& light);
 	static void setPointLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer);
 	static void setSpotLights(const ref<dx_buffer>& lights, uint32 numLights, const ref<dx_buffer>& shadowInfoBuffer);
-
 
 	void submitRenderPass(const opaque_render_pass* renderPass) { opaqueRenderPass = renderPass; }
 
@@ -39,7 +37,7 @@ struct projector_renderer
 
 
 	static inline bool applySolverIntensity = false;
-
+	
 private:
 
 	static void present(dx_command_list* cl,
@@ -86,8 +84,6 @@ private:
 	light_culling culling;
 
 	camera_cb projectorCamera;
-
-
 
 
 

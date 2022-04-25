@@ -399,6 +399,20 @@ void projector_solver::solve(const projector_component* projectors, const render
 	dxContext.executeCommandList(cl);
 }
 
+void projector_solver::resetCameras(const projector_component* projectors, const render_camera* cameras, uint32 numProjectors)
+{
+	dx_allocation alloc = dxContext.allocateDynamicBuffer(numProjectors * sizeof(projector_cb));
+	projector_cb* projectorCBs = (projector_cb*)alloc.cpuPtr;
+	projectorsGPUAddress = alloc.gpuPtr;
+
+
+	for (uint32 i = 0; i < numProjectors; ++i)
+	{
+		const projector_component& p = projectors[i];
+		projectorToCB(cameras[i], projectorCBs[i]);
+	}
+}
+
 
 
 
