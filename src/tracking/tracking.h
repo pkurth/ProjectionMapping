@@ -108,7 +108,7 @@ private:
 	ref<dx_texture> renderedColorTexture; // For debug window only.
 	ref<dx_texture> renderedDepthTexture;
 
-	float positionThreshold = 0.1f;
+	float positionThreshold = 0.03f;
 	float angleThreshold = deg2rad(45.f);
 
 	bool showDepth = false;
