@@ -13,6 +13,7 @@
 #include "core/image.h"
 #include "core/color.h"
 #include "core/cpu_profiling.h"
+#include "core/string.h"
 
 #include "editor/file_dialog.h"
 
@@ -42,18 +43,6 @@ static dx_pipeline depthToColorPipeline;
 static dx_pipeline visualizePointCloudPipeline;
 
 
-static inline std::string getTime()
-{
-	time_t now = time(0);
-	char nowString[100];
-	ctime_s(nowString, 100, &now);
-	std::string time = nowString;
-	std::replace(time.begin(), time.end(), ' ', '_');
-	std::replace(time.begin(), time.end(), ':', '.');
-	time.pop_back(); // Pop last \n.
-
-	return time;
-}
 
 static constexpr uint32 MAX_NUM_PROJECTORS = projector_manager::MAX_NUM_PROJECTORS;
 
@@ -131,7 +120,7 @@ bool projector_system_calibration::projectCalibrationPatterns(game_scene& scene)
 		color_bgra* captures = new color_bgra[maxNumCalibrationPatterns * captureStride];
 		uint8* grayCaptures = new uint8[maxNumCalibrationPatterns * captureStride];
 
-		std::string time = getTime();
+		std::string time = getTimeString();
 		fs::path baseDir = calibrationBaseDirectory / time;
 		fs::create_directories(baseDir);
 

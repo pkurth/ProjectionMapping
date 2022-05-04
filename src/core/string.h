@@ -26,3 +26,16 @@ static std::wstring stringToWstring(const std::string& str)
 	MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &result[0], size);
 	return result;
 }
+
+static inline std::string getTimeString()
+{
+	time_t now = time(0);
+	char nowString[100];
+	ctime_s(nowString, 100, &now);
+	std::string time = nowString;
+	std::replace(time.begin(), time.end(), ' ', '_');
+	std::replace(time.begin(), time.end(), ':', '.');
+	time.pop_back(); // Pop last \n.
+
+	return time;
+}

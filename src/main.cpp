@@ -8,6 +8,7 @@
 #include "core/log.h"
 #include "core/cpu_profiling.h"
 #include "core/file_registry.h"
+#include "core/string.h"
 #include "editor/file_browser.h"
 #include "application.h"
 #include "rendering/render_utils.h"
@@ -276,9 +277,12 @@ int main(int argc, char** argv)
 		
 		if (ImGui::IsKeyPressed(key_print))
 		{
-			fs::create_directories("captures");
-			renderer.takeScreenShot("captures/output.png");
-			LOG_MESSAGE("Saved screen shot to 'captures/output.png'");
+			const fs::path dir = "captures";
+			fs::create_directories(dir);
+
+			fs::path path = dir / (getTimeString() + ".png");
+			renderer.takeScreenShot(path);
+			LOG_MESSAGE("Saved screenshot to '%ws'", path.c_str());
 		}
 
 		fileBrowser.draw(meshEditor);
