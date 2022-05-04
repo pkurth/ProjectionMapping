@@ -273,6 +273,14 @@ int main(int argc, char** argv)
 		projectorManager.updateAndRender(dt);
 		renderer.endFrame(input);
 
+		
+		if (ImGui::IsKeyPressed(key_print))
+		{
+			fs::create_directories("captures");
+			renderer.takeScreenShot("captures/output.png");
+			LOG_MESSAGE("Saved screen shot to 'captures/output.png'");
+		}
+
 		fileBrowser.draw(meshEditor);
 		meshEditor.draw();
 
