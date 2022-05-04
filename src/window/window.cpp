@@ -301,6 +301,8 @@ bool win32_window::initialize(const TCHAR* name, uint32 clientWidth, uint32 clie
 			return 1;
 		}
 
+		RegisterHotKey(0, 0, 0, VK_SNAPSHOT);
+
 		windowClassInitialized = true;
 	}
 
@@ -1325,6 +1327,10 @@ bool handleWindowsMessages()
 	MSG msg = { 0 };
 	while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
 	{
+		if (msg.message == WM_HOTKEY)
+		{
+			ImGui::GetIO().KeysDown[VK_SNAPSHOT] = true;
+		}
 		if (msg.message == WM_QUIT)
 		{
 			running = false;
