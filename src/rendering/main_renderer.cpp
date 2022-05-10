@@ -347,8 +347,8 @@ void main_renderer::endFrame(const user_input& input)
 	}
 	materialInfo.environmentIntensity = settings.environmentIntensity;
 	materialInfo.skyIntensity = settings.skyIntensity;
-	materialInfo.aoTexture = settings.enableAO ? aoTextures[1 - aoHistoryIndex] : render_resources::whiteTexture;
-	materialInfo.sssTexture = settings.enableSSS ? sssTextures[1 - sssHistoryIndex] : render_resources::whiteTexture;
+	materialInfo.aoTexture = (!disableAllPostProcessing && settings.enableAO) ? aoTextures[1 - aoHistoryIndex] : render_resources::whiteTexture;
+	materialInfo.sssTexture = (!disableAllPostProcessing && settings.enableSSS) ? sssTextures[1 - sssHistoryIndex] : render_resources::whiteTexture;
 	materialInfo.tiledCullingGrid = culling.tiledCullingGrid;
 	materialInfo.tiledObjectsIndexList = culling.tiledObjectsIndexList;
 	materialInfo.pointLightBuffer = pointLights;
@@ -485,7 +485,7 @@ void main_renderer::endFrame(const user_input& input)
 			// AMBIENT OCCLUSION
 			// ----------------------------------------
 
-			if (settings.enableAO)
+			if (!disableAllPostProcessing && settings.enableAO)
 			{
 				uint32 aoResultIndex = 1 - aoHistoryIndex;
 				ref<dx_texture> aoHistory = aoWasOnLastFrame ? aoTextures[aoHistoryIndex] : render_resources::whiteTexture;
@@ -505,7 +505,7 @@ void main_renderer::endFrame(const user_input& input)
 			// SCREEN SPACE SHADOWS
 			// ----------------------------------------
 
-			if (settings.enableSSS)
+			if (!disableAllPostProcessing && settings.enableSSS)
 			{
 				uint32 sssResultIndex = 1 - sssHistoryIndex;
 				ref<dx_texture> sssHistory = sssWasOnLastFrame ? sssTextures[sssHistoryIndex] : render_resources::whiteTexture;
@@ -563,7 +563,7 @@ void main_renderer::endFrame(const user_input& input)
 			// SCREEN SPACE REFLECTIONS
 			// ----------------------------------------
 
-			if (settings.enableSSR)
+			if (!disableAllPostProcessing && settings.enableSSR)
 			{
 				screenSpaceReflections(cl, hdrColorTexture, prevFrameHDRColorTexture, depthStencilBuffer, linearDepthBuffer, worldNormalsTexture,
 					reflectanceTexture, screenVelocitiesTexture, ssrRaycastTexture, ssrResolveTexture, ssrTemporalTextures[ssrHistoryIndex],
@@ -577,7 +577,7 @@ void main_renderer::endFrame(const user_input& input)
 			// SPECULAR AMBIENT
 			// ----------------------------------------
 
-			specularAmbient(cl, hdrColorTexture, settings.enableSSR ? ssrResolveTexture : 0, worldNormalsTexture, reflectanceTexture,
+			specularAmbient(cl, hdrColorTexture, (!disableAllPostProcessing && settings.enableSSR) ? ssrResolveTexture : 0, worldNormalsTexture, reflectanceTexture,
 				environment ? environment->environment : 0, materialInfo.aoTexture, hdrPostProcessingTexture, materialInfo.cameraCBV);
 
 			barrier_batcher(cl)
@@ -585,7 +585,7 @@ void main_renderer::endFrame(const user_input& input)
 				.transition(hdrPostProcessingTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) // Will be read by rest of post processing stack. 
 				.transitionEnd(opaqueDepthBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-			if (settings.enableSSR)
+			if (!disableAllPostProcessing && settings.enableSSR)
 			{
 				barrier_batcher(cl)
 					.transition(ssrResolveTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS); // For next frame.
@@ -705,7 +705,7 @@ void main_renderer::endFrame(const user_input& input)
 
 			// TODO: If we really care we should sharpen before rendering overlays and outlines.
 
-			present(cl, ldrPostProcessingTexture, frameResult, (settings.enableSharpen && !disableAllPostProcessing) ? settings.sharpenSettings : sharpen_settings{ 0.f });
+			present(cl, ldrPostProcessingTexture, frameResult, (!disableAllPostProcessing && settings.enableSharpen) ? settings.sharpenSettings : sharpen_settings{ 0.f });
 
 
 
@@ -765,8 +765,8 @@ void main_renderer::endFrame(const user_input& input)
 		dxContext.executeCommandList(cl);
 	}
 
-	aoWasOnLastFrame = settings.enableAO;
-	sssWasOnLastFrame = settings.enableSSS;
+	aoWasOnLastFrame = !disableAllPostProcessing && settings.enableAO;
+	sssWasOnLastFrame = !disableAllPostProcessing && settings.enableSSS;
 }
 
 void main_renderer::takeScreenShot(const fs::path& path)
