@@ -24,8 +24,6 @@ struct projector_context
 
 struct projector_component
 {
-	projector_component() { }
-
 	projector_component(uint32 width, uint32 height, camera_intrinsics intrinsics, const std::string& monitorID, bool local, bool fullscreen)
 	{
 		initialize(width, height, intrinsics, monitorID, local, fullscreen);

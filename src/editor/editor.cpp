@@ -1002,9 +1002,9 @@ void scene_editor::drawEntityCreationPopup()
 
 		if (ImGui::MenuItem("Projector", "B") || ImGui::IsKeyPressed('B'))
 		{
-			auto projector = scene->createEntity("Projector")
+			auto projector = scene->createEntity("Dummy projector")
 				.addComponent<position_rotation_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -1.f), scene->camera.rotation)
-				.addComponent<projector_component>();
+				.addComponent<projector_component>(1280u, 800u, camera_intrinsics{ 1200.f, 1200.f, 640.f, 640.f }, "", false, false);
 
 			setSelectedEntity(projector);
 			clicked = true;
