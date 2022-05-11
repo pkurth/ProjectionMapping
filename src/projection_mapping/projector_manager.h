@@ -92,8 +92,8 @@ private:
 	projector_network_protocol protocol;
 
 
-	float maxSimulatedPositionError = 0.01f;
-	float maxSimulatedRotationError = deg2rad(0.1f);
+	float maxSimulatedPositionError = 0.f;
+	float maxSimulatedRotationError = 0.f;
 
 
 	friend struct projector_network_server;

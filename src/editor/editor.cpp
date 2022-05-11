@@ -1002,9 +1002,17 @@ void scene_editor::drawEntityCreationPopup()
 
 		if (ImGui::MenuItem("Projector", "B") || ImGui::IsKeyPressed('B'))
 		{
+			static uint32 id = 0;
+
+			std::string monitor = "Dummy" + std::to_string(id++);
+			projector_calibration calib = { scene->camera.rotation, scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -1.f), 1920u, 1200u, camera_intrinsics{ 1200.f, 1200.f, 960.f, 1000.f } };
+
+			auto& context = projectorManager->context;
+			context.knownProjectorCalibrations.insert({ monitor, calib });
+
 			auto projector = scene->createEntity("Dummy projector")
-				.addComponent<position_rotation_component>(scene->camera.position + scene->camera.rotation * vec3(0.f, 0.f, -1.f), scene->camera.rotation)
-				.addComponent<projector_component>(1280u, 800u, camera_intrinsics{ 1200.f, 1200.f, 640.f, 640.f }, "", false, false);
+				.addComponent<position_rotation_component>(calib.position, calib.rotation)
+				.addComponent<projector_component>(calib.width, calib.height, calib.intrinsics, monitor, false, false);
 
 			setSelectedEntity(projector);
 			clicked = true;
