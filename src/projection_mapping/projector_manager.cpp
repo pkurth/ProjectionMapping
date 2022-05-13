@@ -121,7 +121,7 @@ void projector_manager::updateAndRender(float dt)
 			{
 				solver.settings.simulateAllProjectors = true;
 
-				ImGui::PropertySlider("    Position calibration error", maxSimulatedPositionError, 0.f, 0.1f);
+				ImGui::PropertySlider("    Position calibration error", maxSimulatedPositionError, 0.f, 0.1f, "%.5f mm");
 				ImGui::PropertySliderAngle("    Rotation calibration error", maxSimulatedRotationError, 0.f, 1.f, "%.6f deg");
 			}
 
@@ -425,7 +425,7 @@ void projector_manager::updateAndRender(float dt)
 
 				random_number_generator rng = { 619324 * (uint32)entityHandle }; // Random, but deterministic.
 
-				position += rng.randomPointOnUnitSphere() * maxSimulatedPositionError;
+				position += rng.randomPointOnUnitSphere() * (maxSimulatedPositionError * 0.001f);
 				rotation = rng.randomRotation(maxSimulatedRotationError) * rotation;
 
 				render_camera& camera = projectorCameras[projectorIndex--];
