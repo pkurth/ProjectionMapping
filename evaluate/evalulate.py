@@ -191,8 +191,6 @@ def vgg19() :
 
 	import sys
 
-	from scipy.spatial.distance import cdist
-
 	def from_device(tensor):
 		return tensor.detach().cpu().numpy()
 
@@ -207,8 +205,6 @@ def vgg19() :
 			return len(self.files)
 
 		def __getitem__(self, idx):
-			if t.is_tensor(idx):
-				idx = idx.tolist()
 			sample = Image.open(self.files[idx]).convert('RGB')
 			if self.transforms:
 				sample = self.transforms(sample)
@@ -217,19 +213,19 @@ def vgg19() :
 	transforms = tv.transforms.Compose([tv.transforms.Resize((224, 244)), tv.transforms.ToTensor()])
 	data = data_set(folder, transforms=transforms)
 
-	dataloader = t.utils.data.DataLoader(data, batch_size=64)
+	dataloader = t.utils.data.DataLoader(data)
 
 	device = "cpu"
 
-	extractor = tv.models.vgg19(pretrained=True).to(device) # Load the model and move to the GPU, if available
+	extractor = tv.models.vgg19(pretrained=True).to(device) # Load the model
 	extractor.classifier = nn.Sequential(*list(extractor.classifier.children())[:5]) # VGG19 fc1
-	extractor.eval() # Set model to evaluation mode, we are not training anything
+	extractor.eval() # Set model to evaluation mode
 
 	feature_size = 4096 # VGG19 fc1
 	features = np.zeros((len(data), feature_size))
 
 	for i, inputs in enumerate(dataloader):
-		outputs = from_device(extractor(inputs.to(device))) # Push image through network on the GPU, then move to CPU
+		outputs = from_device(extractor(inputs.to(device))) # Push image through network
 		features[i*len(inputs):i*len(inputs)+len(inputs)] = outputs
 
 	np.set_printoptions(threshold=sys.maxsize)
