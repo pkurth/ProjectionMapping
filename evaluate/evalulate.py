@@ -120,6 +120,73 @@ print("----")
 
 
 
+
+# ---------------------------
+# VGG 19
+# ---------------------------
+
+def vgg19() :
+	import torch as t
+	import torchvision as tv
+	import torch.nn as nn
+
+	import sys
+
+	def from_device(tensor):
+		return tensor.detach().cpu().numpy()
+
+	class data_set(t.utils.data.Dataset):
+
+		def __init__(self, transforms=None):
+			self.transforms = transforms
+			self.files = [ gt_filename, bad_filename, good_filename ]
+			
+		def __len__(self):
+			return len(self.files)
+
+		def __getitem__(self, idx):
+			sample = Image.open(self.files[idx]).convert('RGB')
+			if self.transforms:
+				sample = self.transforms(sample)
+			return sample
+
+	transforms = tv.transforms.Compose([tv.transforms.Resize((224, 244)), tv.transforms.ToTensor()])
+	data = data_set(transforms=transforms)
+
+	dataloader = t.utils.data.DataLoader(data)
+
+	device = "cpu"
+
+	extractor = tv.models.vgg19(pretrained=True).to(device) # Load the model
+	extractor.classifier = nn.Sequential(*list(extractor.classifier.children())[:5]) # VGG19 fc1
+	extractor.eval() # Set model to evaluation mode
+
+	feature_size = 4096 # VGG19 fc1
+	features = np.zeros((len(data), feature_size))
+
+	for i, inputs in enumerate(dataloader):
+		outputs = from_device(extractor(inputs.to(device))) # Push image through network
+		features[i*len(inputs):i*len(inputs)+len(inputs)] = outputs
+
+	np.set_printoptions(threshold=sys.maxsize)
+
+	gt_features = features[0]
+	bad_features = features[1]
+	good_features = features[2]
+
+	print(np.linalg.norm(np.abs(gt_features - bad_features)))
+	print(np.linalg.norm(np.abs(gt_features - good_features)))
+
+
+print("VGG 19 (lower is better):")
+vgg19()
+print("----")
+
+
+
+
+
+
 # ---------------------------
 # PATTERN MATCHING
 # ---------------------------
@@ -175,74 +242,6 @@ print("Pattern match (lower is better):")
 print(pattern_match(ground_truth, 20, bad, "Match bad"))
 print(pattern_match(ground_truth, 20, good, "Match good"))
 print("----")
-
-
-
-
-
-# ---------------------------
-# VGG 19
-# ---------------------------
-
-def vgg19() :
-	import torch as t
-	import torchvision as tv
-	import torch.nn as nn
-
-	import sys
-
-	def from_device(tensor):
-		return tensor.detach().cpu().numpy()
-
-	class data_set(t.utils.data.Dataset):
-
-		def __init__(self, folder, transforms=None):
-			self.folder = folder
-			self.transforms = transforms
-			self.files = [ gt_filename, bad_filename, good_filename ]
-			
-		def __len__(self):
-			return len(self.files)
-
-		def __getitem__(self, idx):
-			sample = Image.open(self.files[idx]).convert('RGB')
-			if self.transforms:
-				sample = self.transforms(sample)
-			return sample
-
-	transforms = tv.transforms.Compose([tv.transforms.Resize((224, 244)), tv.transforms.ToTensor()])
-	data = data_set(folder, transforms=transforms)
-
-	dataloader = t.utils.data.DataLoader(data)
-
-	device = "cpu"
-
-	extractor = tv.models.vgg19(pretrained=True).to(device) # Load the model
-	extractor.classifier = nn.Sequential(*list(extractor.classifier.children())[:5]) # VGG19 fc1
-	extractor.eval() # Set model to evaluation mode
-
-	feature_size = 4096 # VGG19 fc1
-	features = np.zeros((len(data), feature_size))
-
-	for i, inputs in enumerate(dataloader):
-		outputs = from_device(extractor(inputs.to(device))) # Push image through network
-		features[i*len(inputs):i*len(inputs)+len(inputs)] = outputs
-
-	np.set_printoptions(threshold=sys.maxsize)
-
-	gt_features = features[0]
-	bad_features = features[1]
-	good_features = features[2]
-
-	print(np.linalg.norm(np.abs(gt_features - bad_features)))
-	print(np.linalg.norm(np.abs(gt_features - good_features)))
-
-
-print("VGG (lower is better):")
-vgg19()
-print("----")
-
-
 
 
 cv2.waitKey(0)
