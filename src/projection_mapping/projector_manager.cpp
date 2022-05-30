@@ -121,7 +121,7 @@ void projector_manager::updateAndRender(float dt)
 			{
 				solver.settings.simulateAllProjectors = true;
 
-				ImGui::PropertySlider("    Position calibration error", maxSimulatedPositionError, 0.f, 0.1f, "%.5f mm");
+				ImGui::PropertySlider("    Position calibration error", maxSimulatedPositionError, 0.f, 10.f, "%.2f mm");
 				ImGui::PropertySliderAngle("    Rotation calibration error", maxSimulatedRotationError, 0.f, 1.f, "%.6f deg");
 			}
 
@@ -156,6 +156,8 @@ void projector_manager::updateAndRender(float dt)
 
 				demoTimer = 0.f; // Set to 0, such that it is evaluated right in this frame.
 			}
+
+			ImGui::PropertyCheckbox("Show projector frusta", showProjectorFrusta);
 
 			ImGui::EndProperties();
 		}

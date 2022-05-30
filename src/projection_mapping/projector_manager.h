@@ -30,6 +30,7 @@ struct projector_manager
 	bool isNetworkServer();
 
 	bool simulationMode = false;
+	bool showProjectorFrusta = true;
 
 private:
 

@@ -200,12 +200,14 @@ void application::update(const user_input& input, float dt)
 	// Update projector frusta and set render parameters.
 	for (auto [entityHandle, projector, transform] : scene.group(entt::get<projector_component, position_rotation_component>).each())
 	{
-		render_camera camera;
-		camera.initializeCalibrated(transform.position, transform.rotation, projector.width, projector.height, projector.intrinsics, 0.01f);
-		camera.updateMatrices();
+		if (projectorManager->showProjectorFrusta)
+		{
+			render_camera camera;
+			camera.initializeCalibrated(transform.position, transform.rotation, projector.width, projector.height, projector.intrinsics, 0.01f);
+			camera.updateMatrices();
 
-		renderCameraFrustum(camera, projector.frustumColor, &ldrRenderPass, 4.f);
-
+			renderCameraFrustum(camera, projector.frustumColor, &ldrRenderPass, 4.f);
+		}
 
 		projector.renderer.submitRenderPass(&projectorOpaqueRenderPass);
 	}
@@ -221,7 +223,7 @@ void application::update(const user_input& input, float dt)
 		camera.initializeCalibrated(pos, rot, ds.width, ds.height, ds.intrinsics, 0.01f);
 		camera.updateMatrices();
 
-		renderCameraFrustum(camera, vec4(1.f, 1.f, 1.f, 1.f), &ldrRenderPass, 4.f);
+		//renderCameraFrustum(camera, vec4(1.f, 1.f, 1.f, 1.f), &ldrRenderPass, 4.f);
 	}
 
 
