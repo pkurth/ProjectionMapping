@@ -150,7 +150,7 @@ def vgg19() :
 				sample = self.transforms(sample)
 			return sample
 
-	transforms = tv.transforms.Compose([tv.transforms.Resize((224, 244)), tv.transforms.ToTensor()])
+	transforms = tv.transforms.Compose([tv.transforms.Resize((224, 224)), tv.transforms.ToTensor()])
 	data = data_set(transforms=transforms)
 
 	dataloader = t.utils.data.DataLoader(data)
