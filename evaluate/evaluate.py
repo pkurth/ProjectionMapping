@@ -4,12 +4,42 @@ import cv2
 from skimage.metrics import structural_similarity as compare_ssim
 import os
 
-def load_linear(path, grayscale=False) :
+
+grayscale = True
+folder = "../captures/4/2.00/"
+
+crop_min_x = 760
+crop_max_x = 1450
+
+crop_min_y = 0
+crop_max_y = -1
+
+
+def load_linear(path) :
 	img = Image.open(path)
 	if grayscale :
 		img = ImageOps.grayscale(img)
 
 	arr = (np.float32(np.array(img)) / 255.0) ** 2.2
+
+	global crop_min_x
+	global crop_min_y
+	global crop_max_x
+	global crop_max_y
+
+	if crop_max_x == -1:
+		crop_max_x = img.width
+	if crop_max_y == -1:
+		crop_max_y = img.height
+
+	#print(crop_min_x)
+	#print(crop_min_y)
+	#print(crop_max_x)
+	#print(crop_max_y)
+
+	arr = arr[crop_min_y:crop_max_y, crop_min_x:crop_max_x]
+	#print(arr.shape)
+
 	return arr
 	
 def save_srgb(arr, path) :
@@ -27,9 +57,6 @@ def print_l2(a, b) :
 	print(l2)
 
 
-grayscale = True
-folder = "../captures/1/"
-
 
 gt_filename = folder + "/gt.png"
 bad_filename = folder + "/bad.png"
@@ -40,11 +67,11 @@ good_filename = folder + "/good.png"
 # LOAD IMAGES
 # ---------------------------
 
-ground_truth = load_linear(gt_filename, grayscale)
-bad = load_linear(bad_filename, grayscale)
-good = load_linear(good_filename, grayscale)
+ground_truth = load_linear(gt_filename)
+bad = load_linear(bad_filename)
+good = load_linear(good_filename)
 
-
+#exit()
 
 # ---------------------------
 # SIMPLE L2-NORM
@@ -146,6 +173,7 @@ def vgg19() :
 
 		def __getitem__(self, idx):
 			sample = Image.open(self.files[idx]).convert('RGB')
+			sample = sample.crop((crop_min_x, crop_min_y, crop_max_x, crop_max_y))
 			if self.transforms:
 				sample = self.transforms(sample)
 			return sample
@@ -238,10 +266,10 @@ def pattern_match(a, patch_size, compare, visualize_name=None) :
 	return sum
 
 
-print("Pattern match (lower is better):")
-print(pattern_match(ground_truth, 20, bad, "Match bad"))
-print(pattern_match(ground_truth, 20, good, "Match good"))
-print("----")
+#print("Pattern match (lower is better):")
+#print(pattern_match(ground_truth, 20, bad, "Match bad"))
+#print(pattern_match(ground_truth, 20, good, "Match good"))
+#print("----")
 
 
 cv2.waitKey(0)
