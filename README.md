@@ -58,7 +58,12 @@ All other dependencies (external libraries) either come directly with the source
 If you use this project in a publication, cite this paper:
 
 ```
-TODO
+@article{kurth_ContentAwareBrightness_2022,
+  title = {Content-{{Aware Brightness Solving}} and {{Error Mitigation}} in {{Large-Scale Multi-Projection Mapping}}},
+  author = {Kurth, Philipp and Leuschner, Markus and Stamminger, Marc and Bauer, Frank},
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  note = {to appear}
+}
 ```
 
 
