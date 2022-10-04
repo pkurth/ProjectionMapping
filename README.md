@@ -61,8 +61,11 @@ If you use this project in a publication, cite this paper:
 @article{kurth_ContentAwareBrightness_2022,
   title = {Content-{{Aware Brightness Solving}} and {{Error Mitigation}} in {{Large-Scale Multi-Projection Mapping}}},
   author = {Kurth, Philipp and Leuschner, Markus and Stamminger, Marc and Bauer, Frank},
+  year = {2022},
   journal = {IEEE Transactions on Visualization and Computer Graphics},
-  note = {to appear}
+  pages = {1--11},
+  issn = {1077-2626, 1941-0506, 2160-9306},
+  doi = {10.1109/TVCG.2022.3203085}
 }
 ```
 
